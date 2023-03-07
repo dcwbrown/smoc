@@ -549,12 +549,11 @@ END AllocImport;
 
 PROCEDURE AllocImportModules;
 VAR size: INTEGER;  imod: B.Module;
-    str: ARRAY 512 OF CHAR;
 BEGIN
   Align(staticSize, 16);  imod := B.modList;
   WHILE imod # NIL DO
     IF imod.import OR (imod.impList # NIL) THEN
-      B.ModIdToStr(imod.id, str);  size := (B.StrLen(str)+5)*2;
+      size := (B.StrLen(imod.id)+5)*2;
       imod.adr := staticSize;  INC(staticSize, size)
     END;
     imod := imod.next
@@ -725,10 +724,9 @@ END NewProc;
 
 PROCEDURE Pass1(VAR modinit: B.Node);
 VAR fixAmount: INTEGER;  obj: B.Proc;
-    str, str2: ARRAY 512 OF CHAR;
+    str: ARRAY 512 OF CHAR;
 BEGIN
-  B.ModIdToStr(B.modid, str);
-  modidStr   := B.NewStr2(str);
+  modidStr   := B.NewStr2(B.modid);
   errFmtStr  := B.NewStr2('[%d]: %16.16s');
   err2FmtStr := B.NewStr2('Module key of %s is mismatched');
   err3FmtStr := B.NewStr2('Unknown exception;  PC: %x');
@@ -736,8 +734,8 @@ BEGIN
   rtlName    := B.NewStr2(B.RtlName);
   user32name := B.NewStr2('USER32.DLL');
 
-  str2 := 'Error in module ';  B.Append(str, str2);
-  err5FmtStr := B.NewStr2(str2);
+  str := 'Error in module ';  B.Append(B.modid, str);
+  err5FmtStr := B.NewStr2(str);
 
   trapDesc := B.NewStr2("Module key      Array index     Type mismatch   String index    Nil dereference Nil proc call   Divide by zero  Assertion false Run time missing");
 

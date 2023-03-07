@@ -157,7 +157,7 @@ BEGIN
   WHILE imod # NIL DO
     IF imod.import OR (imod.impList # NIL) THEN
       Files.Set(rider, out, basefadr + imod.adr);
-      i := 0;  B.ModIdToStr2(imod.id, str, i);
+      i := 0;  B.Insert(imod.id, str, i);
       B.Insert('.dll', str, i);  Files.WriteString(rider, str)
     END;
     imod := imod.next
@@ -459,7 +459,7 @@ PROCEDURE Link*(
 );
 VAR n: INTEGER;
 BEGIN
-  B.ModIdToStr(B.modid, fname);
+  fname := B.modid;
   IF B.Flag.main THEN B.Append('.exe', fname) ELSE B.Append('.dll', fname) END;
   out := Files.New(fname);  Files.Set(rider, out, 0);
 

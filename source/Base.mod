@@ -22,10 +22,6 @@ CONST
 
 TYPE
   ModuleKey* = ARRAY 2 OF INTEGER;
-  ModuleId*  = RECORD
-                 plen*: INTEGER;  prefix*: ARRAY 2 OF S.IdStr;
-                 name*: S.IdStr
-  END;
 
   Type*   = POINTER TO TypeDesc;
   Object* = POINTER TO ObjDesc;
@@ -61,7 +57,7 @@ TYPE
   StrList*  = POINTER TO RECORD obj*:  Str;     next*: StrList  END;
 
   Module* = POINTER TO RECORD (ObjDesc)
-    export*, import*: BOOLEAN;  id*: ModuleId;
+    export*, import*: BOOLEAN;  id*: S.IdStr;
     key*: ModuleKey;  lev*, adr*, no*: INTEGER;  next*: Module;
     first*, impList*: Ident;  types*: TypeList
   END;
@@ -89,7 +85,7 @@ TYPE
 
 VAR
   topScope*, universe*, systemScope: Scope;
-  curLev*, modlev*: INTEGER;  modid*: ModuleId;
+  curLev*, modlev*: INTEGER;  modid*: S.IdStr;
   modkey*: ModuleKey;  system*: BOOLEAN;
   expList*, lastExp: ObjList;  strList*: StrList;  recList*: TypeList;
 
@@ -118,9 +114,9 @@ VAR
 (* -------------------------------------------------------------------------- *)
 (* Utility *)
 
-PROCEDURE Insert*(
-  src: ARRAY OF CHAR;  VAR dst: ARRAY OF CHAR;  VAR pos: INTEGER
-);
+PROCEDURE Insert*(    src: ARRAY OF CHAR;
+                  VAR dst: ARRAY OF CHAR;
+                  VAR pos: INTEGER);
 VAR i, j: INTEGER;
 BEGIN i := pos;  j := 0;
   WHILE src[j] # 0X DO  dst[i] := src[j];  INC(i);  INC(j)  END;
@@ -358,59 +354,13 @@ END Enter;
 (* -------------------------------------------------------------------------- *)
 (* -------------------------------------------------------------------------- *)
 
-PROCEDURE ModIdToStr*(id: ModuleId;  VAR str: ARRAY OF CHAR);
-VAR i, slen: INTEGER;
-BEGIN i := 0;  slen := 0;
-  WHILE i < id.plen DO
-    Insert(id.prefix[i], str, slen);  Insert('.', str, slen);  INC(i)
-  END;
-  Insert(id.name, str, slen)
-END ModIdToStr;
-
-PROCEDURE ModIdToStr2*(id: ModuleId;  VAR str: ARRAY OF CHAR;  VAR pos: INTEGER);
-VAR i: INTEGER;
-BEGIN i := 0;
-  WHILE i < id.plen DO
-    Insert(id.prefix[i], str, pos);  Insert('.', str, pos);  INC(i)
-  END;
-  Insert(id.name, str, pos)
-END ModIdToStr2;
-
-PROCEDURE EqlModId*(x, y: ModuleId): BOOLEAN;
-VAR res: BOOLEAN;  i: INTEGER;
-BEGIN
-  IF (x.name # y.name) OR (x.plen # y.plen) THEN res := FALSE
-  ELSE res := TRUE;  i := 0;
-    WHILE res & (i < x.plen) DO
-      res := x.prefix[i] = y.prefix[i];  INC(i)
-    END
-  END;
-  RETURN res
-END EqlModId;
-
-PROCEDURE FindMod(id: ModuleId): Module;
+PROCEDURE FindMod(name: S.IdStr): Module;
 VAR mod: Module;
 BEGIN
   mod := modList;
-  WHILE (mod # NIL) & ~EqlModId(mod.id, id) DO mod := mod.next END;
+  WHILE (mod # NIL) & (mod.id # name) DO mod := mod.next END;
   RETURN mod
 END FindMod;
-
-PROCEDURE WriteModId(x: ModuleId);
-VAR i: INTEGER;
-BEGIN
-  Files.WriteNum(rider, x.plen);  i := 0;
-  WHILE i < x.plen DO Files.WriteByteStr(rider, x.prefix[i]);  INC(i) END;
-  Files.WriteByteStr(rider, x.name)
-END WriteModId;
-
-PROCEDURE ReadModId(VAR x: ModuleId);
-VAR i: INTEGER;
-BEGIN
-  Files.ReadNum(rider, x.plen);  i := 0;
-  WHILE i < x.plen DO Files.ReadByteStr(rider, x.prefix[i]);  INC(i) END;
-  Files.ReadByteStr(rider, x.name)
-END ReadModId;
 
 (* -------------------------------------------------------------------------- *)
 (* -------------------------------------------------------------------------- *)
@@ -439,7 +389,7 @@ BEGIN
       Files.WriteNum(rider, 2);  Files.WriteNum(rider, typ.ref);
       IF typ.ref < 0 THEN ExportType0(typ) END
     ELSE
-      Files.WriteNum(rider, 3);  WriteModId(typ.mod.id);
+      Files.WriteNum(rider, 3);  Files.WriteByteStr(rider, typ.mod.id);
       Files.WriteBool(rider, ~typ.mod.export);
       IF ~typ.mod.export THEN
         WriteModkey(typ.mod.key);  typ.mod.export := TRUE
@@ -514,7 +464,8 @@ VAR ident: Ident;  exp: ObjList;  i, k, n, size: INTEGER;
 BEGIN
   symfname := 0X;  refno := 0;  expno := 0;
   i := 0;  Insert(srcPath, symfname, i);
-  ModIdToStr2(modid, symfname, i);  Insert('.sym', symfname, i);
+  Insert(modid, symfname, i);
+  Insert('.sym', symfname, i);
 
   symfile := Files.New(symfname);
   Files.Set(rider, symfile, 16);
@@ -522,7 +473,7 @@ BEGIN
 
   imod := modList;
   WHILE imod # NIL DO
-    Files.WriteNum(rider, cModule);  WriteModId(imod.id);
+    Files.WriteNum(rider, cModule);  Files.WriteByteStr(rider, imod.id);
     WriteModkey(imod.key);  imod := imod.next
   END;
 
@@ -608,7 +559,7 @@ END ReadModkey;
 
 PROCEDURE DetectTypeI(VAR typ: Type);
 VAR n, ref: INTEGER;  first: BOOLEAN;
-    mod: Module;  id: ModuleId;  key: ModuleKey;
+    mod: Module;  id: S.IdStr;  key: ModuleKey;
 BEGIN
   Files.ReadNum(rider, n);
   IF n = 0 THEN typ := NIL
@@ -620,7 +571,8 @@ BEGIN
     ELSE ImportType0(typ, imod)
     END
   ELSIF n = 3 THEN
-    ReadModId(id);  Files.ReadBool(rider, first);  mod := FindMod(id);
+    Files.ReadByteStr(rider, id);  Files.ReadBool(rider, first);
+    mod := FindMod(id);
     IF first THEN ReadModkey(key);
       IF mod # NIL THEN
         IF (mod.key[0] # key[0]) OR (mod.key[1] # key[1]) THEN
@@ -743,10 +695,10 @@ BEGIN (* ImportType *)
   END
 END ImportType;
 
-PROCEDURE Import(imodid: ModuleId): Module;
+PROCEDURE Import(imodid: S.IdStr): Module;
 VAR dep: Module;  x: Object;  key: ModuleKey;  good: BOOLEAN;
-    lev, val, cls, slen: INTEGER;  tp: Type;  depid: ModuleId;
-    name: S.IdStr;  str, msg: ARRAY 512 OF CHAR;
+    lev, val, cls, slen: INTEGER;  tp: Type;  depid: S.IdStr;
+    name: S.IdStr;  msg: ARRAY 512 OF CHAR;
 BEGIN
   Files.Set(rider, symfile, 0);  imod := FindMod(imodid);
   ReadModkey(key);  Files.ReadNum(rider, lev);
@@ -767,13 +719,12 @@ BEGIN
   IF S.errcnt = 0 THEN
     OpenScope;  curLev := imod.no;  Files.ReadNum(rider, cls);
     WHILE (cls = cModule) & (S.errcnt = 0) DO
-      ReadModId(depid);  ReadModkey(key);  dep := FindMod(depid);
-      IF EqlModId(depid, modid) THEN S.Mark('Circular dependency')
+      Files.ReadByteStr(rider, depid);  ReadModkey(key);  dep := FindMod(depid);
+      IF depid = modid THEN S.Mark('Circular dependency')
       ELSIF dep # NIL THEN
         IF (dep.key[0] # key[0]) OR (dep.key[1] # key[1]) THEN
-          msg := 'Module ';  ModIdToStr(depid, str);
-          Append(str, msg);  Append(' was imported by ', msg);
-          ModIdToStr(imodid, str);  Append(str, msg);
+          msg := 'Module ';                  Append(depid, msg);
+          Append(' was imported by ', msg);  Append(imodid, msg);
           Append(' with a different key', msg);  S.Mark(msg)
         END
       END;
@@ -830,7 +781,7 @@ BEGIN
   modident.obj := mod;  mod.ident := modident;  system := TRUE
 END NewSystemModule;
 
-PROCEDURE NewModule0*(ident: Ident;  id: ModuleId);  (* import name = [name...], or from NewModule below *)
+PROCEDURE NewModule*(ident: Ident;  id: S.IdStr);
 VAR path, symfname: ARRAY 512 OF CHAR;
     x, i: INTEGER;  found: BOOLEAN;  mod: Module;
 
@@ -845,11 +796,11 @@ VAR path, symfname: ARRAY 512 OF CHAR;
     path[j] := 0X
   END GetPath;
 
-BEGIN (* NewModule0 *)
+BEGIN (* NewModule *)
   mod := FindMod(id);  IF (mod # NIL) & ~mod.import THEN mod := NIL END;
-  IF EqlModId(id, modid) THEN S.Mark('Cannot import self')
+  IF id = modid THEN S.Mark('Cannot import self')
   ELSIF mod = NIL THEN
-    i := 0;  ModIdToStr2(id, symfname, i);  Insert('.sym', symfname, i);
+    i := 0;  Insert(id, symfname, i);  Insert('.sym', symfname, i);
     symfile := Files.Old(symfname);  found := symfile # NIL;  i := 0;
     WHILE (symPath[i] # 0X) & ~found DO
       GetPath(path, i);
@@ -865,13 +816,6 @@ BEGIN (* NewModule0 *)
       S.Mark(path)
     END
   END
-END NewModule0;
-
-PROCEDURE NewModule*(ident: Ident;  name: S.IdStr);  (* import name; or import name := name *)
-VAR id: ModuleId;
-BEGIN
-  id.plen := modid.plen;  id.prefix := modid.prefix;
-  id.name := name;  NewModule0(ident, id)
 END NewModule;
 
 (* -------------------------------------------------------------------------- *)
@@ -908,11 +852,11 @@ END SetSrcPath;
 (* -------------------------------------------------------------------------- *)
 (* -------------------------------------------------------------------------- *)
 
-PROCEDURE Init*(modid0: ModuleId);
+PROCEDURE Init*(modid0: S.IdStr);
 VAR symfname: ARRAY 512 OF CHAR;  i, res: INTEGER;
 BEGIN
-  modid := modid0;  i := 0;  Insert(srcPath, symfname, i);
-  ModIdToStr2(modid, symfname, i);  Insert('.sym', symfname, i);
+  modid := modid0;  i := 0;    Insert(srcPath, symfname, i);
+  Insert(modid, symfname, i);  Insert('.sym', symfname, i);
   Files.Delete(symfname, res);
 
   NEW(universe);  topScope := universe;  curLev := -1;

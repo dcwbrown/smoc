@@ -202,7 +202,7 @@ BEGIN xtype := x.type;  ftype := fpar.type;
 END CheckPar;
 
 PROCEDURE CheckLeft(x: B.Object;  op: INTEGER);
-  CONST ivlType = 'invalid type';
+  CONST ivlType = 'Invalid type';
 BEGIN
   IF (op >= S.eql) & (op <= S.geq) THEN
     IF IsOpenArray0(x.type) THEN Mark('untagged open array')
@@ -216,7 +216,7 @@ BEGIN
 END CheckLeft;
 
 PROCEDURE Check1(x: B.Object;  forms: SET);
-  CONST ivlType = 'invalid type';
+  CONST ivlType = 'Invalid type';
 BEGIN
   IF ~(x.type.form IN forms) THEN Mark(ivlType) END
 END Check1;
@@ -852,7 +852,7 @@ VAR x, y: B.Object;  xform: INTEGER;
   END TypeCase;
 
   PROCEDURE label(x: B.Object;  VAR y: B.Object);
-    CONST errMsg = 'invalid value';
+    CONST errMsg = 'Invalid value';
     VAR xform: INTEGER;
   BEGIN xform := x.type.form;
     IF sym = S.int THEN y := factor();
@@ -874,7 +874,7 @@ VAR x, y: B.Object;  xform: INTEGER;
         y := B.NewConst(B.charType, ORD(S.str[0]));  GetSym
       ELSE Mark(errMsg);  y := NIL
       END
-    ELSE Mark('need integer or char value')
+    ELSE Mark('Integer or char required')
     END
   END label;
 
@@ -1296,43 +1296,16 @@ BEGIN
   END
 END DeclarationSequence;
 
-PROCEDURE ModuleId(VAR modid: B.ModuleId);
-VAR plen: INTEGER;
-BEGIN
-  modid.name := S.id;  GetSym;
-  IF sym = S.period THEN GetSym;
-    IF sym = S.ident THEN plen := modid.plen;
-      IF plen < LEN(modid.prefix) THEN
-        modid.prefix[plen] := modid.name;  INC(modid.plen)
-      ELSE Mark('prefix too long')
-      END;
-      ModuleId(modid)
-    ELSE Missing(S.ident)
-    END
-  END
-END ModuleId;
-
 PROCEDURE import;
-VAR ident: B.Ident;  id: B.ModuleId;  name: S.IdStr;
+VAR ident: B.Ident;  name: S.IdStr;
 BEGIN
   ident := NewIdent(S.id);  name := S.id;  GetSym;
   IF sym = S.becomes THEN GetSym;
-    IF sym = S.string THEN
-      name := S.str;  GetSym
-    ELSE
-      IF sym = S.ident THEN name := S.id;  GetSym
-      ELSIF sym = S.lbrak THEN GetSym;  id.plen := 0;
-        IF sym = S.ident THEN ModuleId(id) ELSE Missing(S.ident) END;
-        Check0(S.rbrak);  name := 0X
-      ELSE Missing(S.ident)
-      END
-    END
+    IF sym = S.ident THEN name := S.id;  GetSym ELSE Missing(S.ident) END
   END;
   IF S.errcnt = 0 THEN
     IF name = 'SYSTEM' THEN B.NewSystemModule(ident)
-    ELSIF name # 0X THEN B.NewModule(ident, name)  (* import name; or import name := name *)
-    ELSE B.NewModule0(ident, id)                   (* import name = [name...] *)
-    END
+    ELSE B.NewModule(ident, name) END
   END
 END import;
 
@@ -1346,14 +1319,9 @@ BEGIN GetSym;
 END ImportList;
 
 PROCEDURE Module*(): B.Node;
-VAR modid: B.ModuleId;  modinit: B.Node;
+VAR modid: S.IdStr;  modinit: B.Node;
 BEGIN
-  GetSym;
-  modid.plen := 0;
-  IF sym = S.string THEN modid.name := S.str;  GetSym
-  ELSE
-    IF sym # S.ident THEN Missing(S.ident) ELSE ModuleId(modid) END;
-  END;
+  GetSym;  IF sym # S.ident THEN Missing(S.ident) ELSE modid := S.id;  GetSym END;
   IF S.errcnt = 0 THEN
     B.Init(modid);  G.Init;  Check0(S.semicolon);
     IF sym = S.import THEN ImportList END
@@ -1362,10 +1330,8 @@ BEGIN
     DeclarationSequence(NIL);
     IF sym = S.begin THEN GetSym;  modinit := StatementSequence() END;
     Check0(S.end);
-    IF sym = S.string THEN
-      IF S.str # modid.name THEN Mark('wrong module name') END;  GetSym
-    ELSIF sym = S.ident THEN
-      IF S.id # modid.name THEN Mark('wrong module name') END;  GetSym
+    IF sym = S.ident THEN
+      IF S.id # modid THEN Mark('Module name mismatch') END;  GetSym
     ELSE Missing(S.ident)
     END;
     Check0(S.period)
