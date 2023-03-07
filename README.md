@@ -1,0 +1,3 @@
+# smoc
+
+Small Oberon compiler
