@@ -1,0 +1,4 @@
+*.sym
+*.exe
+*.dll
+build/*
