@@ -106,7 +106,8 @@ VAR
   MakeItem0: PROCEDURE(VAR x: Item;  obj: B.Object);
 
   code: ARRAY 80000H OF BYTE;  pc*, stack: INTEGER;
-  sPos, pass, varSize*, staticSize*, baseOffset: INTEGER;
+  sourcePos: INTEGER; (* Source position as 20/line, 10/column *)
+  pass, varSize*, staticSize*, baseOffset: INTEGER;
 
   procList, curProc: B.ProcList;
   modInitProc, trapProc, trapProc2: Proc;
@@ -727,7 +728,7 @@ VAR fixAmount: INTEGER;  obj: B.Proc;
     str: ARRAY 512 OF CHAR;
 BEGIN
   modidStr   := B.NewStr2(B.modid);
-  errFmtStr  := B.NewStr2('[%d]: %16.16s');
+  errFmtStr  := B.NewStr2('[%d:%d]: %16.16s');
   err2FmtStr := B.NewStr2('Module key of %s is mismatched');
   err3FmtStr := B.NewStr2('Unknown exception;  PC: %x');
   err4FmtStr := B.NewStr2('Cannot load module %s (not exist?)');
@@ -913,10 +914,13 @@ BEGIN
   END
 END LoadProc;
 
-PROCEDURE WriteDebug(pos, spos, trapno: INTEGER);
+PROCEDURE WriteDebug(pc, sourcePos, trapno: INTEGER);
+(* debug section entry: 4/trapno, 20/line, 10/column, 30/pc *)
 BEGIN
   IF pass = 3 THEN
-    Files.WriteInt(rider, pos + LSL(spos, 32) + LSL(trapno, 60))
+    Files.WriteInt(rider,    (pc        MOD 40000000H)
+                        + LSL(sourcePos MOD 40000000H, 30)
+                        + LSL(trapno    MOD 10H,       60))
   END
 END WriteDebug;
 
@@ -925,9 +929,9 @@ VAR L: INTEGER;
 BEGIN
   IF ~(cond IN {ccAlways, ccNever}) THEN
     L := pc;  Jcc1(negated(cond), 0);  EmitBare(UD2);
-    WriteDebug(pc-2, sPos, trapno);  Fixup(L, pc)
+    WriteDebug(pc-2, sourcePos, trapno);  Fixup(L, pc)
   ELSIF cond = ccAlways THEN
-    EmitBare(UD2);  WriteDebug(pc-2, sPos, trapno)
+    EmitBare(UD2);  WriteDebug(pc-2, sourcePos, trapno)
   END
 END Trap;
 
@@ -1333,7 +1337,7 @@ BEGIN
     MakeItem0(y, node.right);  Load(y);
     IF x.r # reg_A THEN RelocReg(x.r, reg_A) END;
     SetAlloc(reg_D);  EmitBare(CQO);
-    WriteDebug(pc, node.sPos, divideTrap);  EmitR(IDIVa, y.r, 8);
+    WriteDebug(pc, node.sourcePos, divideTrap);  EmitR(IDIVa, y.r, 8);
     EmitRR(TEST, reg_D, 8, reg_D);  L := pc;  Jcc1(ccGE, 0);
     IF node.op = S.div THEN EmitRI(SUBi, reg_A, 8, 1)
     ELSE EmitRR(ADDd, reg_D, 8, y.r)
@@ -2041,7 +2045,7 @@ BEGIN
     IF curProc.obj.homeSpace < 32 THEN curProc.obj.homeSpace := 32 END
   ELSIF id = S.spASSERT THEN
     LoadCond(x, obj1);  Jump(node, x.bLink, x.c);  FixLink(x.aLink);
-    EmitBare(UD2);  WriteDebug(pc-2, sPos, assertTrap);  FixLink(node)
+    EmitBare(UD2);  WriteDebug(pc-2, sourcePos, assertTrap);  FixLink(node)
   ELSIF id = S.spPACK THEN
     AvoidUsedBy(obj2);   MakeItem0(x, obj1);
     RefToRegI(x);        r := AllocReg();
@@ -2157,7 +2161,7 @@ BEGIN
     END
   ELSIF obj.class = B.cType THEN ASSERT(FALSE)
   ELSIF obj IS Node THEN
-    node := obj(Node);  sPos := node.sPos;  x.mode := mNothing;
+    node := obj(Node);  sourcePos := node.sourcePos;  x.mode := mNothing;
     IF node.op = S.plus THEN Op2(x, node)
     ELSIF node.op = S.minus THEN
       IF node.right # NIL THEN Op2(x, node) ELSE Negate(x, node) END
@@ -2599,9 +2603,9 @@ BEGIN
 
 (* Find .pdata sections containing trap descriptors *)
 
-    SetRm_regI(reg_SP, 64);             EmitRegRm(MOVd, reg_SI, 8);         (* RSI := Module handle = module base address *)
-    SetRm_regI(reg_SI, 400H-24);        EmitRegRm(MOVd, reg_DI, 8);         (* RDI := pdata_rva+32 *)
-                                        EmitRR   (ADDd, reg_DI, 8, reg_SI); (* RDI := pdata address + 32 *)
+    SetRm_regI(reg_SP, 64);             EmitRegRm(MOVd, reg_SI,  8);        (* RSI := Module handle = module base address *)
+    SetRm_regI(reg_SI, 400H-24);        EmitRegRm(MOVd, reg_DI,  8);        (* RDI := pdata_rva+32 *)
+                                        EmitRR   (ADDd, reg_DI,  8, reg_SI);(* RDI := pdata address + 32 *)
                                         EmitRR   (SUBd, reg_R12, 8, reg_SI);(* R12 := module relative exception address *)
     SetRm_regI(reg_SI, 400H-32);        EmitRegRm(SUBd, reg_R12, 8);        (* DEC(R12, reloc[0]  (Set to 4 in .Linker.mod *)
 
@@ -2623,10 +2627,15 @@ BEGIN
                                         EmitRI   (SHLi, reg_R8, 8, 5);      (* R8 := message offset (16 wchars per message) *)
     SetRm_regI(reg_B, trapDesc.adr);    EmitRegRm(LEA,  reg_R9, 8);         (* R9 := message start *)
                                         EmitRR   (ADDd, reg_R9, 8, reg_R8); (* R9 := R8 + R9 *)
+    SetRm_regI(reg_SP, 32);             EmitRegRm(MOV,  reg_R9, 8);         (* [sp+32] := trap description *)
 
-    SetRm_regI(reg_DI, -8);             EmitRegRm(MOVd, reg_R8, 8);         (* R8 := source position *)
-                                        EmitRI   (SHRi, reg_R8, 8, 32);
-                                        EmitRI   (ANDi, reg_R8, 4, 10000000H-1);
+    SetRm_regI(reg_DI, -8);             EmitRegRm(MOVd, reg_R8, 8);         (* R8 := source line number *)
+                                        EmitRI   (SHRi, reg_R8, 8, 40);
+                                        EmitRI   (ANDi, reg_R8, 4, 100000H-1);
+
+    SetRm_regI(reg_DI, -8);             EmitRegRm(MOVd, reg_R9, 8);         (* R9 := source column *)
+                                        EmitRI   (SHRi, reg_R9, 8, 30);
+                                        EmitRI   (ANDi, reg_R9, 4, 400H-1);
 
     SetRm_regI(reg_SP, 64);             EmitRegRm(LEA,  reg_C, 8);          (* RCX := stack space for formatted string *)
     SetRm_regI(reg_B, errFmtStr.adr);   EmitRegRm(LEA,  reg_D, 8);          (* RDX := "[%d]: %16.16s" *)

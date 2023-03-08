@@ -43,7 +43,7 @@ BEGIN
 
   startTime := Rtl.Time();
   IF sym = S.module THEN modinit := P.Module() ELSE S.Mark("Expected 'MODULE'") END;
-  IF S.errcnt = 0 THEN
+  IF S.errCnt = 0 THEN
     B.WriteSymfile;  G.Generate(modinit);
     B.Cleanup;  G.Cleanup;  endTime := Rtl.Time();
     outSep(G.pc,          10);   outSep(G.staticSize,  10);
@@ -51,7 +51,6 @@ BEGIN
     Out.String('ms');  Out.Ln
   END
 END Compile;
-
 
 PROCEDURE ErrorNotFound(fname: ARRAY OF CHAR);
 BEGIN
@@ -80,7 +79,7 @@ BEGIN
         INC(staticsize, G.staticSize);  INC(varsize, G.varSize);
       ELSE ErrorNotFound(srcfname)
       END;
-      IF S.errcnt # 0 THEN Rtl.Halt(1) END;
+      IF S.errCnt # 0 THEN Rtl.Halt(1) END;
       i := 0
     END
   END;
@@ -126,15 +125,13 @@ BEGIN (* Arguments *)
   END
 END Arguments;
 
-PROCEDURE NotifyError(pos, line, column: INTEGER;  msg: ARRAY OF CHAR);
+PROCEDURE NotifyError(line, column: INTEGER;  msg: ARRAY OF CHAR);
 BEGIN
-  IF S.errcnt = 0 THEN Out.Ln END;
-  Out.String('  [');  Out.Int(line+1,1);
-  Out.Char(':');      Out.Int(column,1);
-  Out.Char('/');      Out.Int(pos,1);
+  IF S.errCnt = 0 THEN Out.Ln END;
+  Out.String('  [');  Out.Int(line, 1);
+  Out.Char(':');      Out.Int(column, 1);
   Out.String("] ");   Out.String(msg);  Out.Ln
 END NotifyError;
-
 
 BEGIN
   S.InstallNotifyError(NotifyError);  Get;  Arguments;

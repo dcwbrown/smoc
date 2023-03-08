@@ -110,7 +110,7 @@ END TimeToMSecs;
 
 PROCEDURE GetUtf8(src: ARRAY OF BYTE; VAR i: INTEGER): INTEGER;
 VAR n, result: INTEGER;
-BEGIN result := src[i];  INC(i);
+BEGIN ASSERT(i < LEN(src)); result := src[i];  INC(i);
   IF result >= 0C0H THEN
     IF    result >= 0FCH THEN result := result MOD 2;  n := 5
     ELSIF result >= 0F8H THEN result := result MOD 4;  n := 4
@@ -129,6 +129,7 @@ RETURN result END GetUtf8;
 
 PROCEDURE PutUtf16(ch: INTEGER; VAR dst: ARRAY OF CHAR; VAR i: INTEGER);
 BEGIN
+  ASSERT(i < LEN(dst));
   IF (ch < 10000H) & (i < LEN(dst)) THEN
     dst[i] := CHR(ch);  INC(i)
   ELSIF i+1 < LEN(dst) THEN
@@ -149,6 +150,7 @@ RETURN j END Utf8ToUtf16;
 PROCEDURE GetUtf16(src: ARRAY OF CHAR; VAR i: INTEGER): INTEGER;
 VAR result: INTEGER;
 BEGIN
+  ASSERT(i < LEN(src));
   result := ORD(src[i]);  INC(i);
   IF result DIV 400H = 36H THEN    (* High surrogate *)
     result := LSL(result MOD 400H, 10) + 10000H;
@@ -161,6 +163,7 @@ RETURN result END GetUtf16;
 PROCEDURE PutUtf8(c: INTEGER; VAR dst: ARRAY OF BYTE; VAR i: INTEGER);
 VAR n: INTEGER;
 BEGIN
+  ASSERT(i < LEN(dst));
   ASSERT(c > 0);  ASSERT(c < 80000000H);
   IF i < LEN(dst) THEN
     IF c < 80H THEN dst[i] := c;  INC(i)

@@ -73,37 +73,37 @@ TYPE
   Str*   = ARRAY MaxStrLen+1 OF CHAR;
 
   SetCompilerFlagProc* = PROCEDURE(pragma: ARRAY OF CHAR);
-  NotifyErrorProc* = PROCEDURE(pos, line, column: INTEGER;  msg: ARRAY OF CHAR);
+  NotifyErrorProc* = PROCEDURE(line, column: INTEGER;  msg: ARRAY OF CHAR);
 
 VAR
   ival*, slen*: INTEGER;
-  rval*: REAL;
-  id*: IdStr;
-  str*: Str;  ansiStr*: BOOLEAN;
-  errcnt*: INTEGER;
+  rval*:        REAL;
+  id*:          IdStr;
+  str*:         Str;
+  ansiStr*:     BOOLEAN;
+  errCnt*:      INTEGER;
 
   ch: CHAR;  eof: BOOLEAN;
-  errpos: INTEGER;
   k: INTEGER;
   KWX: ARRAY 11 OF INTEGER;
   keyTab: ARRAY NKW OF RECORD sym: INTEGER;  id: IdStr END;
 
   buffer: ARRAY 80000H OF BYTE;
   bufPos,  bufSize:   INTEGER;
-  lastPos, filePos*:  INTEGER;
-  linePos, lineNum:   INTEGER;
+
+  filePos,    errPos:     INTEGER;
+  lineNumber, linePos:    INTEGER;
+  lastLine,   lastColumn: INTEGER;
 
   SetCompilerFlag: SetCompilerFlagProc;
-  NotifyError: NotifyErrorProc;
+  NotifyError:     NotifyErrorProc;
 
 PROCEDURE Mark*(msg: ARRAY OF CHAR);
-VAR p: INTEGER;
 BEGIN
-  p := lastPos;
-  IF (p > errpos) & (errcnt < 25) THEN
-    IF NotifyError # NIL THEN NotifyError(p, lineNum, p-linePos, msg) END
+  IF (filePos > errPos) & (errCnt < 25) & (NotifyError # NIL) THEN
+    NotifyError(lastLine, lastColumn, msg)
   END;
-  INC(errcnt);  errpos := p + 4
+  INC(errCnt);  errPos := filePos + 1
 END Mark;
 
 PROCEDURE Read;
@@ -112,14 +112,20 @@ BEGIN
   IF bufPos < bufSize THEN
     ch := CHR(buffer[bufPos] MOD 256);
     INC(bufPos);  INC(filePos);
-    IF ch = 0AX THEN linePos := filePos; INC(lineNum) END;
+    IF ch = 0AX THEN
+      linePos := filePos;
+      INC(lineNumber)
+    END;
   ELSE eof := TRUE;  ch := 0X
   END
 END Read;
 
+PROCEDURE SourcePos*(): INTEGER;
+RETURN LSL(lineNumber, 10) + ((filePos - linePos) MOD 400H) END SourcePos;
+
 PROCEDURE Identifier(VAR sym: INTEGER);
-VAR i, k2: INTEGER;
-BEGIN i := 0;
+VAR i, j, k: INTEGER;
+BEGIN i := 0;  sym := ident;
   REPEAT
     IF i <= MaxIdLen THEN id[i] := ch;  INC(i) END;  Read
   UNTIL (ch < '0') OR (ch > '9') & (ch < 'A')
@@ -127,10 +133,10 @@ BEGIN i := 0;
   IF i <= MaxIdLen THEN id[i] := 0X
   ELSE Mark('identifier too long');  id[MaxIdLen] := 0X
   END;
-  IF i < 11 THEN k2 := KWX[i-1];  (* search for keyword *)
-    WHILE (id # keyTab[k2].id) & (k2 < KWX[i]) DO INC(k2) END;
-    IF k2 < KWX[i] THEN sym := keyTab[k2].sym ELSE sym := ident END
-  ELSE sym := ident
+  (* search for keyword *)
+  IF i < LEN(KWX) THEN j := KWX[i-1]; k := KWX[i];
+    WHILE (keyTab[j].id # id) & (j < k) DO INC(j) END;
+    IF j < k THEN sym := keyTab[j].sym END
   END
 END Identifier;
 
@@ -337,7 +343,9 @@ PROCEDURE Get*(VAR sym: INTEGER);
 BEGIN
   REPEAT
     WHILE ~eof & (ch <= ' ') DO Read END;
-    lastPos := filePos-1;
+    (* Record potential error position *)
+    lastLine := lineNumber;  lastColumn := filePos - linePos;
+
     IF ch < 'A' THEN
       IF ch < '0' THEN
         IF (ch = 22X) OR (ch = 27X) THEN String(ch);  sym := string
@@ -390,11 +398,14 @@ END Get;
 PROCEDURE Init*(f: Files.File;  pos: INTEGER);
 VAR r: Files.Rider;
 BEGIN
-  errpos  := pos-5;  errcnt  := 0;  eof := FALSE;
-  linePos := pos;    lineNum := 0;
-  Files.Set(r, f, pos);  filePos := pos;  bufPos := 0;
+  Files.Set(r, f, pos);
   Files.ReadBytes(r, buffer, LEN(buffer));
-  bufSize := LEN(buffer)-r.res;  Read
+  bufSize := LEN(buffer)-r.res;  eof := FALSE;
+  bufPos     := 0;  filePos    := pos;
+  errCnt     := 0;  errPos     := pos - 10;
+  lineNumber := 1;  linePos    := pos;
+  lastLine   := 1;  lastColumn := 1;
+  Read
 END Init;
 
 PROCEDURE InstallSetCompilerFlag*(proc: SetCompilerFlagProc);

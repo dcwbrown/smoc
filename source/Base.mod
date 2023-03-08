@@ -64,7 +64,7 @@ TYPE
 
   NodeDesc* = RECORD (ObjDesc)
     (* Generator independent fields*)
-    ronly*: BOOLEAN;  op*, sPos*: INTEGER;  left*, right*: Object;
+    ronly*: BOOLEAN;  op*, sourcePos*: INTEGER;  left*, right*: Object;
     (* Generator dependent fields *)
     link*: Node;  jmpSz*, jmpPc*: INTEGER;  xRegUsed*, regUsed*: SET
   END;
@@ -527,7 +527,7 @@ BEGIN
   modkey[1] := Crypt.MD5GetHighResult(hash);
   WriteModkey(modkey);
 
-  IF S.errcnt = 0 THEN Files.Register(symfile) END
+  IF S.errCnt = 0 THEN Files.Register(symfile) END
 END WriteSymfile;
 
 (* -------------------------------------------------------------------------- *)
@@ -585,7 +585,7 @@ BEGIN
       END
     END;
     Files.ReadNum(rider, ref);
-    IF S.errcnt = 0 THEN
+    IF S.errCnt = 0 THEN
       IF ref < 0 THEN ImportType0(typ, mod)
       ELSE typ := FindType(-ref, mod.types)
       END
@@ -610,17 +610,17 @@ VAR typ0: TypeDesc;  form, ref, len: INTEGER;
     Files.ReadNum(rider, typ.expno);  Files.ReadNum(rider, typ.size0);
     Files.ReadNum(rider, typ.size);  Files.ReadNum(rider, typ.align);
     Files.ReadBool(rider, typ.union);  typ.adr := 0;  DetectTypeI(typ.base);
-    IF S.errcnt = 0 THEN ExtendRecord(typ);
+    IF S.errCnt = 0 THEN ExtendRecord(typ);
       Files.ReadNum(rider, cls);  OpenScope;
-      WHILE (cls = cField) & (S.errcnt = 0) DO
+      WHILE (cls = cField) & (S.errCnt = 0) DO
         Files.ReadByteStr(rider, name);  Files.ReadNum(rider, off);
         DetectTypeI(fltype);  Files.ReadNum(rider, cls);
-        IF new & (S.errcnt = 0) THEN
+        IF new & (S.errCnt = 0) THEN
           x := NewField(typ, fltype);
           x.off := off;  NewImport(name, x)
         END
       END;
-      IF S.errcnt = 0 THEN ASSERT(cls = cNull) END;
+      IF S.errCnt = 0 THEN ASSERT(cls = cNull) END;
       typ.fields := topScope.first;  CloseScope
     END
   END ImportRecord;
@@ -629,7 +629,7 @@ VAR typ0: TypeDesc;  form, ref, len: INTEGER;
   BEGIN
     Files.ReadBool(rider, typ.notag);
     Files.ReadNum(rider, typ.size);  Files.ReadNum(rider, typ.align);
-    DetectTypeI(typ.base);  IF S.errcnt = 0 THEN CompleteArray(typ) END
+    DetectTypeI(typ.base);  IF S.errCnt = 0 THEN CompleteArray(typ) END
   END ImportArray;
 
   PROCEDURE ImportPointer(VAR typ: TypeDesc);
@@ -644,16 +644,16 @@ VAR typ0: TypeDesc;  form, ref, len: INTEGER;
   BEGIN
     Files.ReadNum(rider, typ.size);  Files.ReadNum(rider, typ.align);
     Files.ReadNum(rider, typ.parblksize);  DetectTypeI(typ.base);
-    IF S.errcnt = 0 THEN
+    IF S.errCnt = 0 THEN
       Files.ReadNum(rider, cls);  OpenScope;
-      WHILE (cls = cVar) & (S.errcnt = 0) DO
+      WHILE (cls = cVar) & (S.errCnt = 0) DO
         Files.ReadByteStr(rider, name);  Files.ReadBool(rider, varpar);
         DetectTypeI(xtype);  Files.ReadNum(rider, cls);
-        IF new & (S.errcnt = 0) THEN
+        IF new & (S.errCnt = 0) THEN
           x := NewPar(typ, xtype, varpar);  NewImport(name, x)
         END
       END;
-      IF S.errcnt = 0 THEN ASSERT(cls = cNull) END;
+      IF S.errCnt = 0 THEN ASSERT(cls = cNull) END;
       typ.fields := topScope.first;  CloseScope
     END
   END ImportProc;
@@ -716,9 +716,9 @@ BEGIN
   ELSE S.Mark('Was imported with a different key')
   END;
 
-  IF S.errcnt = 0 THEN
+  IF S.errCnt = 0 THEN
     OpenScope;  curLev := imod.no;  Files.ReadNum(rider, cls);
-    WHILE (cls = cModule) & (S.errcnt = 0) DO
+    WHILE (cls = cModule) & (S.errCnt = 0) DO
       Files.ReadByteStr(rider, depid);  ReadModkey(key);  dep := FindMod(depid);
       IF depid = modid THEN S.Mark('Circular dependency')
       ELSIF dep # NIL THEN
@@ -730,10 +730,10 @@ BEGIN
       END;
       Files.ReadNum(rider, cls)
     END;
-    WHILE (cls = cConst) & (S.errcnt = 0) DO
+    WHILE (cls = cConst) & (S.errCnt = 0) DO
       Files.ReadByteStr(rider, name);
       Files.ReadNum(rider, val);  DetectTypeI(tp);
-      IF S.errcnt = 0 THEN
+      IF S.errCnt = 0 THEN
         IF tp # strType THEN x := NewConst(tp, val)
         ELSE Files.ReadNum(rider, slen);  x := NewStr('', slen);
           x(Str).adr := 0;  x(Str).expno := val
@@ -742,31 +742,31 @@ BEGIN
       END;
       Files.ReadNum(rider, cls)
     END;
-    WHILE (cls = cType) & (S.errcnt = 0) DO
+    WHILE (cls = cType) & (S.errCnt = 0) DO
       Files.ReadByteStr(rider, name);  DetectTypeI(tp);
-      IF S.errcnt = 0 THEN x := NewTypeObj(tp);  NewImport(name, x) END;
+      IF S.errCnt = 0 THEN x := NewTypeObj(tp);  NewImport(name, x) END;
       Files.ReadNum(rider, cls)
     END;
-    WHILE (cls = cVar) & (S.errcnt = 0) DO
+    WHILE (cls = cVar) & (S.errCnt = 0) DO
       Files.ReadByteStr(rider, name);
       Files.ReadNum(rider, val);  DetectTypeI(tp);
-      IF S.errcnt = 0 THEN
+      IF S.errCnt = 0 THEN
         x := NewVar(tp);  x(Var).ronly := TRUE;
         x(Var).expno := val;  x(Var).adr := 0;  NewImport(name, x)
       END;
       Files.ReadNum(rider, cls)
     END;
-    WHILE (cls = cProc) & (S.errcnt = 0) DO
+    WHILE (cls = cProc) & (S.errCnt = 0) DO
       Files.ReadByteStr(rider, name);
       Files.ReadNum(rider, val);  DetectTypeI(tp);
-      IF S.errcnt = 0 THEN
+      IF S.errCnt = 0 THEN
         x := NewProc();  x(Proc).adr := 0;
         x(Proc).type := tp;  tp.obj := x;
         x(Proc).expno := val;  NewImport(name, x)
       END;
       Files.ReadNum(rider, cls)
     END;
-    IF S.errcnt = 0 THEN ASSERT(cls = cNull) END;
+    IF S.errCnt = 0 THEN ASSERT(cls = cNull) END;
     curLev := 0;  imod.import := TRUE;
     imod.first := topScope.first;  CloseScope
   END;

@@ -245,7 +245,7 @@ END NewIdent;
 PROCEDURE NewNode(op: INTEGER;  x, y: B.Object): B.Node;
 VAR z: B.Node;
 BEGIN NEW(z);
-  z.class := B.cNode;  z.op := op;  z.sPos := S.filePos;
+  z.class := B.cNode;  z.op := op;  z.sourcePos := S.SourcePos();
   z.left := x;  z.right := y;  z.ronly := FALSE;
   RETURN z
 END NewNode;
@@ -282,7 +282,7 @@ BEGIN
     IF x.type.form = B.tRec THEN
       IF x.type.adr = 0 THEN G.AllocImport(x, mod) END
     ELSIF x.type.form = B.tPtr THEN tp := x.type.base;
-      IF (tp = NIL) & (S.errcnt # 0) THEN (* ignore *)
+      IF (tp = NIL) & (S.errCnt # 0) THEN (* ignore *)
       ELSIF tp.adr = 0 THEN t := tp.obj;
         IF t = NIL THEN t := B.NewTypeObj(tp) END;
         G.AllocImport(t, mod)
@@ -724,7 +724,7 @@ BEGIN hasParen := TRUE;
     IF ~B.Flag.rtl THEN Mark('Must have RTL to call NEW') END;
     x := designator();  Check1(x, {B.tPtr});
     CheckVar(x, FALSE);  bType := x.type.base;
-    IF (S.errcnt # 0) & (bType = NIL) THEN (* ignore *)
+    IF (S.errCnt # 0) & (bType = NIL) THEN (* ignore *)
     ELSIF (bType.mod # NIL) & (bType.adr = 0) THEN
       t := bType.obj;  IF t = NIL THEN t := B.NewTypeObj(bType) END;
       G.AllocImport(t, bType.mod)
@@ -1303,7 +1303,7 @@ BEGIN
   IF sym = S.becomes THEN GetSym;
     IF sym = S.ident THEN name := S.id;  GetSym ELSE Missing(S.ident) END
   END;
-  IF S.errcnt = 0 THEN
+  IF S.errCnt = 0 THEN
     IF name = 'SYSTEM' THEN B.NewSystemModule(ident)
     ELSE B.NewModule(ident, name) END
   END
@@ -1322,11 +1322,11 @@ PROCEDURE Module*(): B.Node;
 VAR modid: S.IdStr;  modinit: B.Node;
 BEGIN
   GetSym;  IF sym # S.ident THEN Missing(S.ident) ELSE modid := S.id;  GetSym END;
-  IF S.errcnt = 0 THEN
+  IF S.errCnt = 0 THEN
     B.Init(modid);  G.Init;  Check0(S.semicolon);
     IF sym = S.import THEN ImportList END
   END;
-  IF S.errcnt = 0 THEN
+  IF S.errCnt = 0 THEN
     DeclarationSequence(NIL);
     IF sym = S.begin THEN GetSym;  modinit := StatementSequence() END;
     Check0(S.end);
