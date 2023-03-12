@@ -297,8 +297,8 @@ BEGIN (* Write_edata_section *)
   Files.Set(rider, out, edata_fadr + dirSz);  exp := B.expList;
   WHILE exp # NIL DO x := exp.obj;
     IF x.class = B.cType THEN rva := data_rva + x.type.adr
-    ELSIF x IS B.Var THEN rva := data_rva + x(B.Var).adr
-    ELSIF x IS B.Proc THEN rva := code_rva + x(B.Proc).adr
+    ELSIF x IS B.Var     THEN rva := data_rva + x(B.Var).adr
+    ELSIF x IS B.Proc    THEN rva := code_rva + x(B.Proc).adr
     END;
     Files.WriteCard32(rider, rva);  exp := exp.next
   END;
@@ -453,10 +453,9 @@ END Write_PEHeader;
 (* -------------------------------------------------------------------------- *)
 (* -------------------------------------------------------------------------- *)
 
-PROCEDURE Link*(
-  debug: Files.File;  code: ARRAY OF BYTE;
-  pc0, entry0, staticSize, varSize, modPtrTable0: INTEGER
-);
+PROCEDURE Link*(debug: Files.File;
+                code: ARRAY OF BYTE;
+                pc0, entry0, staticSize, varSize, modPtrTable0: INTEGER);
 VAR n: INTEGER;
 BEGIN
   fname := B.modid;

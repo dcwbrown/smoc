@@ -121,7 +121,7 @@ BEGIN
 END Read;
 
 PROCEDURE SourcePos*(): INTEGER;
-RETURN LSL(lineNumber, 10) + ((filePos - linePos) MOD 400H) END SourcePos;
+RETURN LSL(lastLine, 10) + (lastColumn MOD 400H) END SourcePos;
 
 PROCEDURE Identifier(VAR sym: INTEGER);
 VAR i, j, k: INTEGER;

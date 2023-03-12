@@ -15,6 +15,11 @@ VAR
 BEGIN
   Out.String("Hello teapots.");  Out.Ln;
 
+  s := 'Hello';
+  i := 20;
+  (* c := s[20];*)
+  c := s[i];
+
   i := 0;
   i := 5 DIV i;
 
@@ -22,10 +27,5 @@ BEGIN
   i := j.i;
 
   ASSERT(FALSE);
-
-  s := 'Hello';
-  i := 20;
-  (* c := s[20];*)
-  c := s[i];
 
 END test.
