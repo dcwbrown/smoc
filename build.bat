@@ -5,7 +5,7 @@
 @copy ..\..\source\all >nul
 @
 @rem ..\patchouli\poc /b all
-@..\boot0\smoc /b all
+..\boot0\smoc /b all
 @if errorlevel 1 goto fail
 @
 @cd ..\..
@@ -17,7 +17,7 @@
 @copy ..\..\source\*.mod >nul
 @copy ..\..\source\all >nul
 @
-@..\boot1\smoc /b all
+..\boot1\smoc /b all
 @if errorlevel 1 goto fail
 @
 @cd ..\..
@@ -31,7 +31,7 @@
 @copy ..\boot2\*.sym >nul
 @copy ..\boot2\*.dll >nul
 @copy ..\boot2\*.exe >nul
-@smoc test.mod
+smoc test.mod
 @if errorlevel 1 goto fail
 @cd ..\..
 @build\test\test

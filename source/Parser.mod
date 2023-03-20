@@ -42,7 +42,7 @@ BEGIN
   ELSIF s = S.becomes   THEN Mark("Missing ':='")
   ELSIF s = S.period    THEN Mark("Missing '.'")
   ELSIF s = S.comma     THEN Mark("Missing ','")
-  ELSE                  ASSERT(FALSE)
+  ELSE                       Mark("Missing something")
   END
 END Missing;
 
@@ -1259,7 +1259,7 @@ BEGIN
     END
   END;
   WHILE sym = S.procedure DO GetSym;
-    IF sym # S.ident THEN procid := NIL;  Mark('proc name?')
+    IF sym # S.ident THEN procid := NIL;  Mark('Expected procedure name')
     ELSE procid := NewIdent(S.id);  GetSym;  CheckExport(procid)
     END;
     proc := B.NewProc();  tp := B.NewProcType();  proc.type := tp;
@@ -1279,15 +1279,15 @@ BEGIN
     DeclarationSequence(proc);  proc.decl := B.topScope.first;
     IF sym = S.begin THEN GetSym;  proc.statseq := StatementSequence() END;
     IF sym = S.return THEN
-      IF tp.base = NIL THEN Mark('not function proc') END;
+      IF tp.base = NIL THEN Mark('Not function procedure') END;
       GetSym;  x := expression();  proc.return := x;
-      IF x.type.form IN {B.tArray, B.tRec} THEN Mark('invalid type') END
+      IF x.type.form IN {B.tArray, B.tRec} THEN Mark('Invalid type') END
     ELSIF tp.base # NIL THEN Missing(S.return)
     END;
     B.CloseScope;  B.IncLev(-1);  Check0(S.end);
     IF sym = S.ident THEN
       IF (procid # NIL) & (procid.name # S.id) THEN
-        Mark('wrong proc ident')
+        Mark('Wrong procedure name')
       END;
       GetSym
     ELSIF procid # NIL THEN Missing(S.ident)

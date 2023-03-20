@@ -11,51 +11,62 @@ CONST
   MEM_RESERVE = 2000H;  MEM_COMMIT = 1000H;  PAGE_READWRITE = 4;
 
 TYPE
-  Handle = INTEGER;
+  Handle  = INTEGER;
   Pointer = INTEGER;
-  Bool = SYSTEM.CARD32;
-  Int = SYSTEM.CARD32;
-  Dword = SYSTEM.CARD32;
-  Ulong = SYSTEM.CARD32;
-  Uint = SYSTEM.CARD32;
+  Bool    = SYSTEM.CARD32;
+  Int     = SYSTEM.CARD32;
+  Dword   = SYSTEM.CARD32;
+  Ulong   = SYSTEM.CARD32;
+  Uint    = SYSTEM.CARD32;
 
-  Finalised* = POINTER [untraced] TO FinalisedDesc;
-  FinaliseProc* = PROCEDURE(ptr: Finalised);
+  Finalised*     = POINTER [untraced] TO FinalisedDesc;
+  FinaliseProc*  = PROCEDURE(ptr: Finalised);
   FinalisedDesc* = RECORD
-    Finalise: FinaliseProc;  next: Finalised
-  END;
+                     Finalise: FinaliseProc;
+                     next:     Finalised
+                   END;
+
+  HeapTraceHandler = PROCEDURE(action: INTEGER);
 
 VAR
-  modList*, nMod*: INTEGER;
-  argv, numArgs*: INTEGER;
-  finalisedList: Finalised;
+  modList*, nMod*:    INTEGER;
+  argv,     numArgs*: INTEGER;
+  finalisedList:      Finalised;
 
   (* Utility *)
-  ExitProcess: PROCEDURE(uExitCode: Uint);
-  AddVectoredExceptionHandler: PROCEDURE(
-    FirstHandler: Ulong;  VectoredHandler: Pointer
-  );
-  MessageBoxW: PROCEDURE(hWnd, lpText, lpCaption, uType: INTEGER): Int;
+  ExitProcess:             PROCEDURE(uExitCode: Uint);
+  MessageBoxW:             PROCEDURE(hWnd, lpText, lpCaption, uType: INTEGER): Int;
   GetSystemTimeAsFileTime: PROCEDURE(lpSystemTimeAsFileTime: Pointer);
-  GetCommandLineW: PROCEDURE(): Pointer;
-  CommandLineToArgvW: PROCEDURE(lpCmdLine, pNumArgs: Pointer): Pointer;
+  GetCommandLineW:         PROCEDURE(): Pointer;
+  CommandLineToArgvW:      PROCEDURE(lpCmdLine, pNumArgs: Pointer): Pointer;
+
+  AddVectoredExceptionHandler: PROCEDURE(
+                                 FirstHandler: Ulong;
+                                 VectoredHandler: Pointer
+                               );
 
   (* Heap *)
-  VirtualAlloc: PROCEDURE(
-    lpAddress, dwSize, flAllocationType, flProtect: INTEGER
-  ): Pointer;
-  heapBase, heapSize, markedList: INTEGER;  allocated*: INTEGER;
-  fList: ARRAY 4 OF INTEGER;  fList0: INTEGER;
-  Collect0: PROCEDURE;  justCollected: BOOLEAN;
+  VirtualAlloc: PROCEDURE(lpAddress, dwSize, flAllocationType, flProtect: INTEGER): Pointer;
+
+  heapBase*,  heapSize*:  INTEGER;
+  markedList, allocated*: INTEGER;
+  fList:                  ARRAY 4 OF INTEGER;
+  fList0:                 INTEGER;
+  Collect0:               PROCEDURE;
+  justCollected:          BOOLEAN;
+
+  (* Tracing *)
+  HeapTracer:  HeapTraceHandler;
+
 
 (* -------------------------------------------------------------------------- *)
 (* -------------------------------------------------------------------------- *)
 (* Utility procedures *)
 
 PROCEDURE Import*(
-VAR proc: ARRAY OF SYSTEM.BYTE;
-  libPath, procName: ARRAY OF CHAR
-);
+            VAR proc:              ARRAY OF SYSTEM.BYTE;
+                libPath, procName: ARRAY OF CHAR
+          );
 VAR hLib, procAdr, i: INTEGER;  ansiStr: ARRAY 256 OF BYTE;
 BEGIN
   SYSTEM.LoadLibraryW(hLib, libPath);
@@ -95,6 +106,7 @@ PROCEDURE TimeToMSecs*(time: INTEGER): INTEGER;
   RETURN time DIV 10000
 END TimeToMSecs;
 
+
 (* -------------------------------------------------------------------------- *)
 (* -------------------------------------------------------------------------- *)
 (* Unicode *)
@@ -127,39 +139,6 @@ BEGIN ASSERT(i < LEN(src)); result := src[i];  INC(i);
   END;
 RETURN result END GetUtf8;
 
-PROCEDURE PutUtf16(ch: INTEGER; VAR dst: ARRAY OF CHAR; VAR i: INTEGER);
-BEGIN
-  ASSERT(i < LEN(dst));
-  IF (ch < 10000H) & (i < LEN(dst)) THEN
-    dst[i] := CHR(ch);  INC(i)
-  ELSIF i+1 < LEN(dst) THEN
-    DEC(ch, 10000H);
-    dst[i] := CHR(0D800H + ch DIV 400H);  INC(i);
-    dst[i] := CHR(0DC00H + ch MOD 400H);  INC(i);
-  END
-END PutUtf16;
-
-PROCEDURE Utf8ToUtf16(src: ARRAY OF BYTE;  VAR dst: ARRAY OF CHAR): INTEGER;
-VAR i, j: INTEGER;
-BEGIN  i := 0;  j := 0;
-  WHILE (i < LEN(src)) & (src[i] # 0) DO PutUtf16(GetUtf8(src, i), dst, j) END;
-  IF j < LEN(dst) THEN dst[j] := 0X;  INC(j) END
-RETURN j END Utf8ToUtf16;
-
-
-PROCEDURE GetUtf16(src: ARRAY OF CHAR; VAR i: INTEGER): INTEGER;
-VAR result: INTEGER;
-BEGIN
-  ASSERT(i < LEN(src));
-  result := ORD(src[i]);  INC(i);
-  IF result DIV 400H = 36H THEN    (* High surrogate *)
-    result := LSL(result MOD 400H, 10) + 10000H;
-    IF (i < LEN(src)) & (ORD(src[i]) DIV 400H = 37H) THEN  (* Low surrogate *)
-      INC(result, ORD(src[i]) MOD 400H);  INC(i)
-    END
-  END
-RETURN result END GetUtf16;
-
 PROCEDURE PutUtf8(c: INTEGER; VAR dst: ARRAY OF BYTE; VAR i: INTEGER);
 VAR n: INTEGER;
 BEGIN
@@ -182,28 +161,49 @@ BEGIN
   END
 END PutUtf8;
 
-PROCEDURE Utf16ToUtf8(src: ARRAY OF CHAR;  VAR dst: ARRAY OF BYTE): INTEGER;
+
+PROCEDURE GetUtf16(src: ARRAY OF CHAR; VAR i: INTEGER): INTEGER;
+VAR result: INTEGER;
+BEGIN
+  ASSERT(i < LEN(src));
+  result := ORD(src[i]);  INC(i);
+  IF result DIV 400H = 36H THEN    (* High surrogate *)
+    result := LSL(result MOD 400H, 10) + 10000H;
+    IF (i < LEN(src)) & (ORD(src[i]) DIV 400H = 37H) THEN  (* Low surrogate *)
+      INC(result, ORD(src[i]) MOD 400H);  INC(i)
+    END
+  END
+RETURN result END GetUtf16;
+
+PROCEDURE PutUtf16(ch: INTEGER; VAR dst: ARRAY OF CHAR; VAR i: INTEGER);
+BEGIN
+  ASSERT(i < LEN(dst));
+  IF (ch < 10000H) & (i < LEN(dst)) THEN
+    dst[i] := CHR(ch);  INC(i)
+  ELSIF i+1 < LEN(dst) THEN
+    DEC(ch, 10000H);
+    dst[i] := CHR(0D800H + ch DIV 400H);  INC(i);
+    dst[i] := CHR(0DC00H + ch MOD 400H);  INC(i);
+  END
+END PutUtf16;
+
+
+PROCEDURE Utf8ToUtf16*(src: ARRAY OF BYTE;  VAR dst: ARRAY OF CHAR): INTEGER;
+VAR i, j: INTEGER;
+BEGIN  i := 0;  j := 0;
+  WHILE (i < LEN(src)) & (src[i] # 0) DO PutUtf16(GetUtf8(src, i), dst, j) END;
+  IF j < LEN(dst) THEN dst[j] := 0X;  INC(j) END
+RETURN j END Utf8ToUtf16;
+
+PROCEDURE Utf16ToUtf8*(src: ARRAY OF CHAR;  VAR dst: ARRAY OF BYTE): INTEGER;
 VAR i, j: INTEGER;
 BEGIN  i := 0;  j := 0;
   WHILE (i < LEN(src)) & (src[i] # 0X) DO PutUtf8(GetUtf16(src, i), dst, j) END;
   IF j < LEN(dst) THEN dst[j] := 0;  INC(j) END
 RETURN j END Utf16ToUtf8;
 
-PROCEDURE Utf16ToUtf8Len(src: ARRAY OF CHAR): INTEGER;
-VAR dst: ARRAY 1024 OF BYTE;
-BEGIN RETURN Utf16ToUtf8(src, dst) END Utf16ToUtf8Len;
 
 (* -------------------------------------------------------------------------- *)
-
-
-PROCEDURE Utf8ToUnicode*(src: ARRAY OF BYTE;  VAR dst: ARRAY OF CHAR): INTEGER;
-RETURN Utf8ToUtf16(src, dst) END Utf8ToUnicode;
-
-PROCEDURE UnicodeToUtf8*(src: ARRAY OF CHAR;  VAR dst: ARRAY OF BYTE): INTEGER;
-RETURN Utf16ToUtf8(src, dst) END UnicodeToUtf8;
-
-PROCEDURE SizeInUtf8*(str: ARRAY OF CHAR): INTEGER;
-RETURN Utf16ToUtf8Len(str) END SizeInUtf8;
 
 PROCEDURE LowerCase*(VAR str: ARRAY OF CHAR);
 VAR i: INTEGER;
@@ -215,6 +215,7 @@ BEGIN
     INC(i)
   END
 END LowerCase;
+
 
 (* -------------------------------------------------------------------------- *)
 (* -------------------------------------------------------------------------- *)
@@ -230,14 +231,16 @@ BEGIN
   INC(nMod);  SYSTEM.PUT(modList+nMod*8-8, modAdr)
 END Register;
 
+
 (* -------------------------------------------------------------------------- *)
 (* -------------------------------------------------------------------------- *)
 (* Heap management *)
 (* Based on Kernel.mod in Project Oberon 2013 *)
 
-PROCEDURE HeapLimit(): INTEGER;
-  RETURN heapBase + heapSize
-END HeapLimit;
+PROCEDURE InstallHeapTraceHandler*(tracer: HeapTraceHandler);
+BEGIN HeapTracer := tracer END InstallHeapTraceHandler;
+
+PROCEDURE HeapLimit(): INTEGER; RETURN heapBase + heapSize END HeapLimit;
 
 PROCEDURE ExtendHeap;
 VAR p, mark, size, prev, p2: INTEGER;
@@ -342,6 +345,7 @@ BEGIN
   WHILE p < lim DO SYSTEM.PUT(p, 0);  INC(p, 8) END
 END New;
 
+
 (* -------------------------------------------------------------------------- *)
 (* Mark and Sweep *)
 (* Combined ideas from both N. Wirth's and F. Negele's Garbage Collectors *)
@@ -441,15 +445,38 @@ BEGIN ptr := finalisedList;
 END Finalise;
 
 PROCEDURE Collect*;
-VAR i, modBase, stkDesc, stkBase, ptrTable, off, ptr: INTEGER;
-BEGIN i := 0;
+VAR
+  i: INTEGER;
+  modBase: INTEGER;  (* modBase is both the start of the initialised .data    *)
+                     (* section and also the limit of the uninitialised (.bss)*)
+                     (* data section. Global VARs are allocated backward from *)
+                     (* modBase.                                              *)
+  stkDesc, stkBase, ptrTable, off, ptr: INTEGER;
+BEGIN
+  IF HeapTracer # NIL THEN HeapTracer(0) END;  (* Trace collect call *)
+  i := 0;
   WHILE i < nMod DO SYSTEM.GET(modList+i*8, modBase);
-    SYSTEM.GET(modBase+112, ptrTable);  SYSTEM.GET(ptrTable, off);
+    (* Loop through list of traced data items.                                *)
+
+    (* At modBase+112 is ptrTable, a list of pointer offsets relative to      *)
+    (* modBase. Each non-nil pointer addresses a dynamically allocated block  *)
+    (* which is preceeded by two 64 bit integers of block metadata, being the *)
+    (* type descriptor address and the mark word.                             *)
+    SYSTEM.GET(modBase+112, ptrTable);
+    SYSTEM.GET(ptrTable, off);
     WHILE off # -1 DO
-      SYSTEM.GET(modBase+off, ptr);  DEC(ptr, blkMeta);
+      SYSTEM.GET(modBase+off, ptr);
+      DEC(ptr, blkMeta);    (* Address block metadata (or -16 if ptr was NIL) *)
       IF ptr >= heapBase THEN Mark(ptr) END;
       INC(ptrTable, 8);  SYSTEM.GET(ptrTable, off)
     END;
+
+    (* At modBase+114 is stkDesc, a linked list of stack descriptions:        *)
+    (*   64/stack base                                                        *)
+    (*   64/offset relative to stack base of table of pointers                *)
+    (*   64/next stack base                                                   *)
+    (* Each pointer table works much as the pointer table for the module base *)
+    (* except that the pointers are offsets relative to the current stack base*)
     SYSTEM.GET(modBase+104, stkDesc);
     WHILE stkDesc # 0 DO SYSTEM.GET(stkDesc, stkBase);
       SYSTEM.GET(stkDesc+8, ptrTable);  SYSTEM.GET(ptrTable, off);
@@ -477,10 +504,11 @@ END RegisterFinalised;
 PROCEDURE InitHeap;
 VAR i, p: INTEGER;
 BEGIN
-  (* Reserve 2GB of address space for later use  as heap space *)
-  heapBase := VirtualAlloc(0, 80000000H, MEM_RESERVE, PAGE_READWRITE);
+  (* Reserve 2GB of address space for later use as heap space *)
+  heapBase := VirtualAlloc(0, HeapMax, MEM_RESERVE, PAGE_READWRITE);
 
-  heapSize := 100000H; ASSERT(heapBase # 0); (* Allocate first 1MB for heap use *)
+  (* Allocate first 512KB for initial heap *)
+  heapSize := 80000H; ASSERT(heapBase # 0);
   heapBase := VirtualAlloc(heapBase, heapSize, MEM_COMMIT, PAGE_READWRITE);
   ASSERT(heapBase # 0);
 

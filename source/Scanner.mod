@@ -151,25 +151,27 @@ BEGIN
     Read
   END;
   Read;  utf8str[i] := 0;
-  slen := Rtl.Utf8ToUnicode(utf8str, str)
+  slen := Rtl.Utf8ToUtf16(utf8str, str)
 END String;
 
 PROCEDURE HexString;
-VAR i, m, n: INTEGER;
-BEGIN
-  i := 0;  Read;
-  WHILE eof & (ch # '$') DO
-    WHILE (ch = ' ') OR (ch = 9X) OR (ch = 0DX) DO Read END;
-    IF    ('0' <= ch) & (ch <= '9') THEN m := ORD(ch) - 30H
-    ELSIF ('A' <= ch) & (ch <= 'F') THEN m := ORD(ch) - 37H
-    ELSE m := 0;  Mark('Hex digit expected')
-    END;
-    Read;
+VAR i, m, n, o, p: INTEGER;
+  PROCEDURE hexdigit(): INTEGER;
+  VAR n: INTEGER;
+  BEGIN
     IF    ('0' <= ch) & (ch <= '9') THEN n := ORD(ch) - 30H
     ELSIF ('A' <= ch) & (ch <= 'F') THEN n := ORD(ch) - 37H
-    ELSE n := 0;  Mark('Hex digit expected')
-    END;
-    IF i < MaxStrLen THEN str[i] := CHR(m*10H + n);  INC(i)
+    ELSE n := 0;  Mark('Hex digit expected')  END
+  RETURN n END hexdigit;
+BEGIN
+  i := 0;  Read;
+  WHILE ~eof & (ch # '$') DO
+    WHILE (ch = ' ') OR (ch = 9X) OR (ch = 0DX) DO Read END;
+    m := hexdigit();  Read;
+    n := hexdigit();  Read;
+    o := hexdigit();  Read;
+    p := hexdigit();
+    IF i < MaxStrLen THEN str[i] := CHR(o*1000H + p*100H + m*10H +n);  INC(i)
     ELSE Mark('String too long')
     END;
     Read

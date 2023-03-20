@@ -38,7 +38,7 @@ PROCEDURE Char*(ch: CHAR);
 	VAR utf8: ARRAY 8 OF BYTE; str: ARRAY 2 OF CHAR;
 		i: INTEGER; bRes, dwByteWritten: INTEGER;
 BEGIN
-	str[0] := ch; str[1] := 0X; i := Rtl.UnicodeToUtf8(str, utf8);
+	str[0] := ch; str[1] := 0X; i := Rtl.Utf16ToUtf8(str, utf8);
 	bRes := WriteFile(
 		GetStdHandle(STD_OUTPUT_HANDLE), SYSTEM.ADR(utf8), i-1,
 		SYSTEM.ADR(dwByteWritten), 0
@@ -49,7 +49,7 @@ PROCEDURE String*(str: ARRAY OF CHAR);
 	VAR utf8: ARRAY 1024 OF BYTE;
 		i: INTEGER; bRes, dwByteWritten: INTEGER;
 BEGIN
-	i := Rtl.UnicodeToUtf8(str, utf8); 
+	i := Rtl.Utf16ToUtf8(str, utf8);
 	bRes := WriteFile(
 		GetStdHandle(STD_OUTPUT_HANDLE), SYSTEM.ADR(utf8), i-1,
 		SYSTEM.ADR(dwByteWritten), 0

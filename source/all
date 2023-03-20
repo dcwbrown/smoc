@@ -9,4 +9,5 @@ Base.mod
 Linker.mod
 Generator.mod
 Parser.mod
+HeapTrace.mod
 Smoc.mod

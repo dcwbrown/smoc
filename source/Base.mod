@@ -2,7 +2,7 @@ MODULE Base;
 IMPORT SYSTEM, Files, Crypt, S := Scanner;
 
 CONST
-  MaxExt* = 7;  MaxRecTypes* = 512;
+  MaxExt*    = 7;    MaxRecTypes* = 512;
   MaxImpMod* = 256;  MaxExpTypes* = 1024;  MaxModLev* = 255;
 
   (* Object class *)
@@ -96,7 +96,7 @@ VAR
   noType*: Type;  predefTypes: TypeList;
 
   Flag*: RECORD
-    main*, console*, rtl*, trace*: BOOLEAN
+    main*, console*, rtl*: BOOLEAN
   END;
 
   imod, modList*: Module;  good: BOOLEAN;
@@ -828,13 +828,12 @@ BEGIN
   IF    pragma = 'MAIN'    THEN Flag.main  := TRUE
   ELSIF pragma = 'CONSOLE' THEN Flag.main  := TRUE;  Flag.console := TRUE
   ELSIF pragma = 'RTL-'    THEN Flag.rtl   := FALSE;
-  ELSIF pragma = 'TRACE'   THEN Flag.trace := TRUE;
   END
 END SetCompilerFlag;
 
 PROCEDURE InitCompilerFlag;
 BEGIN
-  Flag.main := FALSE;  Flag.console := FALSE;  Flag.rtl := TRUE;  Flag.trace := FALSE;
+  Flag.main := FALSE;  Flag.console := FALSE;  Flag.rtl := TRUE;
 END InitCompilerFlag;
 
 PROCEDURE SetSymPath*(path: ARRAY OF CHAR);

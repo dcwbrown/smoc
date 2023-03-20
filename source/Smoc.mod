@@ -22,6 +22,7 @@ BEGIN
    END
 END outSep;
 
+(* Write filename part of path in a fixed 20 column field *)
 PROCEDURE outFname(fname: ARRAY OF CHAR);
 VAR basename: ARRAY 1024 OF CHAR;  i, j: INTEGER;
 BEGIN
@@ -29,7 +30,7 @@ BEGIN
   WHILE fname[i] # 0X DO INC(i) END;
   WHILE (i > 0) & (fname[i-1] # '\') DO DEC(i) END;
   j := i;  WHILE fname[i] # 0X DO Out.Char(fname[i]); INC(i) END;
-  WHILE i-j < 25 DO Out.Char(' '); INC(i) END
+  WHILE i-j < 20 DO Out.Char(' '); INC(i) END
 END outFname;
 
 
@@ -63,7 +64,7 @@ VAR r: Files.Rider;  i: INTEGER;  x: BYTE;  start, end: INTEGER;
     byteStr: ARRAY 1024 OF BYTE;  srcfname: ARRAY 1024 OF CHAR;
     codesize, staticsize, varsize: INTEGER;
 BEGIN
-  Out.String("File name                      code      data    global   time"); Out.Ln;
+  Out.String("File name                 code      data    global   time"); Out.Ln;
   start := Rtl.Time();  buildfile := Files.Old(fname);
   codesize := 0;  staticsize := 0;  varsize := 0;
   Files.Set(r, buildfile, 0);  i := 0;  Files.Read(r, x);
@@ -73,7 +74,7 @@ BEGIN
       byteStr[i] := x;  Files.Read(r, x);  INC(i)
     END;
     IF i > 0 THEN
-      byteStr[i] := 0;  i := Rtl.Utf8ToUnicode(byteStr, srcfname);
+      byteStr[i] := 0;  i := Rtl.Utf8ToUtf16(byteStr, srcfname);
       IF Files.Old(srcfname) # NIL THEN
         Compile(srcfname);  INC(codesize, G.pc);
         INC(staticsize, G.staticSize);  INC(varsize, G.varSize);
@@ -84,7 +85,7 @@ BEGIN
     END
   END;
   end := Rtl.Time();
-  Out.String('Total                    ');
+  Out.String('Total               ');
   outSep(codesize, 10);   outSep(staticsize,  10);
   outSep(varsize,  10);   outSep(Rtl.TimeToMSecs(end-start), 5);
   Out.String('ms');       Out.Ln

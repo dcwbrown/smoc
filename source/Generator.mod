@@ -107,7 +107,8 @@ VAR
 
   code: ARRAY 80000H OF BYTE;  pc*, stack: INTEGER;
   sourcePos: INTEGER; (* Source position as 20/line, 10/column *)
-  pass, varSize*, staticSize*, baseOffset: INTEGER;
+  pass, varSize*, staticSize*: INTEGER;
+  baseOffset: INTEGER;  (* Base address of initialsed data section *)
 
   procList, curProc: B.ProcList;
   modInitProc, trapProc, trapProc2: Proc;
@@ -563,7 +564,8 @@ END AllocImportModules;
 
 PROCEDURE AllocStaticData;
 VAR p: B.StrList;  q: B.TypeList;
-    x: B.Object;  y: B.Str;  strSize, tdSize, align: INTEGER;
+    x: B.Object;   y: B.Str;
+    strSize, tdSize, align: INTEGER;
 BEGIN
   Align(staticSize, 16);  p := B.strList;
   WHILE p # NIL DO
@@ -740,7 +742,10 @@ BEGIN
 
   trapDesc := B.NewStr2("Module key      Array index     Type mismatch   String index    Nil dereference Nil proc call   Divide by zero  Assertion false Run time missing");
 
-  AllocStaticData;  ScanDeclaration(B.universe.first, 0);
+  AllocStaticData;
+  ScanDeclaration(B.universe.first, 0);
+
+  (* Determine address of initialised data section relative to code section *)
   baseOffset := (-staticSize) DIV 4096 * 4096;
 
   IF modinit # NIL THEN
@@ -2247,7 +2252,8 @@ VAR locblksize, homeSpace, nSave, nSaveX, n, i, j, L: INTEGER;
 BEGIN
   BeginProc;  obj := curProc.obj;
   IF pass = 3 THEN
-    PushR(reg_BP);  EmitRR(MOVd, reg_BP, 8, reg_SP);
+                                               PushR(reg_BP);
+                                               EmitRR(MOVd, reg_BP, 8, reg_SP);
     nSave := 0;  nSaveX := 0;  r := 0;
     WHILE r < 16 DO
       IF r IN obj.usedReg*{3 .. 7, 12 .. 15} THEN INC(nSave) END;
@@ -2393,6 +2399,7 @@ BEGIN
   SetRm_reg(reg_A);                   EmitRm   (CALL, 4)
 END ImportRTL;
 
+
 PROCEDURE DLLAttach;
 VAR i, j, adr, expno: INTEGER;
     imod: B.Module;  key: B.ModuleKey;
@@ -2400,15 +2407,17 @@ VAR i, j, adr, expno: INTEGER;
 BEGIN
   BeginProc;
   IF pass = 3 THEN
-    PushR(reg_C);   PushR(reg_D);   PushR(reg_R8);  PushR(reg_R9);
-    PushR(reg_SI);  PushR(reg_DI);  PushR(reg_B);
-
+                                        PushR(reg_C);
+                                        PushR(reg_D);
+                                        PushR(reg_R8);
+                                        PushR(reg_R9);
+                                        PushR(reg_SI);
+                                        PushR(reg_DI);
+                                        PushR(reg_B);
                                         EmitRI   (SUBi, reg_SP, 8, 64);
-    (* Load the base of current module to RBX *)
-    SetRm_RIP(baseOffset-pc-7);         EmitRegRm(LEA,  reg_B, 8);
+    SetRm_RIP(baseOffset-pc-7);         EmitRegRm(LEA,  reg_B, 8);               (* RBX := module base *)
 
-    (* Import USER32.DLL *)
-    SetRm_regI(reg_B, user32name.adr);  EmitRegRm(LEA,  reg_C, 8);
+    SetRm_regI(reg_B, user32name.adr);  EmitRegRm(LEA,  reg_C, 8);               (* Import USER32.DLL *)
     SetRm_regI(reg_B, LoadLibraryW);    EmitRm   (CALL, 4);
                                         EmitRR   (MOVd, reg_SI, 8, reg_A);
 
@@ -2436,9 +2445,10 @@ BEGIN
     SetRm_regI(reg_B, AddVectoredExceptionHandler);
                                         EmitRm   (CALL, 4);
 
-    (* Set pointer to Module Pointer Table and import RTL *)
+    (* Set pointer to data and stack pointer Tables *)
     SetRm_regI(reg_B, modPtrTable);     EmitRegRm(LEA,  reg_A, 8);
     SetRm_regI(reg_B, adrOfPtrTable);   EmitRegRm(MOV,  reg_A, 8);
+
     IF B.Flag.rtl THEN ImportRTL END;
 
     (* Import modules, if there are any *)
@@ -2463,11 +2473,11 @@ BEGIN
         WHILE ident # NIL DO x := ident.obj;
           IF x.class = B.cType THEN
             ASSERT(x.type.form = B.tRec);
-            adr := x.type.adr;  expno := x.type.expno
+            adr := x.type.adr;    expno := x.type.expno
           ELSIF x IS B.Var THEN
             adr := x(B.Var).adr;  expno := x(B.Var).expno
           ELSIF x IS B.Proc THEN
-            adr := x(B.Proc).adr;  expno := x(B.Proc).expno
+            adr := x(B.Proc).adr; expno := x(B.Proc).expno
           END;
           ASSERT(adr >= 128);                 EmitRR   (MOVd,  reg_C, 8, reg_SI);
                                               LoadImm  (reg_D, 4, expno);
@@ -2482,10 +2492,10 @@ BEGIN
     (* Fill value into type descriptors *)
     t := B.recList;
     WHILE t # NIL DO tp := t.type;
-      adr := tp.adr;  ASSERT(adr >= 128);  SetRm_regI(reg_B, adr);
-      IF SmallConst(tp.size) THEN           EmitRmImm(MOVi, 8, tp.size)
-      ELSE ASSERT(FALSE)
-      END;
+      adr := tp.adr;
+      ASSERT(adr >= 128);
+      ASSERT(SmallConst(tp.size));
+      SetRm_regI(reg_B, adr);               EmitRmImm(MOVi, 8, tp.size);
       WHILE (tp.len >= 1) & (tp.mod = NIL) DO
         ASSERT(tp.adr >= 128);
         SetRm_regI(reg_B, tp.adr);          EmitRegRm(LEA,  reg_A, 8);
@@ -2520,14 +2530,19 @@ BEGIN
       *)
       t := t.next
     END;
-
-    EmitRI(ADDi, reg_SP, 8, 64);
-    PopR(reg_B);   PopR(reg_DI);  PopR(reg_SI);
-    PopR(reg_R9);  PopR(reg_R8);  PopR(reg_D);  PopR(reg_C);
-    EmitBare(RET)
+                                            EmitRI(ADDi, reg_SP, 8, 64);
+                                            PopR(reg_B);
+                                            PopR(reg_DI);
+                                            PopR(reg_SI);
+                                            PopR(reg_R9);
+                                            PopR(reg_R8);
+                                            PopR(reg_D);
+                                            PopR(reg_C);
+                                            EmitBare(RET)
   END;
   FinishProc
 END DLLAttach;
+
 
 PROCEDURE DLLDetach;
 BEGIN
@@ -2546,7 +2561,8 @@ BEGIN
   BeginProc;
   IF pass = 3 THEN
     (* Load the base of current module to RBX *)
-    PushR(reg_B);  SetRm_RIP(baseOffset-pc-7);  EmitRegRm(LEA,  reg_B, 8);
+                                                PushR(reg_B);
+    SetRm_RIP(baseOffset-pc-7);                 EmitRegRm(LEA,  reg_B, 8);
 
     IF ~B.Flag.main THEN                        EmitRI   (CMPi, reg_D, 4, 1);
       L := pc;                                  Jcc1     (ccNZ, 0)
@@ -2926,8 +2942,10 @@ END FoldConst;
 PROCEDURE Init*;
 VAR fname: ARRAY 128 OF CHAR;
 BEGIN
-  varSize  := 0;    staticSize := 128;
-  procList := NIL;  curProc    := NIL;
+  varSize    := 0;
+  staticSize := 128;  (* Leave 128 bytes for standard function addresses *)
+  procList   := NIL;
+  curProc    := NIL;
 
   B.intType.size    := 8;  B.intType.align    := 8;
   B.byteType.size   := 1;  B.byteType.align   := 1;
@@ -2947,6 +2965,8 @@ BEGIN
   adrOfStackPtrList := 104;
   wsprintfW         := 96;
   MessageBoxW       := 88;
+  (* Note: offset 80 is reserved for the RVA of the static data from the      *)
+  (* Windows module base.                                                     *)
 
   AddVectoredExceptionHandler := 32;
   GetModuleHandleExW          := 24;
