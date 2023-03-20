@@ -2,4 +2,6 @@
 *.exe
 *.dll
 build/*
+backup/*
 *.sublime-*
+!build/boot0/*
