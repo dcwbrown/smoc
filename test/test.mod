@@ -26,17 +26,13 @@ PROCEDURE ws(s: ARRAY OF CHAR);  BEGIN Out.String(s) END ws;
 PROCEDURE wsl(s: ARRAY OF CHAR); BEGIN ws(s); wl     END wsl;
 PROCEDURE wb(i: INTEGER);        BEGIN WHILE i > 0 DO wc(' ');  DEC(i) END END wb;
 
-PROCEDURE wh1 (n: INTEGER); BEGIN IF n<10 THEN wc(CHR(n + 48)) ELSE wc(CHR(n + 87)) END END wh1;
-PROCEDURE wh2 (n: INTEGER); BEGIN wh1(ASR(n,4)  MOD        10H);  wh1(n MOD        10H) END wh2;
-PROCEDURE wh4 (n: INTEGER); BEGIN wh2(ASR(n,8)  MOD       100H);  wh2(n MOD       100H) END wh4;
-PROCEDURE wh8 (n: INTEGER); BEGIN wh4(ASR(n,16) MOD     10000H);  wh4(n MOD     10000H) END wh8;
-PROCEDURE wh12(n: INTEGER); BEGIN wh4(ASR(n,32) MOD     10000H);  wh8(n MOD 100000000H) END wh12;
-PROCEDURE wh16(n: INTEGER); BEGIN wh8(ASR(n,32) MOD 100000000H);  wh8(n MOD 100000000H) END wh16;
+PROCEDURE wh1(i: INTEGER);    BEGIN IF i<10 THEN wc(CHR(i + 48)) ELSE wc(CHR(i + 87)) END END wh1;
+PROCEDURE whn(i, n: INTEGER); BEGIN IF n>1 THEN whn(n-1, i DIV 16) END;  wh1(i MOD 16)    END whn;
 
-PROCEDURE wh(n: INTEGER);
+PROCEDURE wh(i: INTEGER);
 BEGIN
-  IF (n < 0) OR (n > 15) THEN wh((n DIV 16) MOD 1000000000000000H) END;
-  wh1(n MOD 16);
+  IF (i < 0) OR (i > 15) THEN wh((i DIV 16) MOD 1000000000000000H) END;
+  wh1(i MOD 16);
 END wh;
 
 PROCEDURE whs(n: INTEGER); BEGIN IF n < 0 THEN wc("-");  n := -n END;  wh(n) END whs;
@@ -104,7 +100,7 @@ BEGIN
   rowadr    := (       adr       DIV 16) * 16;
   dumplimit := ((adr + len + 15) DIV 16) * 16;
   WHILE rowadr < dumplimit DO
-    wb(indent); wh12(rowadr); ws("  ");
+    wb(indent); whn(rowadr, 12); ws("  ");
 
     (* Load a row of bytes *)
     FOR i := 0 TO 15 DO
@@ -118,7 +114,7 @@ BEGIN
     (* One row of hex dump *)
     FOR i := 0 TO 15 DO
       IF i MOD 8 = 0 THEN wc(" ") END;
-      IF bytes[i] >= 0 THEN wh2(bytes[i]);  wc(" ") ELSE ws("   ") END;
+      IF bytes[i] >= 0 THEN whn(bytes[i], 2);  wc(" ") ELSE ws("   ") END;
     END;
     ws("  ");
 
@@ -233,7 +229,7 @@ BEGIN
   ASSERT(nModules <= LEN(modules));
   wsl("Module addresses:");
   FOR i := 0 TO nModules-1 DO
-    ws("  $"); wh12(modules[i]);
+    ws("  $"); whn(modules[i], 12);
     ws(", ");
     ASSERT(GetModuleFileNameExW(-1, modules[i], SYSTEM.ADR(name), LEN(name)) # 0);
     ws(name);
@@ -407,9 +403,9 @@ BEGIN
   ws("  Rtl.modList: $"); wh(Rtl.modList); ws(", Rtl.nMod: "); wi(Rtl.nMod); wsl(".");
   FOR i := 0 TO Rtl.nMod-1 DO
     baseadr := getint(module + 8*i);
-    ws("  base address $"); wh12(baseadr);
+    ws("  base address $"); whn(baseadr, 12);
     loadadr := baseadr - getint(baseadr+80);
-    ws(", load address $"); wh12(loadadr);
+    ws(", load address $"); whn(loadadr, 12);
     export := loadadr + getint(loadadr + 3D8H);
     wsl(", exports:");
     ShowExports(4, loadadr, export);
