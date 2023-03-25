@@ -508,10 +508,11 @@ BEGIN
 
   Rtl.InstallHeapTraceHandler(HeapTrace);
   wsl("Hello teapots.");
-  ws("Address of i: "); wh(SYSTEM.ADR(i)); wl;
-  ws("Address of j: "); wh(SYSTEM.ADR(j)); wl;
-  ws("Address of s: "); wh(SYSTEM.ADR(s)); wl;
-  ws("Address of c: "); wh(SYSTEM.ADR(c)); wl;
+  ws("Address of i: INTEGER          "); wh(SYSTEM.ADR(i)); wl;
+  ws("Address of j: intrec           "); wh(SYSTEM.ADR(j)); wl;
+  ws("Address of k: intrecdesc       "); wh(SYSTEM.ADR(k)); wl;
+  ws("Address of s: ARRAY 10 OF CHAR "); wh(SYSTEM.ADR(s)); wl;
+  ws("Address of c: CHAR             "); wh(SYSTEM.ADR(c)); wl;
 
   s := 'Hello';
   i := 20;

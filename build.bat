@@ -37,6 +37,6 @@ smoc test.mod
 @build\test\test
 @goto end
 @
-@:fail
+:fail
 @cd ..\..
-@:end
+:end
