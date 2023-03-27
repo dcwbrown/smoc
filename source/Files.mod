@@ -35,7 +35,7 @@ TYPE
 	Bool = SYSTEM.CARD32;
 	Int = SYSTEM.CARD32;
 		
-	PathStr = ARRAY MAX_PATH+1 OF CHAR;
+	PathStr = ARRAY MAX_PATH+1 OF CHAR16;
 
 	File* = POINTER TO FileDesc;
 	Rider* = RECORD
@@ -52,15 +52,15 @@ VAR
 
 	(* Win32 Interface *)
 	GetFileAttributesW: PROCEDURE(
-		lpFileName: ARRAY [untagged] OF CHAR
+		lpFileName: ARRAY [untagged] OF CHAR16
 	): Dword;
 	MoveFileExW: PROCEDURE(
-		lpExistingFileName, lpNewFileName: ARRAY [untagged] OF CHAR;
+		lpExistingFileName, lpNewFileName: ARRAY [untagged] OF CHAR16;
 		dwFlags: Dword
 	): Bool;
-	DeleteFileW: PROCEDURE(lpFilename: ARRAY [untagged] OF CHAR): Bool;
+	DeleteFileW: PROCEDURE(lpFilename: ARRAY [untagged] OF CHAR16): Bool;
 	CreateFileW: PROCEDURE(
-		lpFileName: ARRAY [untagged] OF CHAR;
+		lpFileName: ARRAY [untagged] OF CHAR16;
 		dwDesiredAccess, dwShareMode: Dword;
 		lpSecurityAttributes: Pointer;
 		dwCreationDisposition, dwFlagsAndAttributes: Dword;
@@ -90,12 +90,12 @@ VAR
 	GetFileSizeEx: PROCEDURE(hFile: Handle; lpFileSize: Pointer): Bool;
 	
 	wsprintfW: PROCEDURE(
-		VAR lpOut: ARRAY [untagged] OF CHAR;
-		lpFmt: ARRAY [untagged] OF CHAR;
+		VAR lpOut: ARRAY [untagged] OF CHAR16;
+		lpFmt: ARRAY [untagged] OF CHAR16;
 		par1, par2: INTEGER
 	): Int;
 	GetEnvironmentVariableW: PROCEDURE(
-		lpName: ARRAY [untagged] OF CHAR;
+		lpName: ARRAY [untagged] OF CHAR16;
 		lpBuffer: Pointer;
 		nSize: Dword
 	): Dword;
@@ -115,7 +115,7 @@ BEGIN
 	Rtl.RegisterFinalised(file, Finalise)
 END NewFile;
 	
-PROCEDURE Old*(name: ARRAY OF CHAR): File;
+PROCEDURE Old*(name: ARRAY OF CHAR16): File;
 	VAR file: File; hFile: Handle;
 		attr: Dword; ronly: BOOLEAN; bRes: Bool;
 BEGIN
@@ -144,7 +144,7 @@ BEGIN
 	RETURN file
 END Old;
 
-PROCEDURE New*(name: ARRAY OF CHAR): File;
+PROCEDURE New*(name: ARRAY OF CHAR16): File;
 	VAR str, temp: PathStr; pathLen, pid: Dword;
 		hFile: Handle; file: File; iRes: Int; time: INTEGER;
 BEGIN
@@ -216,14 +216,14 @@ BEGIN
 	ASSERT(bRes # 0); bRes := SetEndOfFile(f.hFile); ASSERT(bRes # 0)
 END Purge;
 
-PROCEDURE Delete*(name: ARRAY OF CHAR; VAR res: INTEGER);
+PROCEDURE Delete*(name: ARRAY OF CHAR16; VAR res: INTEGER);
 	VAR bRes: Bool;
 BEGIN
 	bRes := DeleteFileW(name);
 	IF bRes # 0 THEN res := 0 ELSE res := -1 END
 END Delete;
 
-PROCEDURE Rename*(old, new: ARRAY OF CHAR; VAR res: INTEGER);
+PROCEDURE Rename*(old, new: ARRAY OF CHAR16; VAR res: INTEGER);
 	VAR bRes: Bool;
 BEGIN
 	bRes := MoveFileExW(old, new, ORD(MOVEFILE_COPY_ALLOWED));
@@ -307,12 +307,12 @@ BEGIN
 	x := n + LSL(b MOD 64 - b DIV 64 * 64, s)
 END ReadNum;
 
-PROCEDURE ReadChar*(VAR r: Rider; VAR x: CHAR);
+PROCEDURE ReadChar*(VAR r: Rider; VAR x: CHAR16);
 	VAR bRes: Bool; byteRead: Dword; f: File;
 BEGIN Read0(r, x)
 END ReadChar;
 
-PROCEDURE ReadString*(VAR r: Rider; VAR x: ARRAY OF CHAR);
+PROCEDURE ReadString*(VAR r: Rider; VAR x: ARRAY OF CHAR16);
 	VAR i: INTEGER; done: BOOLEAN;
 BEGIN
 	done := FALSE; i := 0;
@@ -322,7 +322,7 @@ BEGIN
 	END
 END ReadString;
 
-PROCEDURE ReadByteStr*(VAR r: Rider; VAR x: ARRAY OF CHAR);
+PROCEDURE ReadByteStr*(VAR r: Rider; VAR x: ARRAY OF CHAR16);
 	VAR i: INTEGER; done: BOOLEAN; b: BYTE;
 BEGIN
 	done := FALSE; i := 0;
@@ -396,17 +396,17 @@ BEGIN
 	Write(r, x MOD 128)
 END WriteNum;
 
-PROCEDURE WriteChar*(VAR r: Rider; x: CHAR);
+PROCEDURE WriteChar*(VAR r: Rider; x: CHAR16);
 BEGIN Write0(r, x)
 END WriteChar;
 
-PROCEDURE WriteString*(VAR r: Rider; x: ARRAY OF CHAR);
+PROCEDURE WriteString*(VAR r: Rider; x: ARRAY OF CHAR16);
 	VAR i: INTEGER;
 BEGIN i := 0;
 	WHILE x[i] # 0X DO WriteChar(r, x[i]); INC(i) END; WriteChar(r, 0X)
 END WriteString;
 
-PROCEDURE WriteByteStr*(VAR r: Rider; x: ARRAY OF CHAR);
+PROCEDURE WriteByteStr*(VAR r: Rider; x: ARRAY OF CHAR16);
 	VAR i: INTEGER;
 BEGIN i := 0;
 	WHILE x[i] # 0X DO

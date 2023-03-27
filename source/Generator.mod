@@ -114,9 +114,9 @@ VAR
   modInitProc, trapProc, trapProc2: Proc;
   dllInitProc, dllAttachProc, dllDetachProc: Proc;
 
-  modidStr, errFmtStr, err2FmtStr, err3FmtStr: B.Str;
-  err4FmtStr, err5FmtStr, err6FmtStr, rtlName, user32name: B.Str;
-  trapDesc: B.Str;
+  modidStr, errFmtStr, err2FmtStr, err3FmtStr: B.Str16;
+  err4FmtStr, err5FmtStr, err6FmtStr, rtlName, user32name: B.Str16;
+  trapDesc: B.Str16;
 
   mem: RECORD mod, rm, bas, idx, scl, disp: INTEGER END;
   allocReg, allocXReg: SET;
@@ -555,7 +555,7 @@ BEGIN
   Align(staticSize, 16);  imod := B.modList;
   WHILE imod # NIL DO
     IF imod.import OR (imod.impList # NIL) THEN
-      size := (B.StrLen(imod.id)+5)*2;
+      size := (B.Str16Len(imod.id)+5)*2;
       imod.adr := staticSize;  INC(staticSize, size)
     END;
     imod := imod.next
@@ -563,11 +563,11 @@ BEGIN
 END AllocImportModules;
 
 PROCEDURE AllocStaticData;
-VAR p: B.StrList;  q: B.TypeList;
-    x: B.Object;   y: B.Str;
+VAR p: B.Str16List;  q: B.TypeList;
+    x: B.Object;   y: B.Str16;
     strSize, tdSize, align: INTEGER;
 BEGIN
-  Align(staticSize, 16);  p := B.strList;
+  Align(staticSize, 16);  p := B.str16List;
   WHILE p # NIL DO
     y := p.obj;  strSize := 2*y.len;
     y.adr := staticSize;  INC(staticSize, strSize);  p := p.next
@@ -652,7 +652,7 @@ BEGIN (* ScanNode *)
     ELSIF (node.op >= S.sfLSL) & (node.op <= S.sfROR) THEN
       IF ~(right IS B.Const) THEN INCL(node.regUsed, reg_C) END
     ELSIF (node.op >= S.eql) & (node.op <= S.geq) THEN
-      IF B.IsStr(left.type) THEN
+      IF B.IsStr16(left.type) THEN
         node.regUsed := node.regUsed + {reg_SI, reg_DI}
       END
     ELSIF node.op = S.upto THEN INCL(node.regUsed, reg_C)
@@ -702,7 +702,7 @@ BEGIN ident := decl;
   WHILE ident # NIL DO obj := ident.obj;
     IF obj IS B.Proc THEN
       ScanDeclaration(obj(B.Proc).decl, lev+1);  ScanProc(obj(B.Proc))
-    ELSIF (lev = 0) & (obj IS B.Var) & ~(obj IS B.Str) THEN
+    ELSIF (lev = 0) & (obj IS B.Var) & ~(obj IS B.Str16) THEN
       IF obj.type.nTraced > 0 THEN
         INC(ptrTableSize, obj.type.nTraced*8)
       END
@@ -727,20 +727,20 @@ END NewProc;
 
 PROCEDURE Pass1(VAR modinit: B.Node);
 VAR fixAmount: INTEGER;  obj: B.Proc;
-    str: ARRAY 512 OF CHAR;
+    str: ARRAY 512 OF CHAR16;
 BEGIN
-  modidStr   := B.NewStr2(B.modid);
-  errFmtStr  := B.NewStr2('[%d:%d]: %16.16s');
-  err2FmtStr := B.NewStr2('Module key of %s is mismatched');
-  err3FmtStr := B.NewStr2('Unknown exception;  PC: %x');
-  err4FmtStr := B.NewStr2('Cannot load module %s (not exist?)');
-  rtlName    := B.NewStr2(B.RtlName);
-  user32name := B.NewStr2('USER32.DLL');
+  modidStr   := B.NewStr16Z(B.modid);
+  errFmtStr  := B.NewStr16Z('[%d:%d]: %16.16s');
+  err2FmtStr := B.NewStr16Z('Module key of %s is mismatched');
+  err3FmtStr := B.NewStr16Z('Unknown exception;  PC: %x');
+  err4FmtStr := B.NewStr16Z('Cannot load module %s (not exist?)');
+  rtlName    := B.NewStr16Z(B.RtlName);
+  user32name := B.NewStr16Z('USER32.DLL');
 
   str := 'Error in module ';  B.Append(B.modid, str);
-  err5FmtStr := B.NewStr2(str);
+  err5FmtStr := B.NewStr16Z(str);
 
-  trapDesc := B.NewStr2("Module key      Array index     Type mismatch   String index    Nil dereference Nil proc call   Divide by zero  Assertion false Run time missing");
+  trapDesc := B.NewStr16Z("Module key      Array index     Type mismatch   String index    Nil dereference Nil proc call   Divide by zero  Assertion false Run time missing");
 
   AllocStaticData;
   ScanDeclaration(B.universe.first, 0);
@@ -1106,7 +1106,7 @@ BEGIN
       ELSE ASSERT(FALSE)
       END
     ELSIF type.size = 2 THEN
-      IF (type = B.charType)
+      IF (type = B.char16Type)
       OR (type = B.card16Type) THEN EmitMOVZX(r, 2)
       ELSIF type = B.int16Type THEN EmitMOVSX(r, 2)
       ELSE ASSERT(FALSE)
@@ -1130,8 +1130,8 @@ BEGIN RefToRegI(x);
       IF x.mode # mRegI THEN r := AllocReg() ELSE r := x.r END;
       IF x.mode = mImm THEN LoadImm(r, size, x.a)
       ELSIF x.mode IN {mRegI, mBP, mBX} THEN
-        IF x.type # B.strType THEN LoadToReg0(r, x, x.type)
-        ELSE ASSERT(x.strlen <= 2);  LoadToReg0(r, x, B.charType)
+        IF x.type # B.str16Type THEN LoadToReg0(r, x, x.type)
+        ELSE ASSERT(x.strlen <= 2);  LoadToReg0(r, x, B.char16Type)
         END
       ELSIF x.mode = mProc THEN
         IF ~x.ref THEN LoadProc(r, x.obj(B.Proc))
@@ -1169,7 +1169,7 @@ END LoadAdr;
 
 PROCEDURE ArrayLen(VAR x: Item;  obj: B.Object);
 BEGIN
-  IF obj IS B.Str THEN x.mode := mImm;  x.a := obj(B.Str).len
+  IF obj IS B.Str16 THEN x.mode := mImm;  x.a := obj(B.Str16).len
   ELSIF B.IsOpenArray(obj.type) THEN MakeItem0(x, obj);  INC(x.a, 8)
   ELSIF B.IsNormalArray(obj.type) THEN x.mode := mImm;  x.a := obj.type.len
   ELSE ASSERT(FALSE)
@@ -1180,7 +1180,7 @@ END ArrayLen;
 PROCEDURE SizeOf(VAR x: Item;  obj: B.Object);
 VAR size, e: INTEGER;
 BEGIN
-  IF obj IS B.Str THEN x.mode := mImm;  x.a := obj(B.Str).len*2
+  IF obj IS B.Str16 THEN x.mode := mImm;  x.a := obj(B.Str16).len*2
   ELSIF B.IsOpenArray(obj.type) THEN size := obj.type.base.size;
     IF size = 0 THEN x.mode := mImm;  x.a := 0
     ELSE ArrayLen(x, obj);  Load(x);  e := log2(size);
@@ -1467,7 +1467,7 @@ BEGIN
     ELSIF tp = B.realType THEN CompareReal(x, node)
     ELSE ASSERT(FALSE)
     END
-  ELSIF B.IsStr(tp) THEN
+  ELSIF B.IsStr16(tp) THEN
     SetBestReg(reg_SI);  AvoidUsedBy(node.right);  SetAvoid(reg_DI);
     MakeItem0(x, node.left);  LoadAdr(x);  ResetMkItmStat;
     SetBestReg(reg_DI);  MakeItem0(y, node.right);  LoadAdr(y);
@@ -1646,7 +1646,7 @@ BEGIN
   ftype := fpar.obj.type;  varpar := fpar.obj(B.Par).varpar;
   IF ftype.form = B.tArray THEN LoadParam(x, par, n, TRUE);
     IF B.IsOpenArray(ftype) & ~ftype.notag THEN INC(i) END
-  ELSIF ftype = B.strType THEN LoadParam(x, par, n, TRUE)
+  ELSIF ftype = B.str16Type THEN LoadParam(x, par, n, TRUE)
   ELSIF ftype.form = B.tRec THEN
     IF varpar THEN LoadParam(x, par, n, TRUE);  INC(i)
     ELSIF (ftype.size < 9) & (ftype.size IN {0, 1, 2, 4, 8}) THEN
@@ -1785,10 +1785,10 @@ BEGIN
   ELSIF id = S.sfCHR THEN MakeItem0(x, obj1);  RefToRegI(x);
     IF x.mode IN {mRegI, mBP, mBX} THEN
       IF x.type = B.int8Type THEN x.type := B.byteType
-      ELSIF x.type # B.byteType THEN x.type := B.charType
+      ELSIF x.type # B.byteType THEN x.type := B.char16Type
       END;
       Load(x)
-    ELSIF x.mode = mReg THEN LoadToReg0(x.r, x, B.charType)
+    ELSIF x.mode = mReg THEN LoadToReg0(x.r, x, B.char16Type)
     ELSE ASSERT(FALSE)
     END
   ELSIF id = S.sfADR THEN MakeItem0(x, obj1);  LoadAdr(x)
@@ -1859,13 +1859,13 @@ BEGIN
     SetBestReg(reg_SI);  MakeItem0(y, node.right);  LoadAdr(y);
     IF y.r # reg_SI THEN RelocReg(y.r, reg_SI) END;
     IF x.r # reg_DI THEN RelocReg(x.r, reg_DI) END;
-    IF y.type = B.strType THEN cx := y.strlen;
+    IF y.type = B.str16Type THEN cx := y.strlen;
       IF B.IsOpenArray(x.type) THEN
         ArrayLen(z, node.left);  SetRmOperand(z);
         EmitRmImm(CMPi, 4, cx);  Trap(ccB, stringTrap)
       END;
       SetAlloc(reg_C);  LoadImm(reg_C, 4, cx);  EmitRep(MOVSrep, 2, 1)
-    ELSIF B.IsStr(x.type) THEN
+    ELSIF B.IsStr16(x.type) THEN
       SetAlloc(reg_A);  SetAlloc(reg_C);
       ClearReg(reg_C);  ClearReg(reg_A);
       first := pc;  EmitRI(ADDi, reg_C, 4, 1);
@@ -2151,7 +2151,7 @@ BEGIN
     objv := obj(B.Var);  x.a := objv.adr;  form := objv.type.form;
     IF objv.lev <= 0 THEN x.mode := mBX ELSE x.mode := mBP END;
     IF objv.lev < 0 THEN x.ref := TRUE END;
-    IF objv IS B.Str THEN x.mode := mBX;  x.strlen := objv(B.Str).len
+    IF objv IS B.Str16 THEN x.mode := mBX;  x.strlen := objv(B.Str16).len
     ELSIF objv IS B.Par THEN
       size := objv.type.size;
       x.ref := objv(B.Par).varpar OR (form = B.tArray)
@@ -2840,7 +2840,7 @@ END FltConst;
 PROCEDURE TypeTransferConst*(type: B.Type;  x: B.Object): B.Object;
 VAR val: INTEGER;
 BEGIN
-  IF x IS B.Str THEN val := ORD(B.strbuf[x(B.Str).bufpos])
+  IF x IS B.Str16 THEN val := ORD(B.str16buf[x(B.Str16).bufpos])
   ELSE val := x(B.Const).val
   END;
   IF type # x.type THEN
@@ -2860,7 +2860,7 @@ END TypeTransferConst;
 
 PROCEDURE FoldConst*(op: INTEGER;  x, y: B.Object): B.Object;
 VAR val, xval, yval, i, k: INTEGER;  type: B.Type;
-    r1, r2: REAL;  xstr, ystr: B.Str;  ch1, ch2: CHAR;
+    r1, r2: REAL;  xstr, ystr: B.Str16;  ch1, ch2: CHAR16;
 BEGIN
   IF (op >= S.eql) & (op <= S.in) THEN
     IF (x IS B.Const) & (y IS B.Const) & (x.type # B.realType) THEN
@@ -2879,13 +2879,13 @@ BEGIN
       OR (op = S.lss) & (r1 < r2) OR (op = S.leq) & (r1 <= r2)
       THEN val := 1 ELSE val := 0
       END
-    ELSIF (x IS B.Str) & (y IS B.Str) THEN
-      xstr := x(B.Str);  ystr := y(B.Str);
+    ELSIF (x IS B.Str16) & (y IS B.Str16) THEN
+      xstr := x(B.Str16);  ystr := y(B.Str16);
       IF (xstr.bufpos >= 0) & (ystr.bufpos >= 0) THEN
         i := xstr.bufpos;  k := ystr.bufpos;
-        ch1 := B.strbuf[i];  ch2 := B.strbuf[k];
+        ch1 := B.str16buf[i];  ch2 := B.str16buf[k];
         WHILE (ch1 = ch2) & (ch1 # 0X) DO
-          INC(i);  INC(k);  ch1 := B.strbuf[i];  ch2 := B.strbuf[k]
+          INC(i);  INC(k);  ch1 := B.str16buf[i];  ch2 := B.str16buf[k]
         END;
         IF (op = S.eql) & (ch1 = ch2) OR (op = S.neq) & (ch1 # ch2)
         OR (op = S.gtr) & (ch1 > ch2) OR (op = S.geq) & (ch1 >= ch2)
@@ -2940,7 +2940,7 @@ END FoldConst;
 (* -------------------------------------------------------------------------- *)
 
 PROCEDURE Init*;
-VAR fname: ARRAY 128 OF CHAR;
+VAR fname: ARRAY 128 OF CHAR16;
 BEGIN
   varSize    := 0;
   staticSize := 128;  (* Leave 128 bytes for standard function addresses *)
@@ -2949,7 +2949,7 @@ BEGIN
 
   B.intType.size    := 8;  B.intType.align    := 8;
   B.byteType.size   := 1;  B.byteType.align   := 1;
-  B.charType.size   := 2;  B.charType.align   := 2;
+  B.char16Type.size   := 2;  B.char16Type.align   := 2;
   B.boolType.size   := 1;  B.boolType.align   := 1;
   B.setType.size    := 8;  B.setType.align    := 8;
   B.realType.size   := 8;  B.realType.align   := 8;

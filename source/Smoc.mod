@@ -5,7 +5,7 @@ IMPORT
   SYSTEM, Rtl, Out, Files, S := Scanner, B := Base, G := Generator, P := Parser;
 
 VAR
-  arg, fname: ARRAY 1024 OF CHAR;
+  arg, fname: ARRAY 1024 OF CHAR16;
   buildfile: Files.File;  argIdx: INTEGER;
   buildMode, errFlag: BOOLEAN;
 
@@ -23,8 +23,8 @@ BEGIN
 END outSep;
 
 (* Write filename part of path in a fixed 20 column field *)
-PROCEDURE outFname(fname: ARRAY OF CHAR);
-VAR basename: ARRAY 1024 OF CHAR;  i, j: INTEGER;
+PROCEDURE outFname(fname: ARRAY OF CHAR16);
+VAR basename: ARRAY 1024 OF CHAR16;  i, j: INTEGER;
 BEGIN
   i := 0;
   WHILE fname[i] # 0X DO INC(i) END;
@@ -34,7 +34,7 @@ BEGIN
 END outFname;
 
 
-PROCEDURE Compile(fname: ARRAY OF CHAR);
+PROCEDURE Compile(fname: ARRAY OF CHAR16);
 VAR srcfile: Files.File;  modinit: B.Node;
     i, sym, startTime, endTime: INTEGER;
 BEGIN
@@ -53,15 +53,15 @@ BEGIN
   END
 END Compile;
 
-PROCEDURE ErrorNotFound(fname: ARRAY OF CHAR);
+PROCEDURE ErrorNotFound(fname: ARRAY OF CHAR16);
 BEGIN
   Out.String('File ');  Out.String(fname);
   Out.String(' not found');  Out.Ln
 END ErrorNotFound;
 
-PROCEDURE Build(fname: ARRAY OF CHAR);
+PROCEDURE Build(fname: ARRAY OF CHAR16);
 VAR r: Files.Rider;  i: INTEGER;  x: BYTE;  start, end: INTEGER;
-    byteStr: ARRAY 1024 OF BYTE;  srcfname: ARRAY 1024 OF CHAR;
+    byteStr: ARRAY 1024 OF BYTE;  srcfname: ARRAY 1024 OF CHAR16;
     codesize, staticsize, varsize: INTEGER;
 BEGIN
   Out.String("File name                 code      data    global   time"); Out.Ln;
@@ -98,7 +98,7 @@ PROCEDURE Get;
 BEGIN INC(argIdx);  Rtl.GetArg(arg, argIdx)
 END Get;
 
-PROCEDURE Mark(msg: ARRAY OF CHAR);
+PROCEDURE Mark(msg: ARRAY OF CHAR16);
 BEGIN
   Out.String('arg ');  Out.Int(argIdx, 0);  Out.String(': ');
   Out.String(msg);  Out.Ln;  errFlag := TRUE
@@ -126,7 +126,7 @@ BEGIN (* Arguments *)
   END
 END Arguments;
 
-PROCEDURE NotifyError(line, column: INTEGER;  msg: ARRAY OF CHAR);
+PROCEDURE NotifyError(line, column: INTEGER;  msg: ARRAY OF CHAR16);
 BEGIN
   IF S.errCnt = 0 THEN Out.Ln END;
   Out.String('  [');  Out.Int(line, 1);

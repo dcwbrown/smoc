@@ -36,7 +36,7 @@ TYPE
   END;
 
 VAR
-  FileName:           ARRAY 512 OF CHAR;
+  FileName:           ARRAY 512 OF CHAR16;
   Out:                Files.File;
   Rider:              Files.Rider;
   ImageBase:          INTEGER;
@@ -138,7 +138,7 @@ VAR x: B.Proc;
     Files.Set(Rider, Out, Section[SecInitGlobals].fadr + x.descAdr);
     ident := x.decl;
     WHILE ident # NIL DO y := ident.obj;
-      IF (y IS B.Var) & ~(y IS B.Str) & ~(y IS B.Par)
+      IF (y IS B.Var) & ~(y IS B.Str16) & ~(y IS B.Par)
       OR (y IS B.Par) & ~y(B.Par).varpar & (y.type.size = 8) THEN
         IF y.type.nTraced > 0 THEN adr := y(B.Var).adr;
           IF y.type.form = B.tPtr THEN Files.WriteInt(Rider, adr)
@@ -165,9 +165,9 @@ END Write_proc_pointer_offset;
 PROCEDURE WriteInitGlobals(VAR metrics: SectionMetrics; size: INTEGER);
 VAR
   i, adr: INTEGER;  b: BYTE;
-  imod: B.Module;  slist: B.StrList;  ident: B.Ident;
-  x: B.Str;  t: B.TypeList;  obj: B.Object;
-  str: ARRAY 512 OF CHAR;
+  imod: B.Module;  slist: B.Str16List;  ident: B.Ident;
+  x: B.Str16;  t: B.TypeList;  obj: B.Object;
+  str: ARRAY 512 OF CHAR16;
 BEGIN
   ASSERT(Rva MOD SectionAlignment = 0);
   ASSERT(Rva = RvaInitGlobals);
@@ -201,11 +201,11 @@ BEGIN
     imod := imod.next
   END;
 
-  slist := B.strList;
+  slist := B.str16List;
   WHILE slist # NIL DO x := slist.obj;
     Files.Set(Rider, Out, metrics.fadr + x.adr);  i := 0;
     WHILE i < x.len DO
-      Files.WriteChar(Rider, B.strbuf[x.bufpos+i]);  INC(i)
+      Files.WriteChar(Rider, B.str16buf[x.bufpos+i]);  INC(i)
     END;
     slist := slist.next
   END;
@@ -222,7 +222,7 @@ BEGIN
   Files.Set(Rider, Out, metrics.fadr + ModulePointerTable);
   ident := B.universe.first;
   WHILE ident # NIL DO obj := ident.obj;
-    IF (obj IS B.Var) & ~(obj IS B.Str) THEN
+    IF (obj IS B.Var) & ~(obj IS B.Str16) THEN
       IF obj.type.nTraced > 0 THEN adr := obj(B.Var).adr;
         IF obj.type.form = B.tPtr THEN Files.WriteInt(Rider, adr)
         ELSE Write_pointer_offset(adr, obj.type)
@@ -386,7 +386,7 @@ BEGIN (* WriteExports *)
   metrics.fadr := Align(Files.Pos(Rider), FileAlignment);
   metrics.rva  := Rva;
 
-  moduleNameSize := B.StrLen(FileName)+1;
+  moduleNameSize := B.Str16Len(FileName)+1;
   exportCount    := B.expno;
 
   export    := B.expList;
@@ -431,7 +431,7 @@ BEGIN (* WriteExports *)
   name := names;  nameRva := namesRva + moduleNameSize;
   WHILE name # NIL DO
     Files.WriteCard32(Rider, nameRva);
-    INC(nameRva, B.StrLen(name.ident.name)+1);
+    INC(nameRva, B.Str16Len(name.ident.name)+1);
     name := name.next
   END;
 
@@ -462,7 +462,7 @@ END WriteExports;
 (* -------------------------------------------------------------------------- *)
 (* PE Header *)
 
-PROCEDURE WriteSectionHeader(sec: INTEGER; name: ARRAY OF CHAR; flags: INTEGER);
+PROCEDURE WriteSectionHeader(sec: INTEGER; name: ARRAY OF CHAR16; flags: INTEGER);
 VAR i, l, filesize, virtualsize: INTEGER;
 BEGIN
   l := LEN(name);  i := 0;  IF l > 8 THEN l := 8 END;

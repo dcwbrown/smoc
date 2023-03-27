@@ -69,11 +69,11 @@ CONST
   endSp*          = 159;
 
 TYPE
-  IdStr* = ARRAY MaxIdLen+1 OF CHAR;
-  Str*   = ARRAY MaxStrLen+1 OF CHAR;
+  IdStr* = ARRAY MaxIdLen+1 OF CHAR16;
+  Str*   = ARRAY MaxStrLen+1 OF CHAR16;
 
-  SetCompilerFlagProc* = PROCEDURE(pragma: ARRAY OF CHAR);
-  NotifyErrorProc* = PROCEDURE(line, column: INTEGER;  msg: ARRAY OF CHAR);
+  SetCompilerFlagProc* = PROCEDURE(pragma: ARRAY OF CHAR16);
+  NotifyErrorProc* = PROCEDURE(line, column: INTEGER;  msg: ARRAY OF CHAR16);
 
 VAR
   ival*, slen*: INTEGER;
@@ -83,7 +83,7 @@ VAR
   ansiStr*:     BOOLEAN;
   errCnt*:      INTEGER;
 
-  ch: CHAR;  eof: BOOLEAN;
+  ch: CHAR16;  eof: BOOLEAN;
   k: INTEGER;
   KWX: ARRAY 11 OF INTEGER;
   keyTab: ARRAY NKW OF RECORD sym: INTEGER;  id: IdStr END;
@@ -98,7 +98,7 @@ VAR
   SetCompilerFlag: SetCompilerFlagProc;
   NotifyError:     NotifyErrorProc;
 
-PROCEDURE Mark*(msg: ARRAY OF CHAR);
+PROCEDURE Mark*(msg: ARRAY OF CHAR16);
 BEGIN
   IF (filePos > errPos) & (errCnt < 25) & (NotifyError # NIL) THEN
     NotifyError(lastLine, lastColumn, msg)
@@ -140,7 +140,7 @@ BEGIN i := 0;  sym := ident;
   END
 END Identifier;
 
-PROCEDURE String(quoteCh: CHAR);
+PROCEDURE String(quoteCh: CHAR16);
 VAR i: INTEGER;  utf8str: ARRAY MaxStrLen+1 OF BYTE;
 BEGIN
   i := 0;  Read;

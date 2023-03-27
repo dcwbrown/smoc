@@ -11,12 +11,13 @@ CONST
   cField* = 6;   cSProc*  = 7;  cSFunc* = 8;
 
   (* Type form *)
-  tInt* = 0;  tBool* = 1;  tSet*   = 2;  tChar* = 3;  tReal* = 4;
-  tPtr* = 5;  tProc* = 6;  tArray* = 7;  tRec*  = 8;  tStr*  = 9;  tNil* = 10;
+  tInt*   = 0;  tBool* = 1;  tSet*   = 2;  tChar16* = 3;  tReal*   = 4;
+  tPtr*   = 5;  tProc* = 6;  tArray* = 7;  tRec*    = 8;  tStr16*  = 9;  tNil* = 10;
+  tChar8* = 11; tStr8* = 12;
 
-  typScalar* = {tInt,  tBool, tSet,  tChar, tReal, tPtr, tProc, tNil};
-  typEql*    = {tBool, tSet,  tPtr,  tProc, tNil};
-  typCmp*    = {tInt,  tReal, tChar, tStr};
+  typScalar* = {tInt,  tBool, tSet,   tChar8,  tChar16, tReal, tPtr, tProc, tNil};
+  typEql*    = {tBool, tSet,  tPtr,   tProc,   tNil};
+  typCmp*    = {tInt,  tReal, tChar8, tChar16, tStr8,   tStr16};
 
   RtlName* = 'Rtl.dll';
 
@@ -38,7 +39,7 @@ TYPE
                adr*, expno*, lev*: INTEGER;  ronly*: BOOLEAN
              END;
   Par*     = POINTER TO RECORD (Var)  varpar*: BOOLEAN END;
-  Str*     = POINTER TO RECORD (Var)  bufpos*, len*: INTEGER END;
+  Str16*   = POINTER TO RECORD (Var)  bufpos*, len*: INTEGER END;
   TempVar* = POINTER TO RECORD (Var)  inited*: BOOLEAN END;
 
   Proc* = POINTER TO RECORD (ObjDesc)
@@ -51,10 +52,10 @@ TYPE
             homeSpace*, stack*, fix*, lim*: INTEGER
           END;
 
-  ObjList*  = POINTER TO RECORD obj*:  Object;  next*: ObjList  END;
-  TypeList* = POINTER TO RECORD type*: Type;    next*: TypeList END;
-  ProcList* = POINTER TO RECORD obj*:  Proc;    next*: ProcList END;
-  StrList*  = POINTER TO RECORD obj*:  Str;     next*: StrList  END;
+  ObjList*   = POINTER TO RECORD obj*:  Object;  next*: ObjList   END;
+  TypeList*  = POINTER TO RECORD type*: Type;    next*: TypeList  END;
+  ProcList*  = POINTER TO RECORD obj*:  Proc;    next*: ProcList  END;
+  Str16List* = POINTER TO RECORD obj*:  Str16;   next*: Str16List END;
 
   Module* = POINTER TO RECORD (ObjDesc)
     export*, import*: BOOLEAN;  id*: S.IdStr;
@@ -87,13 +88,16 @@ VAR
   topScope*, universe*, systemScope: Scope;
   curLev*, modlev*: INTEGER;  modid*: S.IdStr;
   modkey*: ModuleKey;  system*: BOOLEAN;
-  expList*, lastExp: ObjList;  strList*: StrList;  recList*: TypeList;
+  expList*, lastExp: ObjList;  str16List*: Str16List;  recList*: TypeList;
 
   (* Predefined Types *)
-  intType*, byteType*, realType*: Type;
-  card16Type*, card32Type*, int8Type*, int16Type*, int32Type*: Type;
-  boolType*, setType*, charType*, nilType*, strType*: Type;
-  noType*: Type;  predefTypes: TypeList;
+  nilType*,   noType*,
+  boolType*,  setType*,    realType*,
+  byteType*,  card16Type*, card32Type*,
+  intType*,   int8Type*,   int16Type*,  int32Type*,
+  char8Type*, str8Type*,   char16Type*, str16Type*: Type;
+
+  predefTypes: TypeList;
 
   Flag*: RECORD
     main*, console*, rtl*: BOOLEAN
@@ -103,9 +107,9 @@ VAR
   symfile: Files.File;  rider: Files.Rider;
   refno, preTypeNo, expno*, modno*: INTEGER;
 
-  strbufSize*: INTEGER;
-  strbuf*: ARRAY 10000H OF CHAR;
-  symPath, srcPath, sym: ARRAY 1024 OF CHAR;
+  str16bufSize*:         INTEGER;
+  str16buf*:             ARRAY 1000H OF CHAR16;
+  symPath, srcPath, sym: ARRAY 1024 OF CHAR16;
 
   ExportType0: PROCEDURE(typ: Type);
   ImportType0: PROCEDURE(VAR typ: Type;  mod: Module);
@@ -114,8 +118,8 @@ VAR
 (* -------------------------------------------------------------------------- *)
 (* Utility *)
 
-PROCEDURE Insert*(    src: ARRAY OF CHAR;
-                  VAR dst: ARRAY OF CHAR;
+PROCEDURE Insert*(    src: ARRAY OF CHAR16;
+                  VAR dst: ARRAY OF CHAR16;
                   VAR pos: INTEGER);
 VAR i, j: INTEGER;
 BEGIN i := pos;  j := 0;
@@ -123,7 +127,7 @@ BEGIN i := pos;  j := 0;
   dst[i] := 0X;  pos := i
 END Insert;
 
-PROCEDURE Append* (src: ARRAY OF CHAR;  VAR dst: ARRAY OF CHAR);
+PROCEDURE Append* (src: ARRAY OF CHAR16;  VAR dst: ARRAY OF CHAR16);
 VAR i, j: INTEGER;
 BEGIN
   i := 0;  WHILE dst[i] # 0X DO INC(i) END;  j := 0;
@@ -131,12 +135,12 @@ BEGIN
   dst[i] := 0X
 END Append;
 
-PROCEDURE StrLen* (str: ARRAY OF CHAR): INTEGER;
+PROCEDURE Str16Len* (str: ARRAY OF CHAR16): INTEGER;
 VAR len: INTEGER;
 BEGIN
   len := 0;  WHILE str[len] # 0X DO INC(len) END;
   RETURN len
-END StrLen;
+END Str16Len;
 
 PROCEDURE Align(VAR n: INTEGER;  align: INTEGER);
 BEGIN
@@ -156,9 +160,13 @@ PROCEDURE IsNormalArray*(tp: Type): BOOLEAN;
   RETURN (tp.form = tArray) & (tp.len >= 0)
 END IsNormalArray;
 
-PROCEDURE IsStr*(t: Type): BOOLEAN;
-  RETURN (t = strType) OR (t.form = tArray) & (t.base.form = tChar)
-END IsStr;
+PROCEDURE IsStr8*(t: Type): BOOLEAN;
+  RETURN (t = str8Type) OR (t.form = tArray) & (t.base.form = tChar8)
+END IsStr8;
+
+PROCEDURE IsStr16*(t: Type): BOOLEAN;
+  RETURN (t = str16Type) OR (t.form = tArray) & (t.base.form = tChar16)
+END IsStr16;
 
 (* -------------------------------------------------------------------------- *)
 (* -------------------------------------------------------------------------- *)
@@ -200,29 +208,29 @@ BEGIN
   RETURN fld
 END NewField;
 
-PROCEDURE NewStr*(str: ARRAY OF CHAR;  slen: INTEGER): Str;
-VAR x: Str;  i: INTEGER;  p: StrList;
+PROCEDURE NewStr16*(str: ARRAY OF CHAR16;  slen: INTEGER): Str16;
+VAR x: Str16;  i: INTEGER;  p: Str16List;
 BEGIN
   NEW(x);  x.class := cVar;  x.ronly := TRUE;
-  x.type := strType;  x.lev := curLev;  x.len := slen;
+  x.type := str16Type;  x.lev := curLev;  x.len := slen;
   IF x.lev >= -1 (* need to alloc buffer *) THEN
-    IF strbufSize + slen >= LEN(strbuf) THEN
+    IF str16bufSize + slen >= LEN(str16buf) THEN
       S.Mark('too many strings');  x.bufpos := -1
-    ELSE x.bufpos := strbufSize;  strbufSize := strbufSize + slen;
-      FOR i := 0 TO slen-1 DO strbuf[x.bufpos+i] := str[i] END;
-      NEW(p);  p.obj := x;  p.next := strList;  strList := p
+    ELSE x.bufpos  := str16bufSize;  str16bufSize := str16bufSize + slen;
+      FOR i := 0 TO slen-1 DO str16buf[x.bufpos+i] := str[i] END;
+      NEW(p);  p.obj := x;  p.next := str16List;  str16List := p
     END
   ELSE x.bufpos := -1
   END;
   RETURN x
-END NewStr;
+END NewStr16;
 
-PROCEDURE NewStr2*(str: ARRAY OF CHAR): Str;
+PROCEDURE NewStr16Z*(str: ARRAY OF CHAR16): Str16;
 VAR slen: INTEGER;
 BEGIN
   slen := 0;  WHILE str[slen] # 0X DO INC(slen) END;  INC(slen);
-  RETURN NewStr(str, slen)
-END NewStr2;
+  RETURN NewStr16(str, slen)
+END NewStr16Z;
 
 PROCEDURE NewProc*(): Proc;
 VAR p: Proc;
@@ -460,7 +468,7 @@ END ExportType;
 PROCEDURE WriteSymfile*;
 VAR ident: Ident;  exp: ObjList;  i, k, n, size: INTEGER;
     hash: Crypt.MD5Hash;  chunk: ARRAY 64 OF BYTE;
-    symfname: ARRAY 512 OF CHAR;  x: Object;
+    symfname: ARRAY 512 OF CHAR16;  x: Object;
 BEGIN
   symfname := 0X;  refno := 0;  expno := 0;
   i := 0;  Insert(srcPath, symfname, i);
@@ -490,12 +498,12 @@ BEGIN
         Files.WriteByteStr(rider, ident.name);
         DetectType(x.type)
       ELSIF x.class = cVar THEN
-        IF x IS Str THEN
+        IF x IS Str16 THEN
           Files.WriteNum(rider, cConst);
           Files.WriteByteStr(rider, ident.name);
           NewExport(exp);  exp.obj := x;
           Files.WriteNum(rider, expno);  DetectType(x.type);
-          Files.WriteNum(rider, x(Str).len)
+          Files.WriteNum(rider, x(Str16).len)
         ELSE
           Files.WriteNum(rider, cVar);
           Files.WriteByteStr(rider, ident.name);
@@ -698,7 +706,7 @@ END ImportType;
 PROCEDURE Import(imodid: S.IdStr): Module;
 VAR dep: Module;  x: Object;  key: ModuleKey;  good: BOOLEAN;
     lev, val, cls, slen: INTEGER;  tp: Type;  depid: S.IdStr;
-    name: S.IdStr;  msg: ARRAY 512 OF CHAR;
+    name: S.IdStr;  msg: ARRAY 512 OF CHAR16;
 BEGIN
   Files.Set(rider, symfile, 0);  imod := FindMod(imodid);
   ReadModkey(key);  Files.ReadNum(rider, lev);
@@ -734,9 +742,9 @@ BEGIN
       Files.ReadByteStr(rider, name);
       Files.ReadNum(rider, val);  DetectTypeI(tp);
       IF S.errCnt = 0 THEN
-        IF tp # strType THEN x := NewConst(tp, val)
-        ELSE Files.ReadNum(rider, slen);  x := NewStr('', slen);
-          x(Str).adr := 0;  x(Str).expno := val
+        IF tp # str16Type THEN x := NewConst(tp, val)
+        ELSE Files.ReadNum(rider, slen);  x := NewStr16('', slen);
+          x(Str16).adr := 0;  x(Str16).expno := val
         END;
         NewImport(name, x)
       END;
@@ -782,10 +790,10 @@ BEGIN
 END NewSystemModule;
 
 PROCEDURE NewModule*(ident: Ident;  id: S.IdStr);
-VAR path, symfname: ARRAY 512 OF CHAR;
+VAR path, symfname: ARRAY 512 OF CHAR16;
     x, i: INTEGER;  found: BOOLEAN;  mod: Module;
 
-  PROCEDURE GetPath(VAR path: ARRAY OF CHAR;  VAR i: INTEGER);
+  PROCEDURE GetPath(VAR path: ARRAY OF CHAR16;  VAR i: INTEGER);
     VAR j: INTEGER;
   BEGIN j := 0;
     WHILE (symPath[i] # 0X) & (symPath[i] # ';') DO
@@ -822,7 +830,7 @@ END NewModule;
 (* -------------------------------------------------------------------------- *)
 (* Compiler Flag *)
 
-PROCEDURE SetCompilerFlag(pragma: ARRAY OF CHAR);
+PROCEDURE SetCompilerFlag(pragma: ARRAY OF CHAR16);
 VAR i: INTEGER;
 BEGIN
   IF    pragma = 'MAIN'    THEN Flag.main  := TRUE
@@ -836,12 +844,12 @@ BEGIN
   Flag.main := FALSE;  Flag.console := FALSE;  Flag.rtl := TRUE;
 END InitCompilerFlag;
 
-PROCEDURE SetSymPath*(path: ARRAY OF CHAR);
+PROCEDURE SetSymPath*(path: ARRAY OF CHAR16);
 BEGIN
   symPath := path
 END SetSymPath;
 
-PROCEDURE SetSrcPath*(path: ARRAY OF CHAR);
+PROCEDURE SetSrcPath*(path: ARRAY OF CHAR16);
 VAR i: INTEGER;
 BEGIN
   srcPath := path;  i := 0;  WHILE srcPath[i] # 0X DO INC(i) END;
@@ -852,23 +860,25 @@ END SetSrcPath;
 (* -------------------------------------------------------------------------- *)
 
 PROCEDURE Init*(modid0: S.IdStr);
-VAR symfname: ARRAY 512 OF CHAR;  i, res: INTEGER;
+VAR symfname: ARRAY 512 OF CHAR16;  i, res: INTEGER;
 BEGIN
   modid := modid0;  i := 0;    Insert(srcPath, symfname, i);
   Insert(modid, symfname, i);  Insert('.sym', symfname, i);
   Files.Delete(symfname, res);
 
   NEW(universe);  topScope := universe;  curLev := -1;
-  system := FALSE;  modno := -2;  strbufSize := 0;
-  expList := NIL;  lastExp := NIL;  strList := NIL;  recList := NIL;
+  system := FALSE;  modno := -2;  str16bufSize := 0;
+  expList := NIL;  lastExp := NIL;  str16List := NIL;  recList := NIL;
   InitCompilerFlag;
 
-  Enter(NewTypeObj(intType),  'INTEGER');
-  Enter(NewTypeObj(byteType), 'BYTE');
-  Enter(NewTypeObj(realType), 'REAL');
-  Enter(NewTypeObj(setType),  'SET');
-  Enter(NewTypeObj(boolType), 'BOOLEAN');
-  Enter(NewTypeObj(charType), 'CHAR');
+  Enter(NewTypeObj(intType),    'INTEGER');
+  Enter(NewTypeObj(byteType),   'BYTE');
+  Enter(NewTypeObj(realType),   'REAL');
+  Enter(NewTypeObj(setType),    'SET');
+  Enter(NewTypeObj(boolType),   'BOOLEAN');
+  Enter(NewTypeObj(char8Type),  'CHAR8');
+  Enter(NewTypeObj(char16Type), 'CHAR');
+  Enter(NewTypeObj(char16Type), 'CHAR16');
 
   Enter(NewSProc(S.spINC,    cSProc), 'INC');
   Enter(NewSProc(S.spDEC,    cSProc), 'DEC');
@@ -921,7 +931,7 @@ PROCEDURE Cleanup*;
 VAR i: INTEGER;
 BEGIN
   universe := NIL;  topScope := NIL;  systemScope := NIL;  modList := NIL;
-  expList  := NIL;  lastExp  := NIL;  strList     := NIL;  recList := NIL
+  expList  := NIL;  lastExp  := NIL;  str16List   := NIL;  recList := NIL
 END Cleanup;
 
 BEGIN
@@ -929,18 +939,20 @@ BEGIN
   S.InstallSetCompilerFlag(SetCompilerFlag);
 
   preTypeNo := 0;  curLev := -1;
-  NewPredefinedType(intType, tInt);
-  NewPredefinedType(byteType, tInt);
-  NewPredefinedType(boolType, tBool);
-  NewPredefinedType(setType, tSet);
-  NewPredefinedType(charType, tChar);
-  NewPredefinedType(nilType, tNil);
-  NewPredefinedType(realType, tReal);
-  NewPredefinedType(strType, tStr);
-  NewPredefinedType(noType, tPtr);  noType.base := intType;
+  NewPredefinedType(intType,    tInt);
+  NewPredefinedType(byteType,   tInt);
+  NewPredefinedType(boolType,   tBool);
+  NewPredefinedType(setType,    tSet);
+  NewPredefinedType(char8Type,  tChar8);
+  NewPredefinedType(char16Type, tChar16);
+  NewPredefinedType(nilType,    tNil);
+  NewPredefinedType(realType,   tReal);
+  NewPredefinedType(str8Type,   tStr8);
+  NewPredefinedType(str16Type,  tStr16);
+  NewPredefinedType(noType,     tPtr);    noType.base := intType;
   NewPredefinedType(card16Type, tInt);
   NewPredefinedType(card32Type, tInt);
-  NewPredefinedType(int8Type, tInt);
-  NewPredefinedType(int16Type, tInt);
-  NewPredefinedType(int32Type, tInt)
+  NewPredefinedType(int8Type,   tInt);
+  NewPredefinedType(int16Type,  tInt);
+  NewPredefinedType(int32Type,  tInt)
 END Base.

@@ -18,7 +18,7 @@ VAR
 (* -------------------------------------------------------------------------- *)
 
 PROCEDURE GetSym;                    BEGIN S.Get(sym)  END GetSym;
-PROCEDURE Mark(msg: ARRAY OF CHAR);  BEGIN S.Mark(msg) END Mark;
+PROCEDURE Mark(msg: ARRAY OF CHAR16);  BEGIN S.Mark(msg) END Mark;
 
 PROCEDURE Missing(s: INTEGER);
 BEGIN
@@ -51,10 +51,6 @@ BEGIN
   IF sym = expect THEN GetSym ELSE Missing(expect) END;
 END Check0;
 
-PROCEDURE IsStr(t: B.Type): BOOLEAN;
-  RETURN (t = B.strType) OR (t.form = B.tArray) & (t.base.form = B.tChar)
-END IsStr;
-
 PROCEDURE IsExt0(t1, t2: B.Type): BOOLEAN;
   RETURN (t1 = t2) OR (t1 # NIL) & IsExt0(t1.base, t2)
 END IsExt0;
@@ -71,7 +67,7 @@ PROCEDURE IsVarPar(x: B.Object): BOOLEAN;
 END IsVarPar;
 
 PROCEDURE IsConst(x: B.Object): BOOLEAN;
-  RETURN (x IS B.Const) OR (x IS B.Str) & (x(B.Str).bufpos >= 0)
+  RETURN (x IS B.Const) OR (x IS B.Str16) & (x(B.Str16).bufpos >= 0)
 END IsConst;
 
 PROCEDURE IsOpenArray(tp: B.Type): BOOLEAN;
@@ -110,7 +106,7 @@ END SameProc;
 PROCEDURE CompTypes(t1, t2: B.Type): BOOLEAN;
   RETURN (t1 = t2)
   OR (t1.form = B.tInt) & (t2.form = B.tInt)
-  OR IsStr(t1) & IsStr(t2)
+  OR B.IsStr16(t1) & B.IsStr16(t2)
   OR (t1.form IN {B.tProc, B.tPtr}) & (t2 = B.nilType)
   OR (t1.form IN {B.tRec, B.tPtr}) & (t1.form = t2.form) & IsExt(t2, t1)
   OR (t1.form = B.tProc) & (t2.form = B.tProc) & SameProc(t1, t2)
@@ -121,7 +117,7 @@ PROCEDURE CompTypes2(t1, t2: B.Type): BOOLEAN;
 END CompTypes2;
 
 PROCEDURE IsCharStr(x: B.Object): BOOLEAN;
-  RETURN (x IS B.Str) & (x(B.Str).len <= 2)
+  RETURN (x IS B.Str16) & (x(B.Str16).len <= 2)
 END IsCharStr;
 
 PROCEDURE CheckInt(x: B.Object);
@@ -171,7 +167,7 @@ END CheckVar;
 
 PROCEDURE CheckStrLen(xtype: B.Type;  y: B.Object);
 BEGIN
-  IF (xtype.len >= 0) & (y IS B.Str) & (y(B.Str).len > xtype.len) THEN
+  IF (xtype.len >= 0) & (y IS B.Str16) & (y(B.Str16).len > xtype.len) THEN
     Mark('string longer than dest')
   END
 END CheckStrLen;
@@ -182,15 +178,15 @@ BEGIN xtype := x.type;  ftype := fpar.type;
   IF IsOpenArray(ftype) THEN CheckVar(x, fpar.ronly);
     IF IsOpenArray0(xtype) & ~ftype.notag THEN Mark('untagged open array')
     ELSIF CompArray(ftype, xtype) OR (ftype.base = B.byteType)
-    OR IsStr(xtype) & IsStr(ftype) THEN (*valid*)
+    OR B.IsStr16(xtype) & B.IsStr16(ftype) THEN (*valid*)
     ELSE Mark('invalid par type')
     END
   ELSIF ~fpar.varpar THEN
     IF ~CompTypes(ftype, xtype) THEN
-      IF (ftype = B.charType) & (x IS B.Str) & (x(B.Str).len <= 2)
+      IF (ftype = B.char16Type) & (x IS B.Str16) & (x(B.Str16).len <= 2)
       THEN (*valid*) ELSE Mark('invalid par type')
       END
-    ELSIF IsStr(ftype) THEN CheckStrLen(ftype, x)
+    ELSIF B.IsStr16(ftype) THEN CheckStrLen(ftype, x)
     END
   ELSIF fpar.varpar THEN
     CheckVar(x, fpar.ronly);  xform := xtype.form;  fform := ftype.form;
@@ -206,7 +202,7 @@ PROCEDURE CheckLeft(x: B.Object;  op: INTEGER);
 BEGIN
   IF (op >= S.eql) & (op <= S.geq) THEN
     IF IsOpenArray0(x.type) THEN Mark('untagged open array')
-    ELSIF (x.type.form IN B.typCmp) OR IsStr(x.type)
+    ELSIF (x.type.form IN B.typCmp) OR B.IsStr16(x.type)
     OR (op <= S.neq) & (x.type.form IN B.typEql) THEN (*valid*)
     ELSE Mark(ivlType)
     END
@@ -222,7 +218,7 @@ BEGIN
 END Check1;
 
 PROCEDURE StrToChar(x: B.Object): B.Object;
-  RETURN B.NewConst(B.charType, ORD(B.strbuf[x(B.Str).bufpos]))
+  RETURN B.NewConst(B.char16Type, ORD(B.str16buf[x(B.Str16).bufpos]))
 END StrToChar;
 
 (* -------------------------------------------------------------------------- *)
@@ -438,7 +434,7 @@ END designator;
 
 PROCEDURE StdFunc(f: B.SProc): B.Object;
 VAR par, par2: B.Node;  x, y, z: B.Object;
-    ch: CHAR;
+    ch: CHAR16;
 BEGIN GetSym;
   IF f.id = S.sfABS THEN y := expression0();  Check1(y, {B.tInt, B.tReal});
     IF y IS B.Const THEN x := G.AbsConst(y)
@@ -451,11 +447,11 @@ BEGIN GetSym;
     IF y IS B.Const THEN x := G.OddConst(y)
     ELSE x := NewNode(S.sfODD, y, NIL);  x.type := B.boolType
     END
-  ELSIF f.id = S.sfLEN THEN y := designator();  Check1(y, {B.tArray, B.tStr});
+  ELSIF f.id = S.sfLEN THEN y := designator();  Check1(y, {B.tArray, B.tStr16});
     IF (y.type.form = B.tArray) & (y.type.len >= 0) THEN
       x := B.NewConst(B.intType, y.type.len)
-    ELSIF y.type.form = B.tStr THEN
-      x := B.NewConst(B.intType, y(B.Str).len)
+    ELSIF y.type.form = B.tStr16 THEN
+      x := B.NewConst(B.intType, y(B.Str16).len)
     ELSIF ~y.type.notag THEN
       x := NewNode(S.sfLEN, y, NIL);  x.type := B.intType
     ELSE Mark('open array without length tag')
@@ -475,15 +471,15 @@ BEGIN GetSym;
     ELSE x := NewNode(S.sfFLT, y, NIL);  x.type := B.realType
     END
   ELSIF f.id = S.sfORD THEN y := expression0();
-    IF (y.type # B.strType) OR (y(B.Str).len > 2) THEN
-      Check1(y, {B.tSet, B.tBool, B.tChar})
+    IF (y.type # B.str16Type) OR (y(B.Str16).len > 2) THEN
+      Check1(y, {B.tSet, B.tBool, B.tChar16})
     END;
     IF IsConst(y) THEN x := G.TypeTransferConst(B.intType, y)
     ELSE x := NewNode(S.sfORD, y, NIL);  x.type := B.intType
     END
   ELSIF f.id = S.sfCHR THEN y := expression0();  CheckInt(y);
-    IF y IS B.Const THEN x := G.TypeTransferConst(B.charType, y)
-    ELSE x := NewNode(S.sfCHR, y, NIL);  x.type := B.charType
+    IF y IS B.Const THEN x := G.TypeTransferConst(B.char16Type, y)
+    ELSE x := NewNode(S.sfCHR, y, NIL);  x.type := B.char16Type
     END
   ELSIF f.id = S.sfADR THEN
     y := expression0();  CheckVar(y, TRUE);
@@ -501,7 +497,7 @@ BEGIN GetSym;
     END;
     Check0(S.comma);  z := expression0();
     IF z.type.form IN {B.tArray, B.tRec} THEN Mark('not scalar')
-    ELSIF (z IS B.Str) & (z(B.Str).len > 2) THEN Mark('not scalar')
+    ELSIF (z IS B.Str16) & (z(B.Str16).len > 2) THEN Mark('not scalar')
     END;
     IF IsConst(z) THEN x := G.TypeTransferConst(y.type, z)
     ELSE x := NewNode(S.sfVAL, z, NIL);  x.type := y.type
@@ -566,7 +562,7 @@ VAR x: B.Object;
 BEGIN
   IF    sym = S.int    THEN x := B.NewConst(B.intType, S.ival);   GetSym
   ELSIF sym = S.real   THEN x := B.NewConst(B.realType, S.ival);  GetSym
-  ELSIF sym = S.string THEN x := B.NewStr(S.str, S.slen);         GetSym
+  ELSIF sym = S.string THEN x := B.NewStr16(S.str, S.slen);       GetSym
   ELSIF sym = S.nil    THEN x := B.NewConst(B.nilType, 0);        GetSym
   ELSIF sym = S.true   THEN x := B.NewConst(B.boolType, 1);       GetSym
   ELSIF sym = S.false  THEN x := B.NewConst(B.boolType, 0);       GetSym
@@ -663,9 +659,9 @@ BEGIN x := SimpleExpression();
       IF IsConst(x) & IsConst(y) THEN x := G.FoldConst(op, x, y)
       ELSE x := NewNode(op, x, y);  x.type := B.boolType
       END
-    ELSIF (x.type = B.charType) & IsCharStr(y) THEN
+    ELSIF (x.type = B.char16Type) & IsCharStr(y) THEN
       x := NewNode(op, x, StrToChar(y));  x.type := B.boolType
-    ELSIF (y.type = B.charType) & IsCharStr(x) THEN
+    ELSIF (y.type = B.char16Type) & IsCharStr(x) THEN
       x := NewNode(op, StrToChar(x), y);  x.type := B.boolType
     ELSE Mark('invalid type')
     END
@@ -755,7 +751,7 @@ BEGIN hasParen := TRUE;
   ELSIF f.id = S.spLoadLibraryW THEN
     x := designator();  CheckVar(x, FALSE);
     IF x.type # B.intType THEN Mark('not INTEGER') END;  Check0(S.comma);
-    y := expression();  IF ~B.IsStr(y.type) THEN Mark('not string') END;
+    y := expression();  IF ~B.IsStr16(y.type) THEN Mark('not string') END;
     x := NewNode(S.spLoadLibraryW, x, y)
   ELSIF f.id = S.spGetProcAddress THEN
     x := designator();  CheckVar(x, FALSE);
@@ -858,20 +854,20 @@ VAR x, y: B.Object;  xform: INTEGER;
     IF sym = S.int THEN y := factor();
       IF xform # B.tInt THEN Mark(errMsg) END
     ELSIF sym = S.string THEN
-      IF xform # B.tChar THEN Mark(errMsg) END;
+      IF xform # B.tChar16 THEN Mark(errMsg) END;
       IF S.slen > 2 THEN Mark('not char') END;
-      y := B.NewConst(B.charType, ORD(S.str[0]));  GetSym
+      y := B.NewConst(B.char16Type, ORD(S.str[0]));  GetSym
     ELSIF sym = S.ident THEN y := qualident();
       IF y = NIL THEN Mark(errMsg)
       ELSIF y IS B.Const THEN
         IF xform = B.tInt THEN CheckInt(y)
-        ELSIF xform = B.tChar THEN
-          IF y.type.form # B.tChar THEN Mark('not char') END
+        ELSIF xform = B.tChar16 THEN
+          IF y.type.form # B.tChar16 THEN Mark('not char') END
         END
-      ELSIF y IS B.Str THEN
-        IF xform # B.tChar THEN Mark(errMsg) END;
-        IF y(B.Str).len > 2 THEN Mark('not char') END;
-        y := B.NewConst(B.charType, ORD(S.str[0]));  GetSym
+      ELSIF y IS B.Str16 THEN
+        IF xform # B.tChar16 THEN Mark(errMsg) END;
+        IF y(B.Str16).len > 2 THEN Mark('not char') END;
+        y := B.NewConst(B.char16Type, ORD(S.str[0]));  GetSym
       ELSE Mark(errMsg);  y := NIL
       END
     ELSE Mark('Integer or char required')
@@ -911,8 +907,8 @@ BEGIN (* Case *)
   isTypeCase := (x.class = B.cVar) & TypeTestable(x);
   IF xform = B.tInt THEN
     y := B.NewTempVar(B.intType);  case.left := NewNode(S.becomes, y, x)
-  ELSIF (xform = B.tChar) OR IsCharStr(x) THEN
-    y := B.NewTempVar(B.charType);  case.left := NewNode(S.becomes, y, x)
+  ELSIF (xform = B.tChar16) OR IsCharStr(x) THEN
+    y := B.NewTempVar(B.char16Type);  case.left := NewNode(S.becomes, y, x)
   ELSIF isTypeCase THEN (*valid*)
   ELSE Mark('invalid case expression')
   END;
@@ -941,9 +937,9 @@ BEGIN
         GetSym;  y := expression();
         IF x.type = y.type THEN stat.left := NewNode(S.becomes, x, y)
         ELSIF CompTypes(x.type, y.type) THEN
-          IF IsStr(x.type) THEN CheckStrLen(x.type, y) END;
+          IF B.IsStr16(x.type) THEN CheckStrLen(x.type, y) END;
           stat.left := NewNode(S.becomes, x, y)
-        ELSIF (x.type = B.charType) & IsCharStr(y) THEN
+        ELSIF (x.type = B.char16Type) & IsCharStr(y) THEN
           stat.left := NewNode(S.becomes, x, StrToChar(y))
         ELSIF CompArray(x.type, y.type) & IsOpenArray(y.type) THEN
           IF y.type.notag THEN Mark('untagged open array') END;
