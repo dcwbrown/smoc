@@ -39,6 +39,7 @@ TYPE
                adr*, expno*, lev*: INTEGER;  ronly*: BOOLEAN
              END;
   Par*     = POINTER TO RECORD (Var)  varpar*: BOOLEAN END;
+  Str8*    = POINTER TO RECORD (Var)  bufpos*, len*: INTEGER END;
   Str16*   = POINTER TO RECORD (Var)  bufpos*, len*: INTEGER END;
   TempVar* = POINTER TO RECORD (Var)  inited*: BOOLEAN END;
 
@@ -55,6 +56,7 @@ TYPE
   ObjList*   = POINTER TO RECORD obj*:  Object;  next*: ObjList   END;
   TypeList*  = POINTER TO RECORD type*: Type;    next*: TypeList  END;
   ProcList*  = POINTER TO RECORD obj*:  Proc;    next*: ProcList  END;
+  Str8List*  = POINTER TO RECORD obj*:  Str8;    next*: Str8List  END;
   Str16List* = POINTER TO RECORD obj*:  Str16;   next*: Str16List END;
 
   Module* = POINTER TO RECORD (ObjDesc)
@@ -86,9 +88,13 @@ TYPE
 
 VAR
   topScope*, universe*, systemScope: Scope;
-  curLev*, modlev*: INTEGER;  modid*: S.IdStr;
+  curLev*, modlev*: INTEGER;
+  modid*: S.IdStr;
   modkey*: ModuleKey;  system*: BOOLEAN;
-  expList*, lastExp: ObjList;  str16List*: Str16List;  recList*: TypeList;
+  expList*, lastExp: ObjList;
+  str8List*:         Str8List;
+  str16List*:        Str16List;
+  recList*:          TypeList;
 
   (* Predefined Types *)
   nilType*,   noType*,
@@ -107,8 +113,12 @@ VAR
   symfile: Files.File;  rider: Files.Rider;
   refno, preTypeNo, expno*, modno*: INTEGER;
 
-  str16bufSize*:         INTEGER;
-  str16buf*:             ARRAY 1000H OF CHAR16;
+  str8bufSize*:  INTEGER;
+  str8buf*:      ARRAY 1000H OF BYTE;  (* TODO change to CHAR8 *)
+
+  str16bufSize*: INTEGER;
+  str16buf*:     ARRAY 1000H OF CHAR16;
+
   symPath, srcPath, sym: ARRAY 1024 OF CHAR16;
 
   ExportType0: PROCEDURE(typ: Type);
@@ -207,6 +217,30 @@ BEGIN
   rec.nTraced := rec.nTraced + tp.nTraced;
   RETURN fld
 END NewField;
+
+PROCEDURE NewStr8*(str: ARRAY OF BYTE;  slen: INTEGER): Str8;  (* TODO CHAR* *)
+VAR x: Str8;  i: INTEGER;  p: Str8List;
+BEGIN
+  NEW(x);  x.class := cVar;  x.ronly := TRUE;
+  x.type := str8Type;  x.lev := curLev;  x.len := slen;
+  IF x.lev >= -1 (* need to alloc buffer *) THEN
+    IF str8bufSize + slen >= LEN(str8buf) THEN
+      S.Mark('too many strings');  x.bufpos := -1
+    ELSE x.bufpos  := str8bufSize;  str8bufSize := str8bufSize + slen;
+      FOR i := 0 TO slen-1 DO str8buf[x.bufpos+i] := str[i] END;
+      NEW(p);  p.obj := x;  p.next := str8List;  str8List := p
+    END
+  ELSE x.bufpos := -1
+  END;
+  RETURN x
+END NewStr8;
+
+PROCEDURE NewStr8Z*(str: ARRAY OF BYTE): Str8;
+VAR slen: INTEGER;
+BEGIN
+  slen := 0;  WHILE str[slen] # 0 DO INC(slen) END;  INC(slen);  (* TODO CHAR* *)
+  RETURN NewStr8(str, slen)
+END NewStr8Z;
 
 PROCEDURE NewStr16*(str: ARRAY OF CHAR16;  slen: INTEGER): Str16;
 VAR x: Str16;  i: INTEGER;  p: Str16List;

@@ -10,4 +10,5 @@ Linker.mod
 Generator.mod
 Parser.mod
 HeapTrace.mod
+Dumper.mod
 Smoc.mod

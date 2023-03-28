@@ -138,7 +138,7 @@ VAR x: B.Proc;
     Files.Set(Rider, Out, Section[SecInitGlobals].fadr + x.descAdr);
     ident := x.decl;
     WHILE ident # NIL DO y := ident.obj;
-      IF (y IS B.Var) & ~(y IS B.Str16) & ~(y IS B.Par)
+      IF (y IS B.Var) & ~(y IS B.Str8) & ~(y IS B.Str16) & ~(y IS B.Par)
       OR (y IS B.Par) & ~y(B.Par).varpar & (y.type.size = 8) THEN
         IF y.type.nTraced > 0 THEN adr := y(B.Var).adr;
           IF y.type.form = B.tPtr THEN Files.WriteInt(Rider, adr)
@@ -165,8 +165,11 @@ END Write_proc_pointer_offset;
 PROCEDURE WriteInitGlobals(VAR metrics: SectionMetrics; size: INTEGER);
 VAR
   i, adr: INTEGER;  b: BYTE;
-  imod: B.Module;  slist: B.Str16List;  ident: B.Ident;
-  x: B.Str16;  t: B.TypeList;  obj: B.Object;
+  imod: B.Module;
+  slist8:  B.Str8List;   y: B.Str8;
+  slist16: B.Str16List;  x: B.Str16;
+  ident: B.Ident;
+  t: B.TypeList;  obj: B.Object;
   str: ARRAY 512 OF CHAR16;
 BEGIN
   ASSERT(Rva MOD SectionAlignment = 0);
@@ -201,14 +204,24 @@ BEGIN
     imod := imod.next
   END;
 
-  slist := B.str16List;
-  WHILE slist # NIL DO x := slist.obj;
+  slist8 := B.str8List;
+  WHILE slist8 # NIL DO y := slist8.obj;
+    Files.Set(Rider, Out, metrics.fadr + y.adr);  i := 0;
+    WHILE i < y.len DO
+      Files.Write(Rider, B.str8buf[y.bufpos+i]);  INC(i)
+    END;
+    slist8 := slist8.next
+  END;
+
+  slist16 := B.str16List;
+  WHILE slist16 # NIL DO x := slist16.obj;
     Files.Set(Rider, Out, metrics.fadr + x.adr);  i := 0;
     WHILE i < x.len DO
       Files.WriteChar(Rider, B.str16buf[x.bufpos+i]);  INC(i)
     END;
-    slist := slist.next
+    slist16 := slist16.next
   END;
+
   t := B.recList;
   WHILE t # NIL DO
     Files.Set(Rider, Out, metrics.fadr + t.type.adr);
@@ -222,7 +235,7 @@ BEGIN
   Files.Set(Rider, Out, metrics.fadr + ModulePointerTable);
   ident := B.universe.first;
   WHILE ident # NIL DO obj := ident.obj;
-    IF (obj IS B.Var) & ~(obj IS B.Str16) THEN
+    IF (obj IS B.Var) & ~(obj IS B.Str8) & ~(obj IS B.Str16) THEN
       IF obj.type.nTraced > 0 THEN adr := obj(B.Var).adr;
         IF obj.type.form = B.tPtr THEN Files.WriteInt(Rider, adr)
         ELSE Write_pointer_offset(adr, obj.type)

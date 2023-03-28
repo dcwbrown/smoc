@@ -3,5 +3,7 @@
 *.dll
 build/*
 backup/*
+dualcharhardlystarted/*
+utf8protonotworking/*
 *.sublime-*
 !build/boot0/*

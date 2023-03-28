@@ -39,6 +39,7 @@ CONST
   char*   = 20;  int*    = 21;  real*  = 22;  false*  = 23;  true*  = 24;
   nil*    = 25;  string* = 26;  not*   = 27;  lparen* = 28;  lbrak* = 29;
   lbrace* = 30;  ident*  = 31;
+
   if*     = 32;  while*  = 34;  repeat*    = 35;  case*   = 36;  for*    = 37;
   comma*  = 40;  colon*  = 41;  becomes*   = 42;  upto*   = 43;  rparen* = 44;
   rbrak*  = 45;  rbrace* = 46;  then*      = 47;  of*     = 48;  do*     = 49;
@@ -68,9 +69,12 @@ CONST
   spPAUSE*        = 155;
   endSp*          = 159;
 
+  string8* = 160; (* Hopefully not a problem that at end reather than next to string *)
+
 TYPE
   IdStr* = ARRAY MaxIdLen+1 OF CHAR16;
   Str*   = ARRAY MaxStrLen+1 OF CHAR16;
+  Str8*  = ARRAY MaxStrLen+1 OF BYTE;
 
   SetCompilerFlagProc* = PROCEDURE(pragma: ARRAY OF CHAR16);
   NotifyErrorProc* = PROCEDURE(line, column: INTEGER;  msg: ARRAY OF CHAR16);
@@ -80,6 +84,7 @@ VAR
   rval*:        REAL;
   id*:          IdStr;
   str*:         Str;
+  str8*:        Str8;
   ansiStr*:     BOOLEAN;
   errCnt*:      INTEGER;
 
@@ -139,6 +144,24 @@ BEGIN i := 0;  sym := ident;
     IF j < k THEN sym := keyTab[j].sym END
   END
 END Identifier;
+
+PROCEDURE String8(quoteCh: CHAR16);  (* Prototyping CHAR8 support *)
+VAR i: INTEGER;  utf8str: ARRAY MaxStrLen+1 OF BYTE;
+BEGIN
+  i := 0;  Read;
+  WHILE ~eof & (ch # quoteCh) DO
+    IF i < MaxStrLen THEN str8[i] := ORD(ch);  INC(i)
+    ELSE Mark('String8 too long')
+    END;
+    Read
+  END;
+  ASSERT(ch = '`');
+  Read;  str8[i] := 0;
+  ASSERT(ch = ';');
+  slen := i;
+
+  (*Out.Ln; Out.String("String8: len "); Out.Int(slen,1); Out.Ln;*)
+END String8;
 
 PROCEDURE String(quoteCh: CHAR16);
 VAR i: INTEGER;  utf8str: ARRAY MaxStrLen+1 OF BYTE;
@@ -379,11 +402,14 @@ BEGIN
     ELSIF ch < '[' THEN Identifier(sym)
     ELSIF ch = '_' THEN Identifier(sym)
     ELSIF ch < 'a' THEN
-      IF    ch = '[' THEN sym := lbrak
-      ELSIF ch = ']' THEN sym := rbrak
-      ELSIF ch = '^' THEN sym := arrow
-      ELSE (* ` *)        sym := null END;
-      Read
+      IF ch = '`' THEN String8(ch);  sym := string8  (* Temp for CHAR8 prototyping *)
+      ELSE
+        IF    ch = '[' THEN sym := lbrak
+        ELSIF ch = ']' THEN sym := rbrak
+        ELSIF ch = '^' THEN sym := arrow
+        ELSE (* ` *)        sym := null END;
+        Read
+      END
     ELSIF ch < '{' THEN Identifier(sym)
     ELSE
       IF    ch = '{' THEN sym := lbrace
