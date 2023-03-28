@@ -17,7 +17,7 @@ VAR
 (* -------------------------------------------------------------------------- *)
 (* -------------------------------------------------------------------------- *)
 
-PROCEDURE GetSym;                    BEGIN S.Get(sym)  END GetSym;
+PROCEDURE GetSym;                      BEGIN S.Get(sym)  END GetSym;
 PROCEDURE Mark(msg: ARRAY OF CHAR16);  BEGIN S.Mark(msg) END Mark;
 
 PROCEDURE Missing(s: INTEGER);
@@ -106,7 +106,7 @@ END SameProc;
 PROCEDURE CompTypes(t1, t2: B.Type): BOOLEAN;
   RETURN (t1 = t2)
   OR (t1.form = B.tInt) & (t2.form = B.tInt)
-  OR B.IsStr8(t1) & B.IsStr8(t2)
+  OR B.IsStr8(t1)  & B.IsStr8(t2)
   OR B.IsStr16(t1) & B.IsStr16(t2)
   OR (t1.form IN {B.tProc, B.tPtr}) & (t2 = B.nilType)
   OR (t1.form IN {B.tRec, B.tPtr}) & (t1.form = t2.form) & IsExt(t2, t1)
