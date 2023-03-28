@@ -155,9 +155,7 @@ BEGIN
     END;
     Read
   END;
-  ASSERT(ch = '`');
   Read;  str8[i] := 0;
-  ASSERT(ch = ';');
   slen := i;
 
   (*Out.Ln; Out.String("String8: len "); Out.Int(slen,1); Out.Ln;*)

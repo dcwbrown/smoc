@@ -1,4 +1,4 @@
-MODULE HeapTrace;  (*$TRACE*)
+MODULE HeapTrace;
 
 (* Include this module to get a trace of every garbage collection. *)
 

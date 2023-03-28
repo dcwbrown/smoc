@@ -1,4 +1,4 @@
-MODULE Dumper;  (*$TRACE*)
+MODULE Dumper;
 
 (* Include this module to get a trace of every garbage collection. *)
 

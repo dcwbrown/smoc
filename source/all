@@ -11,4 +11,6 @@ Generator.mod
 Parser.mod
 HeapTrace.mod
 Dumper.mod
+Write8.mod
+Write16.mod
 Smoc.mod
