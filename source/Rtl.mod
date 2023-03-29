@@ -120,7 +120,7 @@ END TimeToMSecs;
 (* 0000 00vv wwww wwxx xxxx yyyy yyzz zzzz    111110vv 10wwwwww 10xxxxxx 10yyyyyy 10zzzzzz          *)
 (* 0uvv vvvv wwww wwxx xxxx yyyy yyzz zzzz    1111110u 10vvvvvv 10wwwwww 10xxxxxx 10yyyyyy 10zzzzzz *)
 
-PROCEDURE GetUtf8(src: ARRAY OF BYTE; VAR i: INTEGER): INTEGER;
+PROCEDURE GetUtf8*(src: ARRAY OF BYTE; VAR i: INTEGER): INTEGER;
 VAR n, result: INTEGER;
 BEGIN ASSERT(i < LEN(src)); result := src[i];  INC(i);
   IF result >= 0C0H THEN
@@ -139,7 +139,7 @@ BEGIN ASSERT(i < LEN(src)); result := src[i];  INC(i);
   END;
 RETURN result END GetUtf8;
 
-PROCEDURE PutUtf8(c: INTEGER; VAR dst: ARRAY OF BYTE; VAR i: INTEGER);
+PROCEDURE PutUtf8*(c: INTEGER; VAR dst: ARRAY OF BYTE; VAR i: INTEGER);
 VAR n: INTEGER;
 BEGIN
   ASSERT(i < LEN(dst));
@@ -162,7 +162,7 @@ BEGIN
 END PutUtf8;
 
 
-PROCEDURE GetUtf16(src: ARRAY OF CHAR; VAR i: INTEGER): INTEGER;
+PROCEDURE GetUtf16*(src: ARRAY OF CHAR; VAR i: INTEGER): INTEGER;
 VAR result: INTEGER;
 BEGIN
   ASSERT(i < LEN(src));
@@ -175,7 +175,7 @@ BEGIN
   END
 RETURN result END GetUtf16;
 
-PROCEDURE PutUtf16(ch: INTEGER; VAR dst: ARRAY OF CHAR; VAR i: INTEGER);
+PROCEDURE PutUtf16*(ch: INTEGER; VAR dst: ARRAY OF CHAR; VAR i: INTEGER);
 BEGIN
   ASSERT(i < LEN(dst));
   IF (ch < 10000H) & (i < LEN(dst)) THEN

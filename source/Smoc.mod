@@ -40,7 +40,7 @@ VAR srcfile: Files.File;  modinit: B.Node;
 BEGIN
   outFname(fname);
   B.SetSrcPath(fname);  srcfile := Files.Old(fname);
-  S.Init(srcfile, 0);  S.Get(sym);
+  S.Init(srcfile);  S.Get(sym);
 
   startTime := Rtl.Time();
   IF sym = S.module THEN modinit := P.Module() ELSE S.Mark("Expected 'MODULE'") END;

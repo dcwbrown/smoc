@@ -31,6 +31,8 @@ BEGIN
   Dumper.DumpVar("t", t);
 
   IF s = t THEN w.sl(`s=t.`) ELSE w.sl(`s#t.`) END;
+  IF s < t THEN w.sl(`s<t.`) ELSE w.sl(`s¬<t.`) END;
+  IF s > t THEN w.sl(`s>t.`) ELSE w.sl(`s¬>t.`) END;
   s[1] := `e`;
   IF s = t THEN w.sl(`s=t.`) ELSE w.sl(`s#t.`) END;
 

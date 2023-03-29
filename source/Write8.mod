@@ -4,14 +4,17 @@ IMPORT SYSTEM, Rtl;
 
 CONST
   STD_OUTPUT_HANDLE = -11;
-  Kernel32 = 'Kernel32.dll';
+  UTF8              = 65001;
+  Kernel32          = 'Kernel32.dll';
 
 VAR
-  GetStdHandle: PROCEDURE(nStdHandle: SYSTEM.CARD32): INTEGER;
-  WriteFile:    PROCEDURE(
-                  hFile, lpBuffer, nNumberOfBytesToWrite,
-                  lpNumberOfBytesWritten, lpOverlapped: INTEGER
-                ): SYSTEM.CARD32;
+  GetStdHandle:       PROCEDURE(nStdHandle: SYSTEM.CARD32): INTEGER;
+  SetConsoleOutputCP: PROCEDURE(codepage: INTEGER): INTEGER;
+
+  WriteFile: PROCEDURE(
+               hFile, lpBuffer, nNumberOfBytesToWrite,
+               lpNumberOfBytesWritten, lpOverlapped: INTEGER
+             ): SYSTEM.CARD32;
 
   hOut: INTEGER;
   crlf: ARRAY 2 OF BYTE;
@@ -24,7 +27,7 @@ BEGIN result := WriteFile(hOut, adr, len, SYSTEM.ADR(written), 0) END writebuf;
 PROCEDURE write(VAR bytes: ARRAY OF BYTE);
 BEGIN writebuf(SYSTEM.ADR(bytes), LEN(bytes)) END write;
 
-PROCEDURE writebyte(b: BYTE);  BEGIN write(b) END writebyte;
+PROCEDURE writebyte(b: BYTE); BEGIN write(b) END writebyte;
 
 PROCEDURE writesz(bytes: ARRAY OF BYTE);
 VAR len: INTEGER;
@@ -58,10 +61,16 @@ BEGIN
   writebyte(n MOD 10 + 48)
 END i;
 
-
+PROCEDURE init;
+VAR result: INTEGER;
 BEGIN
-  Rtl.Import(GetStdHandle, Kernel32, 'GetStdHandle');
-  Rtl.Import(WriteFile,    Kernel32, 'WriteFile');
+  Rtl.Import(GetStdHandle,       Kernel32, 'GetStdHandle');
+  Rtl.Import(SetConsoleOutputCP, Kernel32, 'SetConsoleOutputCP');
+  Rtl.Import(WriteFile,          Kernel32, 'WriteFile');
   hOut := GetStdHandle(STD_OUTPUT_HANDLE);
+  IF SetConsoleOutputCP # NIL THEN result := SetConsoleOutputCP(UTF8) END;
   crlf[0] := 13;  crlf[1] := 10;
+END init;
+
+BEGIN init
 END Write8.
