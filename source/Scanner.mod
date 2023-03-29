@@ -77,7 +77,7 @@ CONST
   string8* = 160; (* Hopefully not a problem that at end rather than next to string *)
 
 TYPE
-  IdStr* = ARRAY MaxIdLen+1 OF CHAR16;
+  IdStr* = ARRAY MaxIdLen+1  OF CHAR16;
   Str*   = ARRAY MaxStrLen+1 OF CHAR16;
   Str8*  = ARRAY MaxStrLen+1 OF BYTE;
 
@@ -133,6 +133,16 @@ RETURN LSL(lastLine, 10) + (lastColumn MOD 400H) END SourcePos;
 PROCEDURE Identifier(VAR sym: INTEGER);
 VAR i, j, k: INTEGER;
 BEGIN i := 0;  sym := ident;
+  WHILE (i < MaxIdLen) & (   (ch >= ORD('0')) & (ch <= ORD('9'))
+                          OR (ch >= ORD('A')) & (ch <= ORD('Z'))
+                          OR (ch >= ORD('a')) & (ch <= ORD('z'))
+                          OR (ch =  ORD('_'))) DO
+    Rtl.PutUtf16(ch, id, i);  Read
+  END;
+  id[i] := 0X;
+  IF i >= MaxIdLen THEN Mark('identifier too long') END;
+
+  (*
   REPEAT
     IF i <= MaxIdLen THEN Rtl.PutUtf16(ch, id, i) END;  Read
   UNTIL (ch < ORD('0'))
@@ -142,8 +152,11 @@ BEGIN i := 0;  sym := ident;
   IF i <= MaxIdLen THEN id[i] := 0X
   ELSE Mark('identifier too long');  id[MaxIdLen] := 0X
   END;
+  *)
+
   (* search for keyword *)
-  IF i < LEN(KWX) THEN j := KWX[i-1];  k := KWX[i];
+  IF i < LEN(KWX) THEN
+    j := KWX[i-1];  k := KWX[i];
     WHILE (keyTab[j].id # id) & (j < k) DO INC(j) END;
     IF j < k THEN sym := keyTab[j].sym END
   END
@@ -152,25 +165,21 @@ END Identifier;
 PROCEDURE String8(quoteCh: INTEGER);  (* Prototyping CHAR8 support *)
 BEGIN
   slen := 0;  Read;
-  WHILE ~eof & (ch # quoteCh) DO
-    IF slen < MaxStrLen THEN Rtl.PutUtf8(ch, str8, slen)
-    ELSE Mark('String8 too long') END;
-    Read
+  WHILE ~eof & (slen < MaxStrLen) & (ch # quoteCh) DO
+    Rtl.PutUtf8(ch, str8, slen); Read
   END;
-  Read;
-  IF slen < MaxStrLen THEN str8[slen] := 0;  INC(slen) END
+  Read;  str8[slen] := 0;  INC(slen);
+  IF slen >= MaxStrLen THEN Mark('String too long') END;
 END String8;
 
 PROCEDURE String(quoteCh: INTEGER);
 BEGIN
   slen := 0;  Read;
-  WHILE ~eof & (ch # quoteCh) DO
-    IF slen < MaxStrLen THEN Rtl.PutUtf16(ch, str, slen)
-    ELSE Mark('String too long') END;
-    Read
+  WHILE ~eof & (slen < MaxStrLen) & (ch # quoteCh) DO
+    Rtl.PutUtf16(ch, str, slen); Read
   END;
-  Read;
-  IF slen < MaxStrLen THEN str[slen] := 0X;  INC(slen) END
+  Read;  str[slen] := 0X;  INC(slen);
+  IF slen >= MaxStrLen THEN Mark('String too long') END;
 END String;
 
 PROCEDURE HexString;
