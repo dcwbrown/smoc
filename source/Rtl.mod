@@ -65,6 +65,20 @@ VAR
 
 PROCEDURE Import*(VAR proc:     ARRAY OF SYSTEM.BYTE;
                       libPath:  ARRAY OF CHAR;
+                      procName: ARRAY OF CHAR8);
+VAR hLib, procAdr: INTEGER;
+BEGIN
+  SYSTEM.LoadLibraryW(hLib, libPath);
+  IF hLib # 0 THEN
+    SYSTEM.GetProcAddress(procAdr, hLib, SYSTEM.ADR(procName))
+  ELSE procAdr := 0
+  END;
+  SYSTEM.PUT(SYSTEM.ADR(proc), procAdr)
+END Import;
+
+(*
+PROCEDURE Import*(VAR proc:     ARRAY OF SYSTEM.BYTE;
+                      libPath:  ARRAY OF CHAR;
                       procName: ARRAY OF CHAR);
 VAR hLib, procAdr, i: INTEGER;  ansiStr: ARRAY 256 OF BYTE;
 BEGIN
@@ -77,6 +91,7 @@ BEGIN
   END;
   SYSTEM.PUT(SYSTEM.ADR(proc), procAdr)
 END Import;
+*)
 
 PROCEDURE MessageBox*(title, msg: ARRAY OF CHAR);
 VAR iRes: Int;
@@ -538,13 +553,13 @@ BEGIN
 END GetArgv;
 
 BEGIN
-  Import(ExitProcess,                 'KERNEL32.DLL', 'ExitProcess');
-  Import(AddVectoredExceptionHandler, 'KERNEL32.DLL', 'AddVectoredExceptionHandler');
-  Import(MessageBoxW,                 'USER32.DLL',   'MessageBoxW');
-  Import(GetSystemTimeAsFileTime,     'KERNEL32.DLL', 'GetSystemTimeAsFileTime');
-  Import(GetCommandLineW,             'KERNEL32.DLL', 'GetCommandLineW');
-  Import(CommandLineToArgvW,          'Shell32.dll',  'CommandLineToArgvW');
-  Import(VirtualAlloc,                'KERNEL32.DLL', 'VirtualAlloc');
+  Import(ExitProcess,                 'KERNEL32.DLL', `ExitProcess`);
+  Import(AddVectoredExceptionHandler, 'KERNEL32.DLL', `AddVectoredExceptionHandler`);
+  Import(MessageBoxW,                 'USER32.DLL',   `MessageBoxW`);
+  Import(GetSystemTimeAsFileTime,     'KERNEL32.DLL', `GetSystemTimeAsFileTime`);
+  Import(GetCommandLineW,             'KERNEL32.DLL', `GetCommandLineW`);
+  Import(CommandLineToArgvW,          'Shell32.dll',  `CommandLineToArgvW`);
+  Import(VirtualAlloc,                'KERNEL32.DLL', `VirtualAlloc`);
 
   GetArgv;  InitHeap
 END Rtl.

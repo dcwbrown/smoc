@@ -232,9 +232,9 @@ BEGIN
 END Ln;
 
 BEGIN
-	Rtl.Import(GetStdHandle, Kernel32, 'GetStdHandle');
-	Rtl.Import(AllocConsole, Kernel32, 'AllocConsole');
-	Rtl.Import(WriteFile, Kernel32, 'WriteFile');
-	Rtl.Import(wsprintfW, 'USER32.DLL', 'wsprintfW');
+	Rtl.Import(GetStdHandle, Kernel32,     `GetStdHandle`);
+	Rtl.Import(AllocConsole, Kernel32,     `AllocConsole`);
+	Rtl.Import(WriteFile,    Kernel32,     `WriteFile`);
+	Rtl.Import(wsprintfW,    'USER32.DLL', `wsprintfW`);
 	Open
 END Out.

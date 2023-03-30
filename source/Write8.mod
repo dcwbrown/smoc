@@ -64,9 +64,9 @@ END i;
 PROCEDURE init;
 VAR result: INTEGER;
 BEGIN
-  Rtl.Import(GetStdHandle,       Kernel32, 'GetStdHandle');
-  Rtl.Import(SetConsoleOutputCP, Kernel32, 'SetConsoleOutputCP');
-  Rtl.Import(WriteFile,          Kernel32, 'WriteFile');
+  Rtl.Import(GetStdHandle,       Kernel32, `GetStdHandle`);
+  Rtl.Import(SetConsoleOutputCP, Kernel32, `SetConsoleOutputCP`);
+  Rtl.Import(WriteFile,          Kernel32, `WriteFile`);
   hOut := GetStdHandle(STD_OUTPUT_HANDLE);
   IF SetConsoleOutputCP # NIL THEN result := SetConsoleOutputCP(UTF8) END;
   crlf[0] := 13;  crlf[1] := 10;

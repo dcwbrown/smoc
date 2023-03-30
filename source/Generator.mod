@@ -117,9 +117,9 @@ VAR
   modInitProc, trapProc, trapProc2: Proc;
   dllInitProc, dllAttachProc, dllDetachProc: Proc;
 
-  modidStr, errFmtStr, err2FmtStr, err3FmtStr: B.Str16;
-  err4FmtStr, err5FmtStr, err6FmtStr, rtlName, user32name: B.Str16;
-  trapDesc: B.Str16;
+  modidStr,   errFmtStr,  err2FmtStr,
+  err3FmtStr, err4FmtStr, err5FmtStr,
+  err6FmtStr, rtlName,    user32name, trapDesc: B.Str16;
 
   mem: RECORD
          mod, rm, bas, idx, scl, disp: INTEGER
@@ -579,12 +579,14 @@ BEGIN
     z := o.obj;  strSize := z.len;
     z.adr := staticSize;  INC(staticSize, strSize);  o := o.next
   END;
+
   (* Allocate 16 bit literal strings *)
-  Align(staticSize, 16);  p := B.str16List;
+  Align(staticSize, 2);  p := B.str16List;
   WHILE p # NIL DO
     y := p.obj;  strSize := 2*y.len;
     y.adr := staticSize;  INC(staticSize, strSize);  p := p.next
   END;
+
   (* Allocate ptrTable *)
   Align(staticSize, 16);  q := B.recList;
   WHILE q # NIL DO
@@ -594,11 +596,14 @@ BEGIN
     END ;
     q := q.next
   END;
+
   AllocImportModules;
+
   IF staticSize + varSize > MaxSize THEN
     S.Mark('static variables size too big');  ASSERT(FALSE)
   END
 END AllocStaticData;
+
 
 PROCEDURE ScanNode(node: B.Node);
 VAR left, right: B.Object;

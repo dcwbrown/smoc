@@ -4,6 +4,7 @@ IMPORT Dumper, w := Write8;
 
 VAR
   c: CHAR8;
+  i: INTEGER;
   s: ARRAY 10 OF CHAR8;
   t: ARRAY 10 OF CHAR8;
 
@@ -43,5 +44,10 @@ BEGIN
   s := $$40 41
          42 43 00$;
   w.s(`s: '`);  w.s(s);  w.sl(`'.`);
+
+  i := 50;
+  s[i] := ` `;
+
+  ASSERT(FALSE);
 
 END test.
