@@ -2566,8 +2566,8 @@ BEGIN
     imod := B.modList;
     WHILE imod # NIL DO
       IF imod.import OR (imod.impList # NIL) THEN
-        SetRm_regI(reg_B, imod.adr);      EmitRegRm (LEA,  reg_C, 8);
-        SetRm_regI(reg_B, LoadLibraryW);  EmitRm    (CALL, 4);
+        SetRm_regI(reg_B, imod.adr8);     EmitRegRm (LEA,  reg_C, 8);
+        SetRm_regI(reg_B, LoadLibraryA);  EmitRm    (CALL, 4);
                                           EmitRR    (TEST, reg_A, 8, reg_A);
                                           ModKeyTrap(ccZ, 1, imod);
                                           EmitRR    (MOVd, reg_SI, 8, reg_A);
