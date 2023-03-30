@@ -130,10 +130,15 @@ VAR
 
   (* Static data address*)
   (* Win32 specifics *)
-  GetModuleHandleExW, ExitProcess, LoadLibraryW, GetProcAddress: INTEGER;
-  AddVectoredExceptionHandler: INTEGER;
-  MessageBoxW, wsprintfW: INTEGER;
-  (* others *)
+  GetModuleHandleExW, GetModuleHandleExA,
+  ExitProcess,
+  LoadLibraryW, LoadLibraryA,
+  GetProcAddress,
+  AddVectoredExceptionHandler,
+  MessageBoxW,
+  wsprintfW:  INTEGER;
+
+   (* others *)
   adrOfNEW, modPtrTable, adrOfPtrTable, adrOfStackPtrList: INTEGER;
 
   debug: Files.File;
@@ -2186,6 +2191,17 @@ BEGIN
       IF x.r # reg_SI THEN RelocReg(x.r, reg_SI) END;
       EmitRep(MOVSrep, size, 1)
     END
+  ELSIF id = S.spLoadLibraryA THEN
+    MkItmStat.avoid := {0, 1, 2, 8 .. 11};
+    AvoidUsedBy(obj2);  MakeItem0(x, obj1);  ResetMkItmStat;
+    SetBestReg(reg_C);  MakeItem0(y, obj2);  LoadAdr(y);
+    IF y.r # reg_C THEN RelocReg(y.r, reg_C) END;
+
+    SetRm_regI(reg_B, LoadLibraryA);   EmitRm(CALL, 4);
+    FreeReg(reg_C);  SetAlloc(reg_A);  SetAlloc(reg_B);
+
+    RefToRegI(x);  SetRmOperand(x);  EmitRegRm(MOV, reg_A, 8);
+    IF curProc.obj.homeSpace < 32 THEN curProc.obj.homeSpace := 32 END
   ELSIF id = S.spLoadLibraryW THEN
     MkItmStat.avoid := {0, 1, 2, 8 .. 11};
     AvoidUsedBy(obj2);  MakeItem0(x, obj1);  ResetMkItmStat;

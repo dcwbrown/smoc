@@ -458,20 +458,20 @@ END WriteBytes;
 PROCEDURE InitWin32;
   CONST Kernel32 = 'KERNEL32.DLL';
 BEGIN
-  Rtl.Import(GetFileAttributesW, Kernel32, 'GetFileAttributesW');
-  Rtl.Import(CreateFileW, Kernel32, 'CreateFileW');
-  Rtl.Import(CloseHandle, Kernel32, 'CloseHandle');
-  Rtl.Import(MoveFileExW, Kernel32, 'MoveFileExW');
-  Rtl.Import(DeleteFileW, Kernel32, 'DeleteFileW');
-  Rtl.Import(ReadFile, Kernel32, 'ReadFile');
-  Rtl.Import(WriteFile, Kernel32, 'WriteFile');
-  Rtl.Import(SetFilePointerEx, Kernel32, 'SetFilePointerEx');
-  Rtl.Import(FlushFileBuffers, Kernel32, 'FlushFileBuffers');
-  Rtl.Import(SetEndOfFile, Kernel32, 'SetEndOfFile');
-  Rtl.Import(GetFileSizeEx, Kernel32, 'GetFileSizeEx');
-  Rtl.Import(wsprintfW, 'USER32.DLL', 'wsprintfW');
-  Rtl.Import(GetEnvironmentVariableW, Kernel32, 'GetEnvironmentVariableW');
-  Rtl.Import(GetCurrentProcessId, Kernel32, 'GetCurrentProcessId')
+  Rtl.Import(GetFileAttributesW,      Kernel32,     `GetFileAttributesW`);
+  Rtl.Import(CreateFileW,             Kernel32,     `CreateFileW`);
+  Rtl.Import(CloseHandle,             Kernel32,     `CloseHandle`);
+  Rtl.Import(MoveFileExW,             Kernel32,     `MoveFileExW`);
+  Rtl.Import(DeleteFileW,             Kernel32,     `DeleteFileW`);
+  Rtl.Import(ReadFile,                Kernel32,     `ReadFile`);
+  Rtl.Import(WriteFile,               Kernel32,     `WriteFile`);
+  Rtl.Import(SetFilePointerEx,        Kernel32,     `SetFilePointerEx`);
+  Rtl.Import(FlushFileBuffers,        Kernel32,     `FlushFileBuffers`);
+  Rtl.Import(SetEndOfFile,            Kernel32,     `SetEndOfFile`);
+  Rtl.Import(GetFileSizeEx,           Kernel32,     `GetFileSizeEx`);
+  Rtl.Import(wsprintfW,               'USER32.DLL', `wsprintfW`);
+  Rtl.Import(GetEnvironmentVariableW, Kernel32,     `GetEnvironmentVariableW`);
+  Rtl.Import(GetCurrentProcessId,     Kernel32,     `GetCurrentProcessId`)
 END InitWin32;
 
 BEGIN InitWin32

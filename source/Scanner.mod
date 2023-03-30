@@ -74,8 +74,10 @@ CONST
   spPAUSE*        = 155;
   endSp*          = 159;
 
-  string8* = 160; (* Hopefully not a problem that at end rather than next to string *)
-  sfCHR8*  = 161;
+  (* Additions during conversion to 8 bit characters *)
+  string8*        = 160;
+  sfCHR8*         = 161;
+  spLoadLibraryA* = 162;
 
 TYPE
   IdStr* = ARRAY MaxIdLen+1  OF CHAR16;
