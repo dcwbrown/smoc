@@ -933,6 +933,8 @@ BEGIN
   Enter(NewSProc(S.sfFLT,   cSFunc), 'FLT');
   Enter(NewSProc(S.sfORD,   cSFunc), 'ORD');
   Enter(NewSProc(S.sfCHR,   cSFunc), 'CHR');
+  Enter(NewSProc(S.sfCHR,   cSFunc), 'CHR16');
+  Enter(NewSProc(S.sfCHR8,  cSFunc), 'CHR8');
 
   OpenScope;
   Enter(NewSProc(S.spGET,            cSProc), 'GET');

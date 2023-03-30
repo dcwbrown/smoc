@@ -1829,7 +1829,11 @@ BEGIN
     EmitXmmRm(CVTSI2SD, r, 8);  FreeReg(x.r);
     x.mode := mXReg;  x.r := r;  MkItmStat := oldStat
   ELSIF id = S.sfORD THEN MakeItem0(x, obj1);  Load(x)
-  ELSIF id = S.sfCHR THEN MakeItem0(x, obj1);  RefToRegI(x);  (* TODO CHR8() *)
+  ELSIF id = S.sfCHR8 THEN MakeItem0(x, obj1);  RefToRegI(x);
+    IF x.mode IN {mRegI, mBP, mBX} THEN x.type := B.char8Type;  Load(x)
+    ELSIF x.mode = mReg            THEN LoadToReg0(x.r, x, B.char8Type)
+    ELSE ASSERT(FALSE) END
+  ELSIF id = S.sfCHR THEN MakeItem0(x, obj1);  RefToRegI(x);
     IF x.mode IN {mRegI, mBP, mBX} THEN
       IF    x.type = B.int8Type THEN x.type := B.byteType  (* load as unsigned *)
       ELSIF x.type # B.byteType THEN x.type := B.char16Type

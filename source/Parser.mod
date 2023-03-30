@@ -494,7 +494,11 @@ BEGIN GetSym;
     IF IsConst(y) THEN x := G.TypeTransferConst(B.intType, y)
     ELSE x := NewNode(S.sfORD, y, NIL);  x.type := B.intType
     END
-  ELSIF f.id = S.sfCHR THEN y := expression0();  CheckInt(y);    (* TODO CHR8() *)
+  ELSIF f.id = S.sfCHR8 THEN y := expression0();  CheckInt(y);
+    IF y IS B.Const THEN x := G.TypeTransferConst(B.char8Type, y)
+    ELSE x := NewNode(S.sfCHR8, y, NIL);  x.type := B.char8Type
+    END
+  ELSIF f.id = S.sfCHR THEN y := expression0();  CheckInt(y);
     IF y IS B.Const THEN x := G.TypeTransferConst(B.char16Type, y)
     ELSE x := NewNode(S.sfCHR, y, NIL);  x.type := B.char16Type
     END

@@ -75,6 +75,7 @@ CONST
   endSp*          = 159;
 
   string8* = 160; (* Hopefully not a problem that at end rather than next to string *)
+  sfCHR8*  = 161;
 
 TYPE
   IdStr* = ARRAY MaxIdLen+1  OF CHAR16;

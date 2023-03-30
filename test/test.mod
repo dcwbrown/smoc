@@ -15,6 +15,9 @@ BEGIN
   w.s(`w.hs(-25):       `); w.hs(-25);       w.l;
   w.s(`w.c( X ):        `); w.c(`X`);        w.l;
 
+  c := CHR8(113);
+  w.s(`c: '`);  w.c(c);  w.sl(`'.`);
+
   c := `Q`;
   w.s(`c: '`);  w.c(c);  w.sl(`'.`);
   Dumper.DumpVar("c", c);
