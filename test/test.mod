@@ -2,6 +2,9 @@ MODULE test;  (*$CONSOLE*)
 
 IMPORT Dumper, w := Write8;
 
+CONST
+  (* s8 = `8 bit string`; *)
+
 VAR
   c: CHAR8;
   i: INTEGER;

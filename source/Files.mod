@@ -456,22 +456,21 @@ END WriteBytes;
 (* -------------------------------------------------------------------------- *)
 
 PROCEDURE InitWin32;
-  CONST Kernel32 = 'KERNEL32.DLL';
 BEGIN
-  Rtl.Import(GetFileAttributesW,      Kernel32,     `GetFileAttributesW`);
-  Rtl.Import(CreateFileW,             Kernel32,     `CreateFileW`);
-  Rtl.Import(CloseHandle,             Kernel32,     `CloseHandle`);
-  Rtl.Import(MoveFileExW,             Kernel32,     `MoveFileExW`);
-  Rtl.Import(DeleteFileW,             Kernel32,     `DeleteFileW`);
-  Rtl.Import(ReadFile,                Kernel32,     `ReadFile`);
-  Rtl.Import(WriteFile,               Kernel32,     `WriteFile`);
-  Rtl.Import(SetFilePointerEx,        Kernel32,     `SetFilePointerEx`);
-  Rtl.Import(FlushFileBuffers,        Kernel32,     `FlushFileBuffers`);
-  Rtl.Import(SetEndOfFile,            Kernel32,     `SetEndOfFile`);
-  Rtl.Import(GetFileSizeEx,           Kernel32,     `GetFileSizeEx`);
-  Rtl.Import(wsprintfW,               'USER32.DLL', `wsprintfW`);
-  Rtl.Import(GetEnvironmentVariableW, Kernel32,     `GetEnvironmentVariableW`);
-  Rtl.Import(GetCurrentProcessId,     Kernel32,     `GetCurrentProcessId`)
+  Rtl.Import(GetFileAttributesW,      `KERNEL32.DLL`, `GetFileAttributesW`);
+  Rtl.Import(CreateFileW,             `KERNEL32.DLL`, `CreateFileW`);
+  Rtl.Import(CloseHandle,             `KERNEL32.DLL`, `CloseHandle`);
+  Rtl.Import(MoveFileExW,             `KERNEL32.DLL`, `MoveFileExW`);
+  Rtl.Import(DeleteFileW,             `KERNEL32.DLL`, `DeleteFileW`);
+  Rtl.Import(ReadFile,                `KERNEL32.DLL`, `ReadFile`);
+  Rtl.Import(WriteFile,               `KERNEL32.DLL`, `WriteFile`);
+  Rtl.Import(SetFilePointerEx,        `KERNEL32.DLL`, `SetFilePointerEx`);
+  Rtl.Import(FlushFileBuffers,        `KERNEL32.DLL`, `FlushFileBuffers`);
+  Rtl.Import(SetEndOfFile,            `KERNEL32.DLL`, `SetEndOfFile`);
+  Rtl.Import(GetFileSizeEx,           `KERNEL32.DLL`, `GetFileSizeEx`);
+  Rtl.Import(wsprintfW,               `USER32.DLL`,   `wsprintfW`);
+  Rtl.Import(GetEnvironmentVariableW, `KERNEL32.DLL`, `GetEnvironmentVariableW`);
+  Rtl.Import(GetCurrentProcessId,     `KERNEL32.DLL`, `GetCurrentProcessId`)
 END InitWin32;
 
 BEGIN InitWin32

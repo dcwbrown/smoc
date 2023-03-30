@@ -771,6 +771,11 @@ BEGIN hasParen := TRUE;
     y := expression();  CheckInt(y);  Check0(S.comma);
     z := expression();  CheckInt(z);
     x := NewNode(S.spCOPY, x, NewNode(S.null, y, z))
+  ELSIF f.id = S.spLoadLibraryA THEN
+    x := designator();  CheckVar(x, FALSE);
+    IF x.type # B.intType THEN Mark('not INTEGER') END;  Check0(S.comma);
+    y := expression();  IF ~B.IsStr8(y.type) THEN Mark('not string') END;
+    x := NewNode(S.spLoadLibraryA, x, y)
   ELSIF f.id = S.spLoadLibraryW THEN
     x := designator();  CheckVar(x, FALSE);
     IF x.type # B.intType THEN Mark('not INTEGER') END;  Check0(S.comma);

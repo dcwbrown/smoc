@@ -72,12 +72,12 @@ CONST
 
   spLoadLibraryW* = 151;  spGetProcAddress* = 152;  spINT3* = 154;
   spPAUSE*        = 155;
+  spLoadLibraryA* = 156;
   endSp*          = 159;
 
   (* Additions during conversion to 8 bit characters *)
   string8*        = 160;
   sfCHR8*         = 161;
-  spLoadLibraryA* = 162;
 
 TYPE
   IdStr* = ARRAY MaxIdLen+1  OF CHAR16;

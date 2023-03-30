@@ -2284,8 +2284,8 @@ BEGIN
     ELSIF node.op = S.call   THEN Call(x, node)
     ELSIF (node.op >= S.begSf) & (node.op <= S.endSf) THEN StdFunc(x, node)
     ELSIF (node.op = S.becomes)
-    OR (node.op >= S.if) & (node.op <= S.for)
-    OR (node.op >= S.begSp) & (node.op <= S.endSp) THEN
+    OR    (node.op >= S.if) & (node.op <= S.for)
+    OR    (node.op >= S.begSp) & (node.op <= S.endSp) THEN
       ResetMkItmStat;  allocReg := {};  allocXReg := {};
       IF node.op = S.becomes THEN Becomes(node)
       ELSIF node.op = S.if     THEN If(node)
@@ -3081,6 +3081,9 @@ BEGIN
   (* Note: offset 80 is reserved for the RVA of the static data from the      *)
   (* Windows module base.                                                     *)
 
+
+  GetModuleHandleExA          := 48;
+  LoadLibraryA                := 40;
   AddVectoredExceptionHandler := 32;
   GetModuleHandleExW          := 24;
   ExitProcess                 := 16;

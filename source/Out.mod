@@ -6,7 +6,6 @@ IMPORT
 
 CONST
 	STD_OUTPUT_HANDLE = -11;
-	Kernel32 = 'Kernel32.dll';
 
 TYPE
 	Handle = INTEGER;
@@ -232,9 +231,9 @@ BEGIN
 END Ln;
 
 BEGIN
-	Rtl.Import(GetStdHandle, Kernel32,     `GetStdHandle`);
-	Rtl.Import(AllocConsole, Kernel32,     `AllocConsole`);
-	Rtl.Import(WriteFile,    Kernel32,     `WriteFile`);
-	Rtl.Import(wsprintfW,    'USER32.DLL', `wsprintfW`);
+	Rtl.Import(GetStdHandle, `KERNEL32.DLL`, `GetStdHandle`);
+	Rtl.Import(AllocConsole, `KERNEL32.DLL`, `AllocConsole`);
+	Rtl.Import(WriteFile,    `KERNEL32.DLL`, `WriteFile`);
+	Rtl.Import(wsprintfW,    `USER32.DLL`,   `wsprintfW`);
 	Open
 END Out.

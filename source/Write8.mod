@@ -5,7 +5,6 @@ IMPORT SYSTEM, Rtl;
 CONST
   STD_OUTPUT_HANDLE = -11;
   UTF8              = 65001;
-  Kernel32          = 'Kernel32.dll';
 
 VAR
   GetStdHandle:       PROCEDURE(nStdHandle: SYSTEM.CARD32): INTEGER;
@@ -64,9 +63,9 @@ END i;
 PROCEDURE init;
 VAR result: INTEGER;
 BEGIN
-  Rtl.Import(GetStdHandle,       Kernel32, `GetStdHandle`);
-  Rtl.Import(SetConsoleOutputCP, Kernel32, `SetConsoleOutputCP`);
-  Rtl.Import(WriteFile,          Kernel32, `WriteFile`);
+  Rtl.Import(GetStdHandle,       `KERNEL32.DLL`, `GetStdHandle`);
+  Rtl.Import(SetConsoleOutputCP, `KERNEL32.DLL`, `SetConsoleOutputCP`);
+  Rtl.Import(WriteFile,          `KERNEL32.DLL`, `WriteFile`);
   hOut := GetStdHandle(STD_OUTPUT_HANDLE);
   IF SetConsoleOutputCP # NIL THEN result := SetConsoleOutputCP(UTF8) END;
   crlf[0] := 13;  crlf[1] := 10;
