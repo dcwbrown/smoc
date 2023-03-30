@@ -2,10 +2,6 @@ MODULE Write8;  (* Character output convenience functions *)
 
 IMPORT SYSTEM, Rtl;
 
-CONST
-  STD_OUTPUT_HANDLE = -11;
-  UTF8              = 65001;
-
 VAR
   GetStdHandle:       PROCEDURE(nStdHandle: SYSTEM.CARD32): INTEGER;
   SetConsoleOutputCP: PROCEDURE(codepage: INTEGER): INTEGER;
@@ -61,11 +57,17 @@ BEGIN
 END i;
 
 PROCEDURE init;
-VAR result: INTEGER;
+CONST
+  STD_OUTPUT_HANDLE = -11;
+  UTF8              = 65001;
+VAR result, kernel: INTEGER;
 BEGIN
-  Rtl.Import(GetStdHandle,       `KERNEL32.DLL`, `GetStdHandle`);
-  Rtl.Import(SetConsoleOutputCP, `KERNEL32.DLL`, `SetConsoleOutputCP`);
-  Rtl.Import(WriteFile,          `KERNEL32.DLL`, `WriteFile`);
+  SYSTEM.LoadLibraryA(kernel, `kernel32.dll`);
+
+  SYSTEM.GetProcAddress(GetStdHandle,       kernel, SYSTEM.ADR(`GetStdHandle`));       ASSERT(GetStdHandle       # NIL);
+  SYSTEM.GetProcAddress(SetConsoleOutputCP, kernel, SYSTEM.ADR(`SetConsoleOutputCP`)); ASSERT(SetConsoleOutputCP # NIL);
+  SYSTEM.GetProcAddress(WriteFile,          kernel, SYSTEM.ADR(`WriteFile`));          ASSERT(WriteFile          # NIL);
+
   hOut := GetStdHandle(STD_OUTPUT_HANDLE);
   IF SetConsoleOutputCP # NIL THEN result := SetConsoleOutputCP(UTF8) END;
   crlf[0] := 13;  crlf[1] := 10;

@@ -230,10 +230,17 @@ BEGIN
 	)
 END Ln;
 
+PROCEDURE InitWin32;
+VAR kernel, user: INTEGER;
 BEGIN
-	Rtl.Import(GetStdHandle, `KERNEL32.DLL`, `GetStdHandle`);
-	Rtl.Import(AllocConsole, `KERNEL32.DLL`, `AllocConsole`);
-	Rtl.Import(WriteFile,    `KERNEL32.DLL`, `WriteFile`);
-	Rtl.Import(wsprintfW,    `USER32.DLL`,   `wsprintfW`);
+  SYSTEM.LoadLibraryA(kernel, `kernel32.dll`);
+  SYSTEM.LoadLibraryA(user,   `user32.dll`);
+  SYSTEM.GetProcAddress(GetStdHandle, kernel, SYSTEM.ADR(`GetStdHandle`)); ASSERT(GetStdHandle # NIL);
+  SYSTEM.GetProcAddress(AllocConsole, kernel, SYSTEM.ADR(`AllocConsole`)); ASSERT(AllocConsole # NIL);
+  SYSTEM.GetProcAddress(WriteFile,    kernel, SYSTEM.ADR(`WriteFile`));    ASSERT(WriteFile    # NIL);
+  SYSTEM.GetProcAddress(wsprintfW,    user,   SYSTEM.ADR(`wsprintfW`));    ASSERT(wsprintfW    # NIL);
+END InitWin32;
+
+BEGIN InitWin32;
 	Open
 END Out.

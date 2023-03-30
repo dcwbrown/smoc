@@ -3,7 +3,7 @@ MODULE test;  (*$CONSOLE*)
 IMPORT Dumper, w := Write8;
 
 CONST
-  (* s8 = `8 bit string`; *)
+  cs8 = `8 bit string`;
 
 VAR
   c: CHAR8;
@@ -18,6 +18,8 @@ BEGIN
   w.s(`w.hn(12345, 12): `); w.hn(12345, 12); w.l;
   w.s(`w.hs(-25):       `); w.hs(-25);       w.l;
   w.s(`w.c( X ):        `); w.c(`X`);        w.l;
+
+  w.s(`cs8:            '`); w.s(cs8);  w.sl(`'.`);
 
   c := CHR8(113);
   w.s(`c: '`);  w.c(c);  w.sl(`'.`);
@@ -48,9 +50,9 @@ BEGIN
          42 43 00$;
   w.s(`s: '`);  w.s(s);  w.sl(`'.`);
 
-  i := 50;
-  s[i] := ` `;
-
+  (*
+  i := 50;  s[i] := ` `;
   ASSERT(FALSE);
+  *)
 
 END test.

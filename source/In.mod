@@ -107,27 +107,21 @@ BEGIN
 END Int;
 	
 PROCEDURE Init;
-VAR kern32: INTEGER;
+VAR kernel: INTEGER;
 
-	PROCEDURE Import(VAR proc: ARRAY OF SYSTEM.BYTE;
-		               lib: INTEGER; name: ARRAY OF CHAR);
-	VAR procAdr, i: INTEGER; byteStr: ARRAY 256 OF BYTE;
-	BEGIN
-		IF lib # 0 THEN i := 0;
-			WHILE name[i] # 0X DO
-				byteStr[i] := ORD(name[i]); INC(i)
-			END; byteStr[i] := 0;
-			SYSTEM.GetProcAddress(procAdr, lib, SYSTEM.ADR(byteStr));
-			SYSTEM.PUT(SYSTEM.ADR(proc), procAdr)
-		ELSE SYSTEM.PUT(SYSTEM.ADR(proc), 0)
-		END
-	END Import;
+  PROCEDURE GetProc(library: INTEGER; name: ARRAY OF CHAR8; VAR proc: ARRAY OF BYTE);
+  VAR procadr: INTEGER;
+  BEGIN
+  	SYSTEM.GetProcAddress(procadr, library, SYSTEM.ADR(name));  ASSERT(procadr # 0);
+	  SYSTEM.PUT(SYSTEM.ADR(proc), procadr)
+  END GetProc;
 
 BEGIN (* Init *)
-	SYSTEM.LoadLibraryW(kern32, 'kernel32.dll');
-	Import(GetStdHandle, kern32, 'GetStdHandle');
-	Import(ReadConsoleW, kern32, 'ReadConsoleW')
+	SYSTEM.LoadLibraryA(kernel, `kernel32.dll`);  ASSERT(kernel # 0);
+	GetProc(kernel, `GetStdHandle`, GetStdHandle);
+	GetProc(kernel, `ReadConsoleW`, ReadConsoleW);
 END Init;
 
 BEGIN Init; Open
 END In.
+

@@ -63,36 +63,6 @@ VAR
 (* -------------------------------------------------------------------------- *)
 (* Utility procedures *)
 
-PROCEDURE Import*(VAR proc:     ARRAY OF SYSTEM.BYTE;
-                      libPath:  ARRAY OF CHAR8;
-                      procName: ARRAY OF CHAR8);
-VAR hLib, procAdr: INTEGER;
-BEGIN
-  SYSTEM.LoadLibraryA(hLib, libPath);
-  IF hLib # 0 THEN
-    SYSTEM.GetProcAddress(procAdr, hLib, SYSTEM.ADR(procName))
-  ELSE procAdr := 0
-  END;
-  SYSTEM.PUT(SYSTEM.ADR(proc), procAdr)
-END Import;
-
-(*
-PROCEDURE Import*(VAR proc:     ARRAY OF SYSTEM.BYTE;
-                      libPath:  ARRAY OF CHAR;
-                      procName: ARRAY OF CHAR);
-VAR hLib, procAdr, i: INTEGER;  ansiStr: ARRAY 256 OF BYTE;
-BEGIN
-  SYSTEM.LoadLibraryW(hLib, libPath);
-  IF hLib # 0 THEN i := -1;
-    REPEAT INC(i);  ansiStr[i] := ORD(procName[i])
-    UNTIL (procName[i] = 0X) OR (i = LEN(ansiStr)-1);  ansiStr[i] := 0;
-    SYSTEM.GetProcAddress(procAdr, hLib, SYSTEM.ADR(ansiStr))
-  ELSE procAdr := 0
-  END;
-  SYSTEM.PUT(SYSTEM.ADR(proc), procAdr)
-END Import;
-*)
-
 PROCEDURE MessageBox*(title, msg: ARRAY OF CHAR);
 VAR iRes: Int;
 BEGIN iRes := MessageBoxW(0, SYSTEM.ADR(msg), SYSTEM.ADR(title), 0)
@@ -552,14 +522,22 @@ BEGIN
   argv := CommandLineToArgvW(pCmdLine, SYSTEM.ADR(numArgs))
 END GetArgv;
 
+PROCEDURE InitWin32;
+VAR kernel, user, shell: INTEGER;
 BEGIN
-  Import(ExitProcess,                 `KERNEL32.DLL`, `ExitProcess`);
-  Import(AddVectoredExceptionHandler, `KERNEL32.DLL`, `AddVectoredExceptionHandler`);
-  Import(MessageBoxW,                 `USER32.DLL`,   `MessageBoxW`);
-  Import(GetSystemTimeAsFileTime,     `KERNEL32.DLL`, `GetSystemTimeAsFileTime`);
-  Import(GetCommandLineW,             `KERNEL32.DLL`, `GetCommandLineW`);
-  Import(CommandLineToArgvW,          `Shell32.dll`,  `CommandLineToArgvW`);
-  Import(VirtualAlloc,                `KERNEL32.DLL`, `VirtualAlloc`);
+  SYSTEM.LoadLibraryA(kernel, `kernel32.dll`);
+  SYSTEM.LoadLibraryA(user,   `user32.dll`);
+  SYSTEM.LoadLibraryA(shell,  `shell32.dll`);
 
-  GetArgv;  InitHeap
+  SYSTEM.GetProcAddress(ExitProcess,                 kernel, SYSTEM.ADR(`ExitProcess`));                 ASSERT(ExitProcess                 # NIL);
+  SYSTEM.GetProcAddress(AddVectoredExceptionHandler, kernel, SYSTEM.ADR(`AddVectoredExceptionHandler`)); ASSERT(AddVectoredExceptionHandler # NIL);
+  SYSTEM.GetProcAddress(MessageBoxW,                 user,   SYSTEM.ADR(`MessageBoxW`));                 ASSERT(MessageBoxW                 # NIL);
+  SYSTEM.GetProcAddress(GetSystemTimeAsFileTime,     kernel, SYSTEM.ADR(`GetSystemTimeAsFileTime`));     ASSERT(GetSystemTimeAsFileTime     # NIL);
+  SYSTEM.GetProcAddress(GetCommandLineW,             kernel, SYSTEM.ADR(`GetCommandLineW`));             ASSERT(GetCommandLineW             # NIL);
+  SYSTEM.GetProcAddress(CommandLineToArgvW,          shell,  SYSTEM.ADR(`CommandLineToArgvW`));          ASSERT(CommandLineToArgvW          # NIL);
+  SYSTEM.GetProcAddress(VirtualAlloc,                kernel, SYSTEM.ADR(`VirtualAlloc`));                ASSERT(VirtualAlloc                # NIL);
+END InitWin32;
+
+BEGIN
+  InitWin32;  GetArgv;  InitHeap
 END Rtl.
