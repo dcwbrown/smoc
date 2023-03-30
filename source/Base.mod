@@ -19,7 +19,7 @@ CONST
   typEql*    = {tBool, tSet,  tPtr,   tProc,   tNil};
   typCmp*    = {tInt,  tReal, tChar8, tChar16, tStr8,   tStr16};
 
-  RtlName* = 'Rtl.dll';
+  RtlName*  = 'Rtl.dll';
 
 TYPE
   ModuleKey* = ARRAY 2 OF INTEGER;
@@ -60,9 +60,14 @@ TYPE
   Str16List* = POINTER TO RECORD obj*:  Str16;   next*: Str16List END;
 
   Module* = POINTER TO RECORD (ObjDesc)
-    export*, import*: BOOLEAN;  id*: S.IdStr;
-    key*: ModuleKey;  lev*, adr*, no*: INTEGER;  next*: Module;
-    first*, impList*: Ident;  types*: TypeList
+    export*, import*: BOOLEAN;
+    id*:              S.IdStr;
+    key*:             ModuleKey;
+    no*, lev*:        INTEGER;
+    adr*, adr8*:      INTEGER;
+    next*:            Module;
+    first*, impList*: Ident;
+    types*:           TypeList
   END;
 
   NodeDesc* = RECORD (ObjDesc)
@@ -109,8 +114,12 @@ VAR
     main*, console*, rtl*: BOOLEAN
   END;
 
-  imod, modList*: Module;  good: BOOLEAN;
+  imod, modList*: Module;
+
+  good: BOOLEAN;
+
   symfile: Files.File;  rider: Files.Rider;
+
   refno, preTypeNo, expno*, modno*: INTEGER;
 
   str8bufSize*:  INTEGER;

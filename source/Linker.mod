@@ -166,13 +166,15 @@ END Write_proc_pointer_offset;
 
 PROCEDURE WriteInitGlobals(VAR metrics: SectionMetrics; size: INTEGER);
 VAR
-  i, adr: INTEGER;  b: BYTE;
-  imod: B.Module;
+  i, adr:  INTEGER;
+  b:       BYTE;
+  imod:    B.Module;
+  ident:   B.Ident;
+  t:       B.TypeList;
+  obj:     B.Object;
+  str:     ARRAY 512 OF CHAR16;
   slist8:  B.Str8List;   y: B.Str8;
   slist16: B.Str16List;  x: B.Str16;
-  ident: B.Ident;
-  t: B.TypeList;  obj: B.Object;
-  str: ARRAY 512 OF CHAR16;
 BEGIN
   ASSERT(Rva MOD SectionAlignment = 0);
   ASSERT(Rva = RvaInitGlobals);
@@ -202,6 +204,18 @@ BEGIN
       Files.Set(Rider, Out, metrics.fadr + imod.adr);
       i := 0;  B.Insert(imod.id, str, i);
       B.Insert('.dll', str, i);  Files.WriteString(Rider, str)
+    END;
+    imod := imod.next
+  END;
+
+  (* Also write 8 bit character names of imported modules at offsets *)
+  (* specified by the .adr8 field of each module object.             *)
+  imod := B.modList;
+  WHILE imod # NIL DO
+    IF imod.import OR (imod.impList # NIL) THEN
+      Files.Set(Rider, Out, metrics.fadr + imod.adr8);
+      i := 0;  B.Insert(imod.id, str, i);
+      B.Insert('.dll', str, i);  Files.WriteByteStr(Rider, str)
     END;
     imod := imod.next
   END;

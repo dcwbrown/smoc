@@ -117,9 +117,12 @@ VAR
   modInitProc, trapProc, trapProc2: Proc;
   dllInitProc, dllAttachProc, dllDetachProc: Proc;
 
-  modidStr,   errFmtStr,  err2FmtStr,
-  err3FmtStr, err4FmtStr, err5FmtStr,
-  err6FmtStr, rtlName,    user32name, trapDesc: B.Str16;
+  modidStr,   trapDesc,
+  errFmtStr,  err2FmtStr,
+  err3FmtStr, err4FmtStr,
+  err5FmtStr, err6FmtStr,
+  rtlName,    user32name:  B.Str16;
+  rtlNamea,   user32namea: B.Str8;
 
   mem: RECORD
          mod, rm, bas, idx, scl, disp: INTEGER
@@ -563,11 +566,22 @@ END AllocImport;
 PROCEDURE AllocImportModules;
 VAR size: INTEGER;  imod: B.Module;
 BEGIN
+  (* Save module names as 16 bit characters *)
   Align(staticSize, 16);  imod := B.modList;
   WHILE imod # NIL DO
     IF imod.import OR (imod.impList # NIL) THEN
       size := (B.Str16Len(imod.id)+5)*2;
       imod.adr := staticSize;  INC(staticSize, size)
+    END;
+    imod := imod.next
+  END;
+
+  (* Save module names as 8 bit characters *)
+  Align(staticSize, 16);  imod := B.modList;
+  WHILE imod # NIL DO
+    IF imod.import OR (imod.impList # NIL) THEN
+      size := B.Str16Len(imod.id)+5;
+      imod.adr8 := staticSize;  INC(staticSize, size)
     END;
     imod := imod.next
   END
@@ -753,13 +767,15 @@ PROCEDURE Pass1(VAR modinit: B.Node);
 VAR fixAmount: INTEGER;  obj: B.Proc;
     str: ARRAY 512 OF CHAR16;
 BEGIN
-  modidStr   := B.NewStr16Z(B.modid);
-  errFmtStr  := B.NewStr16Z('[%d:%d]: %16.16s');
-  err2FmtStr := B.NewStr16Z('Module key of %s is mismatched');
-  err3FmtStr := B.NewStr16Z('Unknown exception;  PC: %x');
-  err4FmtStr := B.NewStr16Z('Cannot load module %s (not exist?)');
-  rtlName    := B.NewStr16Z(B.RtlName);
-  user32name := B.NewStr16Z('USER32.DLL');
+  modidStr    := B.NewStr16Z(B.modid);
+  errFmtStr   := B.NewStr16Z('[%d:%d]: %16.16s');
+  err2FmtStr  := B.NewStr16Z('Module key of %s is mismatched');
+  err3FmtStr  := B.NewStr16Z('Unknown exception;  PC: %x');
+  err4FmtStr  := B.NewStr16Z('Cannot load module %s (not exist?)');
+  rtlName     := B.NewStr16Z(B.RtlName);
+  rtlNamea    := B.NewStr8Z(`Rtl.dll`);
+  user32name  := B.NewStr16Z('USER32.DLL');
+  user32namea := B.NewStr8Z(`USER32.DLL`);
 
   str := 'Error in module ';  B.Append(B.modid, str);
   err5FmtStr := B.NewStr16Z(str);
@@ -2458,8 +2474,8 @@ END Procedure;
 PROCEDURE ImportRTL;
 VAR L: INTEGER;
 BEGIN
-  SetRm_regI(reg_B, rtlName.adr);     EmitRegRm(LEA,  reg_C, 8);
-  SetRm_regI(reg_B, LoadLibraryW);    EmitRm   (CALL, 4);
+  SetRm_regI(reg_B, rtlNamea.adr);    EmitRegRm(LEA,  reg_C, 8);
+  SetRm_regI(reg_B, LoadLibraryA);    EmitRm   (CALL, 4);
                                       EmitRR   (TEST, reg_A, 8, reg_A);
                                       Trap     (ccZ, rtlTrap);
                                       EmitRR   (MOVd, reg_SI, 8, reg_A);
@@ -2512,8 +2528,8 @@ BEGIN
                                         EmitRI   (SUBi, reg_SP, 8, 64);
     SetRm_RIP(baseOffset-pc-7);         EmitRegRm(LEA,  reg_B, 8);               (* RBX := module base *)
 
-    SetRm_regI(reg_B, user32name.adr);  EmitRegRm(LEA,  reg_C, 8);               (* Import USER32.DLL *)
-    SetRm_regI(reg_B, LoadLibraryW);    EmitRm   (CALL, 4);
+    SetRm_regI(reg_B, user32namea.adr); EmitRegRm(LEA,  reg_C, 8);               (* Import USER32.DLL *)
+    SetRm_regI(reg_B, LoadLibraryA);    EmitRm   (CALL, 4);
                                         EmitRR   (MOVd, reg_SI, 8, reg_A);
 
                                         EmitRR   (MOVd, reg_C, 8, reg_A);
@@ -3135,12 +3151,12 @@ VAR i: INTEGER;
 BEGIN
   debug := NIL;  Files.Set(rider, NIL, 0);
 
-  procList   := NIL;  curProc    := NIL;  modInitProc := NIL;
-  trapProc   := NIL;  trapProc2  := NIL;  dllInitProc := NIL;
-
-  errFmtStr  := NIL;  err2FmtStr := NIL;  err3FmtStr  := NIL;
-  err4FmtStr := NIL;  err5FmtStr := NIL;  modidStr    := NIL;
-  rtlName    := NIL;  user32name := NIL;  trapDesc    := NIL;
+  procList   := NIL;  curProc     := NIL;  modInitProc := NIL;
+  trapProc   := NIL;  trapProc2   := NIL;  dllInitProc := NIL;
+  errFmtStr  := NIL;  err2FmtStr  := NIL;  err3FmtStr  := NIL;
+  err4FmtStr := NIL;  err5FmtStr  := NIL;  modidStr    := NIL;
+  rtlName    := NIL;  rtlNamea    := NIL;  trapDesc    := NIL;
+  user32name := NIL;  user32namea := NIL;
 END Cleanup;
 
 BEGIN

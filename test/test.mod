@@ -50,9 +50,8 @@ BEGIN
          42 43 00$;
   w.s(`s: '`);  w.s(s);  w.sl(`'.`);
 
-  (*
-  i := 50;  s[i] := ` `;
-  ASSERT(FALSE);
-  *)
+  IF TRUE  THEN i := 50;  s[i] := ` ` END;
+  IF FALSE THEN ASSERT(FALSE)         END;
+
 
 END test.
