@@ -21,13 +21,6 @@ CONST
   K32NameOffset  = K32TableOffset + K32TableSize;
   K32HintOffset  = K32NameOffset + 16;
 
-  (* Section flags *)
-  SWriteable     = 80000000H;
-  SReadable      = 40000000H;
-  SExecutable    = 20000000H;
-  SUninitialised =       80H;
-  SInitialised   =       40H;
-  SCode          =       20H;
 TYPE
   SectionMetrics = RECORD
     fadr:  INTEGER;  (* Address in file                                      *)
@@ -88,13 +81,19 @@ RETURN result END Align;
 (* -------------------------------------------------------------------------- *)
 
 PROCEDURE MakeUninitGlobals(VAR metrics: SectionMetrics; size: INTEGER);
-BEGIN size := Align(size, SectionAlignment);
+BEGIN
+  IF size < 1 THEN size := 1 END;  (* Guarantee presence of a globals section *)
+  size := Align(size, SectionAlignment);
   metrics.size  := size;
   metrics.fadr  := 0;
   metrics.rva   := Rva;
   INC(Rva, size)
 END MakeUninitGlobals;
 
+
+(* -------------------------------------------------------------------------- *)
+(* -------------------------------------------------------------------------- *)
+(* Initialized globals *)
 
 PROCEDURE Write_pointer_offset(offset: INTEGER;  type: B.Type);
 VAR ident: B.Ident;       field: B.Field;
@@ -352,7 +351,6 @@ BEGIN
   metrics.size := fpos - metrics.fadr;
 
   Rva := Align(Rva + metrics.size, SectionAlignment);
-
 END WriteTraps;
 
 
@@ -498,114 +496,188 @@ END WriteSectionHeader;
 
 PROCEDURE WritePEHeader;
 CONST
+  (* Section flags *)
+  SWriteable     = 80000000H;
+  SReadable      = 40000000H;
+  SExecutable    = 20000000H;
+  SUninitialised =       80H;
+  SInitialised   =       40H;
+  SCode          =       20H;
+
   dosProgram = $0E1FBA0E00B409CD21B8014CCD21546869732070726F6772616D2063616E6E6F74202072756E20696E20444F53206D6F64652E0D0A24$;
+TYPE
+  U8  = BYTE;         U16 = SYSTEM.CARD16;  U32 = SYSTEM.CARD32;
+  I8  = SYSTEM.INT8;  I16 = SYSTEM.INT16;   I32 = SYSTEM.INT32;   I64 = INTEGER;
+  PEHDR = RECORD
+            eMagic:     U16;  (* 5AD4 *)
+            zeroes1:    ARRAY 3AH OF BYTE;
+            eLfanew:    U32;
+            dosProgram: ARRAY 40H OF CHAR8;
+            signature:  U32;
+
+            (* COFF file header*)
+            machine:              U16;
+            numberOfSections:     U16;
+            timeDateStamp:        U32;
+            pointerToSymbolTable: U32;
+            numberOfSymbols:      U32;
+            sizeOfOptionalHeader: U16;
+            characteristics:      U16;
+
+            (* PE32+ optional header *)
+            pe32magic:               U16;
+            majorLinkerVersion:      U8;
+            minorLinkerVersion:      U8;
+            sizeOfCode:              U32;
+            sizeOfInitializedData:   U32;
+            sizeOfUninitializedData: U32;
+            addressOfEntryPoint:     U32;
+            baseOfCode:              U32;
+
+            (* Windows specific PE32+ fields *)
+            imageBase:             I64;
+            sectionAlignment:      U32;
+            fileAlignment:         U32;
+            majorOSVersion:        U16;
+            minorOSVersion:        U16;
+            majorImageVersion:     U16;
+            minorImageVersion:     U16;
+            majorSubsystemVersion: U16;
+            minorSubsystemVersion: U16;
+            win32VersionValue:     U32;
+            sieOfImage:            U32;
+            sizeOfHeaders:         U32;
+            checksum:              U32;
+            subsystem:             U16;
+            dllCharacteristics:    U16;
+            sizeOfStackReserve:    I64;
+            sizeOfStackCommit:     I64;
+            sizeOfHeapReserve:     I64;
+            sizeOfHeapCommit:      I64;
+            loaderFlags:           U32;
+            numberOfRvaAndSizes:   U32;
+
+            (* Optional header data directories *)
+            exportTableRVA:            U32;
+            exportTableSize:           U32;
+            importTableRVA:            U32;
+            importTableSize:           U32;
+            resourceTableRVA:          U32;
+            resourceTableSize:         U32;
+            exceptionTableRVA:         U32;
+            exceptionTableSize:        U32;
+            certificateTableRVA:       U32;
+            certificateTableSize:      U32;
+            baseRelocationTableRVA:    U32;
+            baseRelocationTableSize:   U32;
+            debugRVA:                  U32;
+            debugSize:                 U32;
+            architectureRVA:           U32;
+            architectureSize:          U32;
+            globalPtrRVA:              U32;
+            globalPtrSize:             U32;
+            tlsTableRVA:               U32;
+            tlsTableSize:              U32;
+            loadConfigTableRVA:        U32;
+            loadConfigTableSize:       U32;
+            boundImportRVA:            U32;
+            boundImportSize:           U32;
+            IATRVA:                    U32;
+            IATSize:                   U32;
+            delayImportDescriptorRVA:  U32;
+            delayImportDescriptorSize: U32;
+            CLRRuntimeHeaderRVA:       U32;
+            CLRRuntimeHeaderSize:      U32;
+            reservedZeroRVA:           U32;
+            reservedZeroSize:          U32
+          END;
 VAR
-  i, imageSize, uninitialisedSize, initialisedSize: INTEGER;
+  imageSize, uninitialisedSize, initialisedSize: INTEGER;
+  characteristics, dllCharacteristics, subsystem: INTEGER;
+  hdr: PEHDR;
+
+  PROCEDURE ZeroFill(VAR buf: ARRAY OF BYTE);  VAR i: INTEGER;
+  BEGIN FOR i := 0 TO LEN(buf)-1 DO buf[i] := 0 END END ZeroFill;
+
 BEGIN
-  Files.Set(Rider, Out, 0);            (* e_magic   *)
-  Files.WriteCard16(Rider, 5A4DH);
-  Files.Set(Rider, Out, 3CH);          (* e_lfanew  *)
-  Files.WriteCard32(Rider, 128);
-  Files.WriteBytes(Rider, dosProgram, 40H);
-  Files.Set(Rider, Out, 80H);
-  Files.WriteCard32(Rider, 4550H);     (* signature *)
-
-  (* Windows COFF header *)
-  Files.WriteCard16(Rider, 8664H);        (* Machine = AMD64/Intel 64 *)
-  Files.WriteCard16(Rider, LEN(Section)); (* NumberOfSections         *)
-  Files.WriteCard32(Rider, 0);            (* TimeDateStamp            *)
-  Files.WriteCard32(Rider, 0);            (* PointerToSymbolTable     *)
-  Files.WriteCard32(Rider, 0);            (* NumberOfSymbols          *)
-  Files.WriteCard16(Rider, 240);          (* Size of optional header  *)
-
-  (* Characteristics *)
-  (* 2000H - This is adynamic link library                   *)
-  (*  200H - Windows debug information stripped              *)
-  (*   20H - Large address aware                             *)
-  (*    8  - Coff symbol tables removed (should really be 0) *)
-  (*    4  - Coff linenumbers removed   (should really be 0) *)
-  (*    2  - Executable image                                *)
-  (*    1  - Relocs stripped                                 *)
-  IF B.Flag.main THEN
-    Files.WriteCard16(Rider,         200H + 20H + 8 + 4 + 2 + 1)
-  ELSE
-    Files.WriteCard16(Rider, 2000H + 200H + 20H + 8 + 4 + 2)
-  END;
-
-  (* PE32+ optional header *)
-  Files.WriteCard16(Rider, 20BH);       (* Magic number for PE32+           *)
-  Files.Write(Rider, 1);                (* Linker major version             *)
-  Files.Write(Rider, 49H);              (* Linker minor version             *)
-  Files.WriteCard32(Rider, Align(Section[SecCode].size, FileAlignment));  (* SizeOfCode *)
-
-  (* Optional header section sizes *)
   uninitialisedSize := Align(Section[SecUninitGlobals].size, SectionAlignment);
   initialisedSize   := Align(Section[SecInitGlobals].size,   SectionAlignment)
                      + Align(Section[SecImports].size,       SectionAlignment)
                      + Align(Section[SecTraps].size,         SectionAlignment)
                      + Align(Section[SecExports].size,       SectionAlignment);
+  imageSize         := Align(HeaderSize, SectionAlignment)
+                     + Align(Section[SecCode].size, SectionAlignment)
+                     + uninitialisedSize + initialisedSize;
 
-  Files.WriteCard32(Rider, initialisedSize);                   (* SizeOfInitializedData   *)
-  Files.WriteCard32(Rider, uninitialisedSize);                 (* SizeOfUninitializedData *)
-  Files.WriteCard32(Rider, Section[SecCode].rva + EntryPoint); (* Address of entry point  *)
-  Files.WriteCard32(Rider, Section[SecCode].rva);              (* Base of code            *)
+  characteristics    := 200H  (* Windows debug information stripped               *)
+                      + 20H   (* Large address aware                              *)
+                      + 8     (* Coff symbol tables removed (should really be 0?) *)
+                      + 4     (* Coff linenumbers removed   (should really be 0?) *)
+                      + 2;    (* Executable image                                 *)
+  dllCharacteristics := 400H; (* No SEH *)
+
+  IF B.Flag.main THEN
+    INC(characteristics,    1);           (* Relocs stripped *)
+  ELSE
+    INC(characteristics,    2000H);       (* This is a dynamic link library *)
+    INC(dllCharacteristics, 100H + 40H);  (* NX compat, relocatable *)
+  END;
+
+  IF B.Flag.console THEN
+    subsystem := 3;  (* Console *)
+  ELSE
+    subsystem := 2;  (* GUI *)
+  END;
+
+  ZeroFill(hdr);
+
+  (* MSDOS stub *)
+  hdr.eMagic               := 5A4DH;
+  hdr.eLfanew              := 128;
+  (*
+  hdr.dosProgram           := $$0E1FBA0E00B409CD21B8014CCD21546869732070726F6772616D2063616E6E6F74202072756E20696E20444F53206D6F64652E0D0A24;
+  *)
+  hdr.signature            := 4550H;
+
+  (* COFF file header*)
+  hdr.machine              := 8664H;  (* AMD64/Intel 64 *)
+  hdr.numberOfSections     := LEN(Section);
+  hdr.sizeOfOptionalHeader := 240;
+  hdr.characteristics      := characteristics;
+
+  (* PE32+ optional header *)
+  hdr.pe32magic               := 20BH;  (* PE32+ *)
+  hdr.majorLinkerVersion      := 1;
+  hdr.minorLinkerVersion      := 49H;
+  hdr.sizeOfCode              := Align(Section[SecCode].size, FileAlignment);
+  hdr.sizeOfInitializedData   := initialisedSize;
+  hdr.sizeOfUninitializedData := uninitialisedSize;
+  hdr.addressOfEntryPoint     := Section[SecCode].rva + EntryPoint;
+  hdr.baseOfCode              := Section[SecCode].rva;
 
   (* Windows specific PE32+ fields *)
-
-  Files.WriteInt(Rider, ImageBase);           (* Preferred addres of first byte of image *)
-  Files.WriteCard32(Rider, SectionAlignment); (* Section alignment when loaded           *)
-  Files.WriteCard32(Rider, FileAlignment);    (* File alignment                          *)
-  Files.WriteCard16(Rider, 1);                (* Major OS version                        *)
-  Files.WriteCard16(Rider, 0);                (* Minor OS version                        *)
-  Files.WriteCard16(Rider, 0);                (* Major image version                     *)
-  Files.WriteCard16(Rider, 0);                (* Minor image version                     *)
-  Files.WriteCard16(Rider, 5);                (* Major subsytem version                  *)
-  Files.WriteCard16(Rider, 0);                (* Minor subsytem version                  *)
-  Files.WriteCard32(Rider, 0);                (* Win32VerionValue (must be 0)            *)
-
-  (* Image size including headers *)
-  imageSize := Align(HeaderSize, SectionAlignment)
-             + Align(Section[SecCode].size, SectionAlignment)
-             + uninitialisedSize + initialisedSize;
-  Files.WriteCard32(Rider, imageSize);  (* SizeOfImage                             *)
-  Files.WriteCard32(Rider, HeaderSize); (* SizeOfHeaders                           *)
-  Files.WriteCard32(Rider, 0);          (* Checksum                                *)
-  IF B.Flag.console THEN
-    Files.WriteCard16(Rider, 3)         (* Subsystem = Console                     *)
-  ELSE
-    Files.WriteCard16(Rider, 2)         (* Subsystem = GUI                         *)
-  END;
-                                        (* DLL Characteristics                     *)
-  IF B.Flag.main THEN Files.WriteCard16(Rider, 400H) (* No SEH *)
-  ELSE Files.WriteCard16(Rider, 400H + 100H + 40H)   (* No SEH, NX compat, relocatable *)
-  END;
-
-  Files.WriteInt(Rider, 1000H);         (* Size of stack reserve    *)
-  Files.WriteInt(Rider, 1000H);         (* Size of stack commit     *)
-  Files.WriteInt(Rider, 10000H);        (* Size of heap reserve     *)
-  Files.WriteInt(Rider, 0);             (* Size of heap commit      *)
-  Files.WriteCard32(Rider, 0);          (* Loader flags (must be 0) *)
-  Files.WriteCard32(Rider, 16);         (* Number of RVAs/Sizes in data directories *)
+  hdr.imageBase               := ImageBase;
+  hdr.sectionAlignment        := SectionAlignment;
+  hdr.fileAlignment           := FileAlignment;
+  hdr.majorOSVersion          := 1;
+  hdr.majorSubsystemVersion   := 5;
+  hdr.sieOfImage              := imageSize;
+  hdr.sizeOfHeaders           := HeaderSize;
+  hdr.subsystem               := subsystem;
+  hdr.dllCharacteristics      := dllCharacteristics;
+  hdr.sizeOfStackReserve      := 1000H;
+  hdr.sizeOfStackCommit       := 1000H;
+  hdr.sizeOfHeapReserve       := 10000H;
+  hdr.numberOfRvaAndSizes     := 16;
 
   (* Optional header data directories *)
-  Files.WriteCard32(Rider, Section[SecExports].rva); (* Export table *)
-  Files.WriteCard32(Rider, Section[SecExports].size);
-  Files.WriteCard32(Rider, Section[SecImports].rva); (* Import table *)
-  Files.WriteCard32(Rider, Section[SecImports].size);
-  Files.WriteInt(Rider, 0);             (* Resource table           *)
-  Files.WriteInt(Rider, 0);             (* Exception table          *)
-  Files.WriteInt(Rider, 0);             (* Certificate table        *)
-  Files.WriteInt(Rider, 0);             (* Relocations              *)
-  Files.WriteInt(Rider, 0);             (* Debug data               *)
-  Files.WriteInt(Rider, 0);             (* Architecture (must be 0) *)
-  Files.WriteInt(Rider, 0);             (* Global ptr               *)
-  Files.WriteInt(Rider, 0);             (* TLS table                *)
-  Files.WriteInt(Rider, 0);             (* Load config table        *)
-  Files.WriteInt(Rider, 0);             (* Bound import             *)
-  Files.WriteInt(Rider, 0);             (* Import address table ?   *)
-  Files.WriteInt(Rider, 0);             (* Delay import descriptor  *)
-  Files.WriteInt(Rider, 0);             (* CLR runtime header       *)
-  Files.WriteInt(Rider, 0);             (* Reserved (must be 0)     *)
+  hdr.exportTableRVA            := Section[SecExports].rva;
+  hdr.exportTableSize           := Section[SecExports].size;
+  hdr.importTableRVA            := Section[SecImports].rva;
+  hdr.importTableSize           := Section[SecImports].size;
+
+  Files.Set(Rider, Out, 0);
+  Files.WriteBytes(Rider, hdr, SYSTEM.SIZE(PEHDR));
 
   (* Write section headers *)
   WriteSectionHeader(SecUninitGlobals, ".bss",   SReadable + SWriteable  + SUninitialised);
