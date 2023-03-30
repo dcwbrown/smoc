@@ -406,10 +406,18 @@ PROCEDURE WriteChar*(VAR r: Rider; x: CHAR16);
 BEGIN Write0(r, x)
 END WriteChar;
 
+PROCEDURE WriteString8*(VAR r: Rider; x: ARRAY OF BYTE);
+VAR i: INTEGER;
+BEGIN i := 0;
+  WHILE (i < LEN(x)) & (x[i] # 0) DO Write(r, x[i]); INC(i) END;
+  Write(r, 0)
+END WriteString8;
+
 PROCEDURE WriteString*(VAR r: Rider; x: ARRAY OF CHAR16);
 VAR i: INTEGER;
 BEGIN i := 0;
-  WHILE x[i] # 0X DO WriteChar(r, x[i]); INC(i) END; WriteChar(r, 0X)
+  WHILE (i < LEN(x)) & (x[i] # 0X) DO WriteChar(r, x[i]); INC(i) END;
+  WriteChar(r, 0X)
 END WriteString;
 
 PROCEDURE WriteByteStr*(VAR r: Rider; x: ARRAY OF CHAR16);

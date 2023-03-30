@@ -324,6 +324,11 @@ BEGIN
       IF k2 = 0 THEN str[0] := 0X;  slen := 1
       ELSE str[0] := CHR(k2);  str[1] := 0X;  slen := 2
       END
+    ELSIF ch = ORD('Y') THEN sym := string8;
+      IF k2 < 100H THEN ival := k2 ELSE Mark('Illegal value');  ival := 0  END;
+      IF k2 = 0 THEN str8[0] := 0;  slen := 1
+      ELSE str8[0] := k2;  str8[1] := 0;  slen := 2
+      END
     ELSIF ch = ORD('R') THEN sym := real;  rval := SYSTEM.VAL(REAL, k2)
     ELSE sym := int;  ival := k2
     END;
@@ -390,7 +395,8 @@ BEGIN
   REPEAT
     WHILE ~eof & (ch <= ORD(' ')) DO Read END;
     (* Record potential error position *)
-    lastLine := lineNumber;  lastColumn := bufPos - linePos;
+    lastLine   := lineNumber;
+    lastColumn := bufPos - linePos;
 
     IF ch < ORD('A') THEN
       IF ch < ORD('0') THEN

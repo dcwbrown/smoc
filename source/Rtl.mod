@@ -63,10 +63,9 @@ VAR
 (* -------------------------------------------------------------------------- *)
 (* Utility procedures *)
 
-PROCEDURE Import*(
-            VAR proc:              ARRAY OF SYSTEM.BYTE;
-                libPath, procName: ARRAY OF CHAR
-          );
+PROCEDURE Import*(VAR proc:     ARRAY OF SYSTEM.BYTE;
+                      libPath:  ARRAY OF CHAR;
+                      procName: ARRAY OF CHAR);
 VAR hLib, procAdr, i: INTEGER;  ansiStr: ARRAY 256 OF BYTE;
 BEGIN
   SYSTEM.LoadLibraryW(hLib, libPath);

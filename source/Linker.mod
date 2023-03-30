@@ -58,8 +58,11 @@ VAR
      first 4096 bytes contain the PE file headers.)
   *)
 
+
   Section: ARRAY 6 OF SectionMetrics;
+
   Rva: INTEGER;  (* current section rva, updated as each section is written. *)
+
   (* Predetermined rva's - calculated from Link parameters, and checked as   *)
   (* the sections are generated.                                             *)
   RvaInitGlobals, RvaCode, RvaImport: INTEGER;
@@ -305,14 +308,14 @@ BEGIN (* WriteImports *)
   FOR i := 0 TO K32TableLen - 1 DO Files.WriteInt(Rider, Kernel32Table[i]) END;
 
   (* Write DLL name being imported from *)
-  Files.Set(Rider, Out, metrics.fadr + K32NameOffset);  Files.WriteByteStr(Rider, 'KERNEL32.DLL');
+  Files.Set(Rider, Out, metrics.fadr + K32NameOffset);  Files.WriteString8(Rider, `KERNEL32.DLL`);
 
   (* Write hint table of imported entry point names *)
-  Files.Set(Rider, Out, metrics.fadr + K32HintOffset + 2);   Files.WriteByteStr(Rider, 'GetProcAddress');
-  Files.Set(Rider, Out, metrics.fadr + K32HintOffset + 34);  Files.WriteByteStr(Rider, 'LoadLibraryW');
-  Files.Set(Rider, Out, metrics.fadr + K32HintOffset + 66);  Files.WriteByteStr(Rider, 'ExitProcess');
-  Files.Set(Rider, Out, metrics.fadr + K32HintOffset + 98);  Files.WriteByteStr(Rider, 'GetModuleHandleExW');
-  Files.Set(Rider, Out, metrics.fadr + K32HintOffset + 130); Files.WriteByteStr(Rider, 'AddVectoredExceptionHandler');
+  Files.Set(Rider, Out, metrics.fadr + K32HintOffset + 2);   Files.WriteString8(Rider, `GetProcAddress`);
+  Files.Set(Rider, Out, metrics.fadr + K32HintOffset + 34);  Files.WriteString8(Rider, `LoadLibraryW`);
+  Files.Set(Rider, Out, metrics.fadr + K32HintOffset + 66);  Files.WriteString8(Rider, `ExitProcess`);
+  Files.Set(Rider, Out, metrics.fadr + K32HintOffset + 98);  Files.WriteString8(Rider, `GetModuleHandleExW`);
+  Files.Set(Rider, Out, metrics.fadr + K32HintOffset + 130); Files.WriteString8(Rider, `AddVectoredExceptionHandler`);
 
   metrics.size := K32HintOffset + 160;
 
