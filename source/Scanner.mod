@@ -183,29 +183,44 @@ BEGIN
   IF slen >= MaxStrLen THEN Mark('String too long') END;
 END String;
 
-PROCEDURE HexString;
-VAR i, m, n, o, p: INTEGER;
+PROCEDURE HexString(): INTEGER;
+VAR i, m, n, o, p, sym: INTEGER;
+
   PROCEDURE hexdigit(): INTEGER;
   VAR n: INTEGER;
   BEGIN
-    IF    (ORD('0') <= ch) & (ch <= ORD('9')) THEN n := ch - 30H
-    ELSIF (ORD('A') <= ch) & (ch <= ORD('F')) THEN n := ch - 37H
+    IF    (ORD('0') <= ch) & (ch <= ORD('9')) THEN n := ch - 30H; Read
+    ELSIF (ORD('A') <= ch) & (ch <= ORD('F')) THEN n := ch - 37H; Read
     ELSE n := 0;  Mark('Hex digit expected')  END
   RETURN n END hexdigit;
 BEGIN
   i := 0;  Read;
-  WHILE ~eof & (ch # ORD('$')) DO
-    WHILE (ch = SP) OR (ch = TAB) OR (ch = CR) DO Read END;
-    m := hexdigit();  Read;
-    n := hexdigit();  Read;
-    o := hexdigit();  Read;
-    p := hexdigit();
-    IF i < MaxStrLen THEN str[i] := CHR(o*1000H + p*100H + m*10H +n);  INC(i)
-    ELSE Mark('String too long')
+
+  IF ch = ORD('$') THEN  (* Hex CHAR8 string starts '$$' *)
+    Read;  slen := 0;
+    WHILE ~eof & (slen < MaxStrLen) & (ch # ORD('$')) DO
+      WHILE (ch = SP) OR (ch = TAB) OR (ch = CR) DO Read END;
+      m := hexdigit();  n := hexdigit();
+      str8[slen] := m * 10H + n;
+      INC(slen)
     END;
-    Read
+    IF slen > MaxStrLen THEN Mark("Hex string too long") END;
+    Read;
+    str8[slen] := 0;  (* Guaranteed terminator, not included in string length *)
+    sym := string8
+  ELSE
+    WHILE ~eof & (ch # ORD('$')) DO
+      WHILE (ch = SP) OR (ch = TAB) OR (ch = CR) DO Read END;
+      m := hexdigit();  n := hexdigit();
+      o := hexdigit();  p := hexdigit();
+      IF i < MaxStrLen THEN str[i] := CHR(o*1000H + p*100H + m*10H +n);  INC(i)
+      ELSE Mark('String too long')
+      END
+    END;
+    Read;  slen := i;  (* no 0X appended! *)
+    sym := string
   END;
-  Read;  slen := i  (* no 0X appended! *)
+  RETURN sym
 END HexString;
 
 PROCEDURE Real(VAR sym: INTEGER;  d: ARRAY OF INTEGER;  n: INTEGER);
@@ -380,9 +395,9 @@ BEGIN
     IF ch < ORD('A') THEN
       IF ch < ORD('0') THEN
         IF (ch = 22H) OR (ch = 27H) THEN String(ch);  sym := string
-        ELSIF ch = ORD('#') THEN Read;       sym := neq
-        ELSIF ch = ORD('$') THEN HexString;  sym := string
-        ELSIF ch = ORD('&') THEN Read;       sym := and
+        ELSIF ch = ORD('#') THEN Read;  sym := neq
+        ELSIF ch = ORD('$') THEN sym := HexString();
+        ELSIF ch = ORD('&') THEN Read;  sym := and
         ELSIF ch = ORD('(') THEN Read;
           IF ch = ORD('*') THEN sym := null;  Read;  SkipComment(0)
                            ELSE sym := lparen END
