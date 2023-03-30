@@ -503,8 +503,6 @@ CONST
   SUninitialised =       80H;
   SInitialised   =       40H;
   SCode          =       20H;
-
-  dosProgram = $0E1FBA0E00B409CD21B8014CCD21546869732070726F6772616D2063616E6E6F74202072756E20696E20444F53206D6F64652E0D0A24$;
 TYPE
   U8  = BYTE;         U16 = SYSTEM.CARD16;  U32 = SYSTEM.CARD32;
   I8  = SYSTEM.INT8;  I16 = SYSTEM.INT16;   I32 = SYSTEM.INT32;   I64 = INTEGER;
@@ -634,9 +632,10 @@ BEGIN
   (* MSDOS stub *)
   hdr.eMagic               := 5A4DH;
   hdr.eLfanew              := 128;
-  (*
-  hdr.dosProgram           := $$0E1FBA0E00B409CD21B8014CCD21546869732070726F6772616D2063616E6E6F74202072756E20696E20444F53206D6F64652E0D0A24;
-  *)
+  hdr.dosProgram           := $$0E1FBA0E00B409CD 21B8014CCD215468
+                                69732070726F6772 616D2063616E6E6F
+                                74202072756E2069 6E20444F53206D6F
+                                64652E0D0A24$;
   hdr.signature            := 4550H;
 
   (* COFF file header*)

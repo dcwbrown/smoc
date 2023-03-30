@@ -199,7 +199,7 @@ BEGIN
   IF ch = ORD('$') THEN  (* Hex CHAR8 string starts '$$' *)
     Read;  slen := 0;
     WHILE ~eof & (slen < MaxStrLen) & (ch # ORD('$')) DO
-      WHILE (ch = SP) OR (ch = TAB) OR (ch = CR) DO Read END;
+      WHILE (ch = SP) OR (ch = TAB) OR (ch = CR)  OR (ch = LF) DO Read END;
       m := hexdigit();  n := hexdigit();
       str8[slen] := m * 10H + n;
       INC(slen)
@@ -210,7 +210,7 @@ BEGIN
     sym := string8
   ELSE
     WHILE ~eof & (ch # ORD('$')) DO
-      WHILE (ch = SP) OR (ch = TAB) OR (ch = CR) DO Read END;
+      WHILE (ch = SP) OR (ch = TAB) OR (ch = CR)  OR (ch = LF) DO Read END;
       m := hexdigit();  n := hexdigit();
       o := hexdigit();  p := hexdigit();
       IF i < MaxStrLen THEN str[i] := CHR(o*1000H + p*100H + m*10H +n);  INC(i)

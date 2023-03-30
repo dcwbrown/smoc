@@ -40,7 +40,8 @@ BEGIN
   s[1] := `e`;
   IF s = t THEN w.sl(`s=t.`) ELSE w.sl(`s#t.`) END;
 
-  s := $$404142  4300$;
+  s := $$40 41
+         42 43 00$;
   w.s(`s: '`);  w.s(s);  w.sl(`'.`);
 
 END test.
