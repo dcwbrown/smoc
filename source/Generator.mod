@@ -93,12 +93,17 @@ TYPE
   Node = B.Node;
 
   Item = RECORD
-    mode, op, r, rm: BYTE;  ref, par: BOOLEAN;  type: B.Type;
-    a, b, c, strlen: INTEGER;  aLink, bLink: Node;  obj: B.Object
+    mode, op, r, rm: BYTE;
+    ref, par:        BOOLEAN;
+    type:            B.Type;
+    a, b, c, strlen: INTEGER;
+    aLink, bLink:    Node;
+    obj:             B.Object
   END;
 
   MakeItemState = RECORD
-    avoid, xAvoid: SET;  bestReg, bestXReg: BYTE
+    avoid,   xAvoid:   SET;
+    bestReg, bestXReg: BYTE
   END;
 
 VAR

@@ -80,7 +80,7 @@ CONST
   string8*        = 160;
 
 TYPE
-  IdStr*  = ARRAY MaxIdLen+1  OF CHAR16;
+(*IdStr*  = ARRAY MaxIdLen+1  OF CHAR16;*)
   IdStr8* = ARRAY MaxIdLen+1  OF CHAR8;
   Str*    = ARRAY MaxStrLen+1 OF CHAR16;
   Str8*   = ARRAY MaxStrLen+1 OF BYTE;
@@ -91,7 +91,6 @@ TYPE
 VAR
   ival*, slen*: INTEGER;
   rval*:        REAL;
-  id*:          IdStr;   (* Scanner sets both id and id8 every time *)
   id8*:         IdStr8;
   str*:         Str;
   str8*:        Str8;
@@ -102,7 +101,7 @@ VAR
   eof:    BOOLEAN;
   k:      INTEGER;
   KWX:    ARRAY 11 OF INTEGER;
-  keyTab: ARRAY NKW OF RECORD sym: INTEGER;  id: IdStr END;
+  keyTab: ARRAY NKW OF RECORD sym: INTEGER;  id: IdStr8 END;
 
   buffer: ARRAY 80000H OF BYTE;
   bufPos,  bufSize:   INTEGER;
@@ -141,21 +140,20 @@ RETURN LSL(lastLine, 10) + (lastColumn MOD 400H) END SourcePos;
 
 PROCEDURE Identifier(VAR sym: INTEGER);
 VAR i, j, k: INTEGER;
-BEGIN i := 0;  j := 0;  sym := ident;
+BEGIN i := 0;  sym := ident;
   WHILE (i < MaxIdLen) & (   (ch >= ORD('0')) & (ch <= ORD('9'))
                           OR (ch >= ORD('A')) & (ch <= ORD('Z'))
                           OR (ch >= ORD('a')) & (ch <= ORD('z'))
                           OR (ch =  ORD('_'))) DO
-    Rtl.PutUtf16(ch, id,  i);
-    Rtl.PutUtf8 (ch, id8, j);
+    Rtl.PutUtf8 (ch, id8, i);
     Read
   END;
-  id[i] := 0X;  id8[j] := 0Y;
-  IF (i >= MaxIdLen) OR (j >= MaxIdLen) THEN Mark16('identifier too long') END;
+  id8[i] := 0Y;
+  IF i >= MaxIdLen THEN Mark16('identifier too long') END;
   (* search for keyword *)
   IF i < LEN(KWX) THEN
     j := KWX[i-1];  k := KWX[i];
-    WHILE (keyTab[j].id # id) & (j < k) DO INC(j) END;
+    WHILE (keyTab[j].id # id8) & (j < k) DO INC(j) END;
     IF j < k THEN sym := keyTab[j].sym END
   END
 END Identifier;
@@ -468,53 +466,53 @@ PROCEDURE InstallNotifyError*(proc8: NotifyError8Proc);
 BEGIN NotifyError8 := proc8
 END InstallNotifyError;
 
-PROCEDURE EnterKW(sym: INTEGER;  name: IdStr);
+PROCEDURE EnterKW(sym: INTEGER;  name: IdStr8);
 BEGIN keyTab[k].id := name;  keyTab[k].sym := sym;  INC(k)
 END EnterKW;
 
 BEGIN
   k := 0;  KWX[0] := 0;  KWX[1] := 0;
-  EnterKW(if, 'IF');
-  EnterKW(do, 'DO');
-  EnterKW(of, 'OF');
-  EnterKW(or, 'OR');
-  EnterKW(to, 'TO');
-  EnterKW(in, 'IN');
-  EnterKW(is, 'IS');
-  EnterKW(by, 'BY');
+  EnterKW(if, `IF`);
+  EnterKW(do, `DO`);
+  EnterKW(of, `OF`);
+  EnterKW(or, `OR`);
+  EnterKW(to, `TO`);
+  EnterKW(in, `IN`);
+  EnterKW(is, `IS`);
+  EnterKW(by, `BY`);
   KWX[2] := k;
-  EnterKW(end, 'END');
-  EnterKW(nil, 'NIL');
-  EnterKW(var, 'VAR');
-  EnterKW(div, 'DIV');
-  EnterKW(mod, 'MOD');
-  EnterKW(for, 'FOR');
+  EnterKW(end, `END`);
+  EnterKW(nil, `NIL`);
+  EnterKW(var, `VAR`);
+  EnterKW(div, `DIV`);
+  EnterKW(mod, `MOD`);
+  EnterKW(for, `FOR`);
   KWX[3] := k;
-  EnterKW(else, 'ELSE');
-  EnterKW(then, 'THEN');
-  EnterKW(true, 'TRUE');
-  EnterKW(type, 'TYPE');
-  EnterKW(case, 'CASE');
+  EnterKW(else, `ELSE`);
+  EnterKW(then, `THEN`);
+  EnterKW(true, `TRUE`);
+  EnterKW(type, `TYPE`);
+  EnterKW(case, `CASE`);
   KWX[4] := k;
-  EnterKW(elsif, 'ELSIF');
-  EnterKW(false, 'FALSE');
-  EnterKW(array, 'ARRAY');
-  EnterKW(begin, 'BEGIN');
-  EnterKW(const, 'CONST');
-  EnterKW(until, 'UNTIL');
-  EnterKW(while, 'WHILE');
+  EnterKW(elsif, `ELSIF`);
+  EnterKW(false, `FALSE`);
+  EnterKW(array, `ARRAY`);
+  EnterKW(begin, `BEGIN`);
+  EnterKW(const, `CONST`);
+  EnterKW(until, `UNTIL`);
+  EnterKW(while, `WHILE`);
   KWX[5] := k;
-  EnterKW(record, 'RECORD');
-  EnterKW(repeat, 'REPEAT');
-  EnterKW(return, 'RETURN');
-  EnterKW(import, 'IMPORT');
-  EnterKW(module, 'MODULE');
+  EnterKW(record, `RECORD`);
+  EnterKW(repeat, `REPEAT`);
+  EnterKW(return, `RETURN`);
+  EnterKW(import, `IMPORT`);
+  EnterKW(module, `MODULE`);
   KWX[6] := k;
-  EnterKW(pointer, 'POINTER');
+  EnterKW(pointer, `POINTER`);
   KWX[7] := k;
   KWX[8] := k;
-  EnterKW(procedure, 'PROCEDURE');
+  EnterKW(procedure, `PROCEDURE`);
   KWX[9] := k;
-  EnterKW(null, 'EXTENSIBLE');
+  EnterKW(null, `EXTENSIBLE`);
   KWX[10] := k
 END Scanner.

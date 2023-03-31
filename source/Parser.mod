@@ -1034,7 +1034,7 @@ BEGIN tp := B.intType;
   ELSIF sym = S.array THEN
     tp := B.NewArray(-1);  GetSym;
     IF sym = S.lbrak THEN GetSym;
-      IF (sym = S.ident) & (S.id = 'untagged') THEN
+      IF (sym = S.ident) & (S.id8 = `untagged`) THEN
         IF B.system THEN tp.notag := TRUE
         ELSE Mark8(`untagged not allowed`)
         END;  GetSym
@@ -1100,7 +1100,7 @@ VAR ptrType: B.Type;  ident: B.Ident;  x: B.Object;
 BEGIN
   ptrType := B.NewPointer();  GetSym;
   IF sym = S.lbrak THEN GetSym;
-    IF (sym = S.ident) & (S.id = 'untraced') THEN
+    IF (sym = S.ident) & (S.id8 = `untraced`) THEN
       IF B.system THEN ptrType.nTraced := 0
       ELSE Mark8(`untraced not allowed`)
       END;  GetSym
@@ -1197,7 +1197,7 @@ BEGIN tp := B.intType;
   ELSIF sym = S.record THEN
     tp := B.NewRecord();  GetSym;
     IF sym = S.lbrak THEN GetSym;
-      IF (sym = S.ident) & (S.id = 'union') THEN
+      IF (sym = S.ident) & (S.id8 = `union`) THEN
         IF B.system THEN tp.union := TRUE
         ELSE Mark8(`union not allowed`)
         END;  GetSym
