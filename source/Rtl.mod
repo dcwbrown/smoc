@@ -192,12 +192,12 @@ END TimeToMSecs;
 
 (* -------------------------------------------------------------------------- *)
 
-PROCEDURE LowerCase*(VAR str: ARRAY OF CHAR);
+PROCEDURE LowerCase*(VAR str: ARRAY OF CHAR8);
 VAR i: INTEGER;
 BEGIN
-  WHILE (i < LEN(str)) & (str[i] # 0X) DO
+  WHILE (i < LEN(str)) & (str[i] # 0Y) DO
     IF (ORD(str[i]) >= ORD('a'))  &  (ORD(str[i]) <= ORD('z')) THEN
-      str[i] := CHR(ORD(str[i]) - 20H)
+      str[i] := CHR8(ORD(str[i]) - 20H)
     END;
     INC(i)
   END

@@ -253,7 +253,7 @@ BEGIN
   RETURN fld
 END NewField;
 
-PROCEDURE NewStr8*(str: ARRAY OF BYTE;  slen: INTEGER): Str8;  (* TODO CHAR* *)
+PROCEDURE NewStr8*(str: ARRAY OF BYTE;  slen: INTEGER): Str8;
 VAR x: Str8;  i: INTEGER;  p: Str8List;
 BEGIN
   NEW(x);  x.class := cVar;  x.ronly := TRUE;
@@ -273,7 +273,7 @@ END NewStr8;
 PROCEDURE NewStr8Z*(str: ARRAY OF BYTE): Str8;
 VAR slen: INTEGER;
 BEGIN
-  slen := 0;  WHILE str[slen] # 0 DO INC(slen) END;  INC(slen);  (* TODO CHAR* *)
+  slen := 0;  WHILE str[slen] # 0 DO INC(slen) END;  INC(slen);
   RETURN NewStr8(str, slen)
 END NewStr8Z;
 
@@ -293,13 +293,6 @@ BEGIN
   END;
   RETURN x
 END NewStr16;
-
-PROCEDURE NewStr16Z*(str: ARRAY OF CHAR16): Str16;
-VAR slen: INTEGER;
-BEGIN
-  slen := 0;  WHILE str[slen] # 0X DO INC(slen) END;  INC(slen);
-  RETURN NewStr16(str, slen)
-END NewStr16Z;
 
 PROCEDURE NewProc*(): Proc;
 VAR p: Proc;
@@ -832,9 +825,14 @@ BEGIN
       Files.ReadString8(rider, name);
       Files.ReadNum(rider, val);  DetectTypeI(tp);
       IF S.errCnt = 0 THEN
-        IF tp # str16Type THEN x := NewConst(tp, val)
-        ELSE Files.ReadNum(rider, slen);  x := NewStr16('', slen);
+        IF tp = str8Type THEN
+          Files.ReadNum(rider, slen);  x := NewStr8(``, slen);
+          x(Str8).adr := 0;  x(Str8).expno := val
+        ELSIF tp = str16Type THEN
+          Files.ReadNum(rider, slen);  x := NewStr16('', slen);
           x(Str16).adr := 0;  x(Str16).expno := val
+        ELSE
+          x := NewConst(tp, val)
         END;
         NewImport(name, x)
       END;
