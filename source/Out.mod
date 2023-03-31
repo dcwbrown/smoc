@@ -233,12 +233,10 @@ END Ln;
 PROCEDURE InitWin32;
 VAR kernel, user: INTEGER;
 BEGIN
-  SYSTEM.LoadLibraryA(kernel, `kernel32.dll`);
-  SYSTEM.LoadLibraryA(user,   `user32.dll`);
-  SYSTEM.GetProcAddress(GetStdHandle, kernel, SYSTEM.ADR(`GetStdHandle`)); ASSERT(GetStdHandle # NIL);
-  SYSTEM.GetProcAddress(AllocConsole, kernel, SYSTEM.ADR(`AllocConsole`)); ASSERT(AllocConsole # NIL);
-  SYSTEM.GetProcAddress(WriteFile,    kernel, SYSTEM.ADR(`WriteFile`));    ASSERT(WriteFile    # NIL);
-  SYSTEM.GetProcAddress(wsprintfW,    user,   SYSTEM.ADR(`wsprintfW`));    ASSERT(wsprintfW    # NIL);
+  SYSTEM.GetProcAddress(GetStdHandle, Rtl.HKernel, SYSTEM.ADR(`GetStdHandle`)); ASSERT(GetStdHandle # NIL);
+  SYSTEM.GetProcAddress(AllocConsole, Rtl.HKernel, SYSTEM.ADR(`AllocConsole`)); ASSERT(AllocConsole # NIL);
+  SYSTEM.GetProcAddress(WriteFile,    Rtl.HKernel, SYSTEM.ADR(`WriteFile`));    ASSERT(WriteFile    # NIL);
+  SYSTEM.GetProcAddress(wsprintfW,    Rtl.HUser,   SYSTEM.ADR(`wsprintfW`));    ASSERT(wsprintfW    # NIL);
 END InitWin32;
 
 BEGIN InitWin32;

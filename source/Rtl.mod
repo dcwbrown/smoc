@@ -40,10 +40,10 @@ VAR
   GetCommandLineW:         PROCEDURE(): Pointer;
   CommandLineToArgvW:      PROCEDURE(lpCmdLine, pNumArgs: Pointer): Pointer;
 
-  AddVectoredExceptionHandler: PROCEDURE(
-                                 FirstHandler: Ulong;
-                                 VectoredHandler: Pointer
-                               );
+  AddVectoredExceptionHandler: PROCEDURE(FirstHandler:    Ulong;
+                                         VectoredHandler: Pointer);
+
+  HKernel*, HUser*, HShell*: INTEGER;
 
   (* Heap *)
   VirtualAlloc: PROCEDURE(lpAddress, dwSize, flAllocationType, flProtect: INTEGER): Pointer;
@@ -63,10 +63,10 @@ VAR
 (* -------------------------------------------------------------------------- *)
 (* Utility procedures *)
 
-PROCEDURE MessageBox*(title, msg: ARRAY OF CHAR);
+PROCEDURE MessageBox16*(title, msg: ARRAY OF CHAR);
 VAR iRes: Int;
 BEGIN iRes := MessageBoxW(0, SYSTEM.ADR(msg), SYSTEM.ADR(title), 0)
-END MessageBox;
+END MessageBox16;
 
 PROCEDURE GetArg*(VAR out: ARRAY OF CHAR;  n: INTEGER);
 VAR i, arg: INTEGER;
@@ -523,19 +523,18 @@ BEGIN
 END GetArgv;
 
 PROCEDURE InitWin32;
-VAR kernel, user, shell: INTEGER;
 BEGIN
-  SYSTEM.LoadLibraryA(kernel, `kernel32.dll`);
-  SYSTEM.LoadLibraryA(user,   `user32.dll`);
-  SYSTEM.LoadLibraryA(shell,  `shell32.dll`);
+  SYSTEM.LoadLibraryA(HKernel, `kernel32.dll`);
+  SYSTEM.LoadLibraryA(HUser,   `user32.dll`);
+  SYSTEM.LoadLibraryA(HShell,  `shell32.dll`);
 
-  SYSTEM.GetProcAddress(ExitProcess,                 kernel, SYSTEM.ADR(`ExitProcess`));                 ASSERT(ExitProcess                 # NIL);
-  SYSTEM.GetProcAddress(AddVectoredExceptionHandler, kernel, SYSTEM.ADR(`AddVectoredExceptionHandler`)); ASSERT(AddVectoredExceptionHandler # NIL);
-  SYSTEM.GetProcAddress(MessageBoxW,                 user,   SYSTEM.ADR(`MessageBoxW`));                 ASSERT(MessageBoxW                 # NIL);
-  SYSTEM.GetProcAddress(GetSystemTimeAsFileTime,     kernel, SYSTEM.ADR(`GetSystemTimeAsFileTime`));     ASSERT(GetSystemTimeAsFileTime     # NIL);
-  SYSTEM.GetProcAddress(GetCommandLineW,             kernel, SYSTEM.ADR(`GetCommandLineW`));             ASSERT(GetCommandLineW             # NIL);
-  SYSTEM.GetProcAddress(CommandLineToArgvW,          shell,  SYSTEM.ADR(`CommandLineToArgvW`));          ASSERT(CommandLineToArgvW          # NIL);
-  SYSTEM.GetProcAddress(VirtualAlloc,                kernel, SYSTEM.ADR(`VirtualAlloc`));                ASSERT(VirtualAlloc                # NIL);
+  SYSTEM.GetProcAddress(ExitProcess,                 HKernel, SYSTEM.ADR(`ExitProcess`));                 ASSERT(ExitProcess                 # NIL);
+  SYSTEM.GetProcAddress(AddVectoredExceptionHandler, HKernel, SYSTEM.ADR(`AddVectoredExceptionHandler`)); ASSERT(AddVectoredExceptionHandler # NIL);
+  SYSTEM.GetProcAddress(MessageBoxW,                 HUser,   SYSTEM.ADR(`MessageBoxW`));                 ASSERT(MessageBoxW                 # NIL);
+  SYSTEM.GetProcAddress(GetSystemTimeAsFileTime,     HKernel, SYSTEM.ADR(`GetSystemTimeAsFileTime`));     ASSERT(GetSystemTimeAsFileTime     # NIL);
+  SYSTEM.GetProcAddress(GetCommandLineW,             HKernel, SYSTEM.ADR(`GetCommandLineW`));             ASSERT(GetCommandLineW             # NIL);
+  SYSTEM.GetProcAddress(CommandLineToArgvW,          HShell,  SYSTEM.ADR(`CommandLineToArgvW`));          ASSERT(CommandLineToArgvW          # NIL);
+  SYSTEM.GetProcAddress(VirtualAlloc,                HKernel, SYSTEM.ADR(`VirtualAlloc`));                ASSERT(VirtualAlloc                # NIL);
 END InitWin32;
 
 BEGIN

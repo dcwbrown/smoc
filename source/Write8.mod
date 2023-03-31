@@ -60,13 +60,11 @@ PROCEDURE init;
 CONST
   STD_OUTPUT_HANDLE = -11;
   UTF8              = 65001;
-VAR result, kernel: INTEGER;
+VAR result: INTEGER;
 BEGIN
-  SYSTEM.LoadLibraryA(kernel, `kernel32.dll`);
-
-  SYSTEM.GetProcAddress(GetStdHandle,       kernel, SYSTEM.ADR(`GetStdHandle`));       ASSERT(GetStdHandle       # NIL);
-  SYSTEM.GetProcAddress(SetConsoleOutputCP, kernel, SYSTEM.ADR(`SetConsoleOutputCP`)); ASSERT(SetConsoleOutputCP # NIL);
-  SYSTEM.GetProcAddress(WriteFile,          kernel, SYSTEM.ADR(`WriteFile`));          ASSERT(WriteFile          # NIL);
+  SYSTEM.GetProcAddress(GetStdHandle,       Rtl.HKernel, SYSTEM.ADR(`GetStdHandle`));       ASSERT(GetStdHandle       # NIL);
+  SYSTEM.GetProcAddress(SetConsoleOutputCP, Rtl.HKernel, SYSTEM.ADR(`SetConsoleOutputCP`)); ASSERT(SetConsoleOutputCP # NIL);
+  SYSTEM.GetProcAddress(WriteFile,          Rtl.HKernel, SYSTEM.ADR(`WriteFile`));          ASSERT(WriteFile          # NIL);
 
   hOut := GetStdHandle(STD_OUTPUT_HANDLE);
   IF SetConsoleOutputCP # NIL THEN result := SetConsoleOutputCP(UTF8) END;
