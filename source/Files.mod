@@ -35,13 +35,14 @@ TYPE
   Bool         = SYSTEM.CARD32;
   Int          = SYSTEM.CARD32;
 
-  PathStr = ARRAY MAX_PATH+1 OF CHAR16;
+  PathStr16 = ARRAY MAX_PATH+1 OF CHAR16;
+  PathStr8  = ARRAY MAX_PATH+1 OF CHAR8;
 
   File*    = POINTER TO FileDesc;
   FileDesc = RECORD (Rtl.Finalised)
                new, ronly:                    BOOLEAN;
                hFile:                         Handle;
-               name, temp: PathStr; pos, len: INTEGER
+               name, temp: PathStr16; pos, len: INTEGER
              END;
   Rider*   = RECORD
                eof*:         BOOLEAN;
@@ -53,59 +54,43 @@ VAR
   tempId: INTEGER;
 
   (* Win32 Interface *)
-  GetFileAttributesW:  PROCEDURE(lpFileName: ARRAY [untagged] OF CHAR16): Dword;
-  DeleteFileW:         PROCEDURE(lpFilename: ARRAY [untagged] OF CHAR16): Bool;
-  CloseHandle:         PROCEDURE(hObject: Handle): Bool;
-  FlushFileBuffers:    PROCEDURE(hFile: Handle): Bool;
-  SetEndOfFile:        PROCEDURE(hFile: Handle): Bool;
-  GetFileSizeEx:       PROCEDURE(hFile: Handle; lpFileSize: Pointer): Bool;
-  GetCurrentProcessId: PROCEDURE(): Dword;
-
-  MoveFileExW: PROCEDURE(
-                 lpExistingFileName, lpNewFileName: ARRAY [untagged] OF CHAR16;
-                 dwFlags: Dword
-               ): Bool;
-
-  CreateFileW: PROCEDURE(
-                 lpFileName: ARRAY [untagged] OF CHAR16;
-                 dwDesiredAccess, dwShareMode: Dword;
-                 lpSecurityAttributes: Pointer;
-                 dwCreationDisposition, dwFlagsAndAttributes: Dword;
-                 hTemplateFile: Handle
-               ): Handle;
-
-  ReadFile: PROCEDURE(
-              hFile: Handle;
-              lpBuffer: Pointer;
-              nNumberOfBytesToRead: Dword;
-              lpNumberOfBytesRead, lpOverlapped: Pointer
-            ): Bool;
-
-  WriteFile: PROCEDURE(
-               hFile: Handle;
-               lpBuffer: Pointer;
-               nNumberOfBytesToWrite: Dword;
-               lpNumberOfBytesWrite, lpOverlapped: Pointer
-             ): Bool;
-
-  SetFilePointerEx: PROCEDURE(
-                      hFile: Handle;
-                      liDistanceToMove: LargeInteger;
-                      lpNewFilePointer: Pointer;
-                      dwMoveMethod: Dword
-                    ): Bool;
-
-  wsprintfW: PROCEDURE(
-               VAR lpOut: ARRAY [untagged] OF CHAR16;
-               lpFmt: ARRAY [untagged] OF CHAR16;
-               par1, par2: INTEGER
-             ): Int;
-
-  GetEnvironmentVariableW: PROCEDURE(
-                             lpName: ARRAY [untagged] OF CHAR16;
-                             lpBuffer: Pointer;
-                             nSize: Dword
-                           ): Dword;
+  GetFileAttributesW:      PROCEDURE(lpFileName: ARRAY [untagged] OF CHAR16): Dword;
+  DeleteFileW:             PROCEDURE(lpFilename: ARRAY [untagged] OF CHAR16): Bool;
+  CloseHandle:             PROCEDURE(hObject: Handle): Bool;
+  FlushFileBuffers:        PROCEDURE(hFile: Handle): Bool;
+  SetEndOfFile:            PROCEDURE(hFile: Handle): Bool;
+  GetFileSizeEx:           PROCEDURE(hFile: Handle; lpFileSize: Pointer): Bool;
+  GetCurrentProcessId:     PROCEDURE(): Dword;
+  MoveFileExW:             PROCEDURE(lpExistingFileName,
+                                     lpNewFileName:         ARRAY [untagged] OF CHAR16;
+                                     dwFlags:               Dword): Bool;
+  CreateFileW:             PROCEDURE(lpFileName:            ARRAY [untagged] OF CHAR16;
+                                     dwDesiredAccess,
+                                     dwShareMode:           Dword;
+                                     lpSecurityAttributes:  Pointer;
+                                     dwCreationDisposition,
+                                     dwFlagsAndAttributes:  Dword;
+                                     hTemplateFile:         Handle): Handle;
+  ReadFile:                PROCEDURE(hFile:                 Handle;
+                                     lpBuffer:              Pointer;
+                                     nNumberOfBytesToRead:  Dword;
+                                     lpNumberOfBytesRead,
+                                     lpOverlapped:          Pointer): Bool;
+  WriteFile:               PROCEDURE(hFile:                 Handle;
+                                     lpBuffer:              Pointer;
+                                     nNumberOfBytesToWrite: Dword;
+                                     lpNumberOfBytesWrite,
+                                     lpOverlapped:          Pointer): Bool;
+  SetFilePointerEx:        PROCEDURE(hFile:                 Handle;
+                                     liDistanceToMove:      LargeInteger;
+                                     lpNewFilePointer:      Pointer;
+                                     dwMoveMethod:          Dword): Bool;
+  wsprintfW:               PROCEDURE(VAR lpOut:             ARRAY [untagged] OF CHAR16;
+                                     lpFmt:                 ARRAY [untagged] OF CHAR16;
+                                     par1, par2:            INTEGER): Int;
+  GetEnvironmentVariableW: PROCEDURE(lpName:                ARRAY [untagged] OF CHAR16;
+                                     lpBuffer:              Pointer;
+                                     nSize:                 Dword): Dword;
 
 PROCEDURE Finalise(ptr: Rtl.Finalised);
 VAR bRes: Bool; f: File;
@@ -150,8 +135,14 @@ BEGIN
   RETURN file
 END Old;
 
+PROCEDURE Old8*(name: ARRAY OF CHAR8): File;
+VAR name16: PathStr16;  len: INTEGER;
+BEGIN
+  len := Rtl.Utf8ToUtf16(name, name16);  RETURN Old(name16)
+END Old8;
+
 PROCEDURE New*(name: ARRAY OF CHAR16): File;
-VAR str, temp: PathStr; pathLen, pid: Dword;
+VAR str, temp: PathStr16; pathLen, pid: Dword;
     hFile: Handle; file: File; iRes: Int; time: INTEGER;
 BEGIN
   pathLen := GetEnvironmentVariableW(
@@ -177,6 +168,39 @@ BEGIN
   END;
   RETURN file
 END New;
+
+PROCEDURE New8*(name: ARRAY OF CHAR8): File;
+VAR
+  str,     temp: PathStr16;
+  pathLen, pid:  Dword;
+  hFile:         Handle;
+  file:          File;
+  iRes:          Int;
+  time, len:     INTEGER;
+BEGIN
+  pathLen := GetEnvironmentVariableW('USERPROFILE', SYSTEM.ADR(str), LEN(str));
+  pid  := GetCurrentProcessId();
+  time := Rtl.Time();
+  IF pathLen < MAX_PATH-60 THEN
+    iRes := wsprintfW(temp, '%s\.pocTemp_%x',  SYSTEM.ADR(str),  pid);
+    iRes := wsprintfW(str,  '%s_%lx',          SYSTEM.ADR(temp), time);
+    iRes := wsprintfW(temp, '%s_%lx',          SYSTEM.ADR(str),  tempId)
+  ELSE iRes := wsprintfW(temp, '.temp%lu_%lu', time,             tempId)
+  END;
+  INC(tempId);
+  hFile := CreateFileW(temp, ORD(GENERIC_READ+GENERIC_WRITE),
+                       ORD(FILE_SHARE_READ+FILE_SHARE_WRITE+FILE_SHARE_DELETE), 0,
+                       CREATE_NEW, ORD(FILE_ATTRIBUTE_TEMPORARY+FILE_FLAG_DELETE_ON_CLOSE), 0);
+  IF hFile # -1 THEN
+    NewFile(file, hFile);
+    file.new  := TRUE;
+    len := Rtl.Utf8ToUtf16(name, file.name);
+    file.temp := temp;
+    file.pos  := 0;
+    file.len  := 0
+  END;
+  RETURN file
+END New8;
 
 PROCEDURE Register*(f: File);
 VAR hFile2: Handle; buf: ARRAY 10000H OF BYTE;
@@ -228,6 +252,14 @@ BEGIN
   bRes := DeleteFileW(name);
   IF bRes # 0 THEN res := 0 ELSE res := -1 END
 END Delete;
+
+PROCEDURE Delete8*(name: ARRAY OF CHAR8; VAR res: INTEGER);
+VAR bRes: Bool;  name16: PathStr16;  len: INTEGER;
+BEGIN
+  len := Rtl.Utf8ToUtf16(name, name16);
+  bRes := DeleteFileW(name16);
+  IF bRes # 0 THEN res := 0 ELSE res := -1 END
+END Delete8;
 
 PROCEDURE Rename*(old, new: ARRAY OF CHAR16; VAR res: INTEGER);
 VAR bRes: Bool;
@@ -317,6 +349,16 @@ PROCEDURE ReadChar*(VAR r: Rider; VAR x: CHAR16);
 VAR bRes: Bool; byteRead: Dword; f: File;
 BEGIN Read0(r, x)
 END ReadChar;
+
+PROCEDURE ReadString8*(VAR r: Rider; VAR x: ARRAY OF CHAR8);
+VAR i: INTEGER;  done: BOOLEAN;  b: BYTE;
+BEGIN
+  done := FALSE; i := 0;
+  WHILE ~r.eof & ~done DO
+    Read(r, b);  x[i] := CHR8(b);
+    IF r.eof THEN x[i] := 0Y ELSE done := x[i] = 0Y; INC(i) END
+  END
+END ReadString8;
 
 PROCEDURE ReadString*(VAR r: Rider; VAR x: ARRAY OF CHAR16);
 VAR i: INTEGER; done: BOOLEAN;

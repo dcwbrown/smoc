@@ -29,7 +29,7 @@ TYPE
   END;
 
 VAR
-  FileName:           ARRAY 512 OF CHAR16;
+  FileName:           ARRAY 512 OF CHAR8;
   Out:                Files.File;
   Rider:              Files.Rider;
   ImageBase:          INTEGER;
@@ -172,7 +172,7 @@ VAR
   ident:   B.Ident;
   t:       B.TypeList;
   obj:     B.Object;
-  str:     ARRAY 512 OF CHAR16;
+  str:     ARRAY 512 OF CHAR8;
   slist8:  B.Str8List;   y: B.Str8;
   slist16: B.Str16List;  x: B.Str16;
 BEGIN
@@ -203,7 +203,7 @@ BEGIN
     IF imod.import OR (imod.impList # NIL) THEN
       Files.Set(Rider, Out, metrics.fadr + imod.adr8);
       i := 0;  B.Insert(imod.id, str, i);
-      B.Insert('.dll', str, i);  Files.WriteByteStr(Rider, str)
+      B.Insert(`.dll`, str, i);  Files.WriteString8(Rider, str)
     END;
     imod := imod.next
   END;
@@ -404,7 +404,7 @@ BEGIN (* WriteExports *)
   metrics.fadr := Align(Files.Pos(Rider), FileAlignment);
   metrics.rva  := Rva;
 
-  moduleNameSize := B.Str16Len(FileName)+1;
+  moduleNameSize := B.Str8Len(FileName)+1;
   exportCount    := B.expno;
 
   export    := B.expList;
@@ -461,7 +461,7 @@ BEGIN (* WriteExports *)
   END;
 
   (* Name strings *)
-  Files.WriteByteStr(Rider, FileName);
+  Files.WriteString8(Rider, FileName);
   name := names;
   WHILE name # NIL DO
     Files.WriteByteStr(Rider, name.ident.name);
@@ -715,11 +715,11 @@ BEGIN
   EntryPoint         := entry;
   ModulePointerTable := modPtrTable;
 
-  IF B.Flag.main THEN ImageBase := 400000H;    B.Append('.exe', FileName)
-  ELSE                ImageBase := 10000000H;  B.Append('.dll', FileName)
+  IF B.Flag.main THEN ImageBase := 400000H;    B.Append(`.exe`, FileName)
+  ELSE                ImageBase := 10000000H;  B.Append(`.dll`, FileName)
   END;
 
-  Out := Files.New(FileName);
+  Out := Files.New8(FileName);
 
   (* First section starts after headers *)
   Rva            := Align(HeaderSize,                  SectionAlignment);

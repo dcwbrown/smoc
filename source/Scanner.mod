@@ -86,12 +86,13 @@ TYPE
   Str8*   = ARRAY MaxStrLen+1 OF BYTE;
 
   SetCompilerFlagProc* = PROCEDURE(pragma: ARRAY OF CHAR16);
-  NotifyErrorProc* = PROCEDURE(line, column: INTEGER;  msg: ARRAY OF CHAR16);
+  NotifyError8Proc* = PROCEDURE(line, column: INTEGER;  msg: ARRAY OF CHAR8);
 
 VAR
   ival*, slen*: INTEGER;
   rval*:        REAL;
-  id*:          IdStr;
+  id*:          IdStr;   (* Scanner sets both id and id8 every time *)
+  id8*:         IdStr8;
   str*:         Str;
   str8*:        Str8;
   ansiStr*:     BOOLEAN;
@@ -111,15 +112,19 @@ VAR
   lastLine,   lastColumn: INTEGER;
 
   SetCompilerFlag: SetCompilerFlagProc;
-  NotifyError:     NotifyErrorProc;
+  NotifyError8:    NotifyError8Proc;
 
-PROCEDURE Mark*(msg: ARRAY OF CHAR16);
+PROCEDURE Mark8*(msg: ARRAY OF CHAR8);
 BEGIN
-  IF (bufPos > errPos) & (errCnt < 25) & (NotifyError # NIL) THEN
-    NotifyError(lastLine, lastColumn, msg)
+  IF (bufPos > errPos) & (errCnt < 25) & (NotifyError8 # NIL) THEN
+    NotifyError8(lastLine, lastColumn, msg)
   END;
   INC(errCnt);  errPos := bufPos + 1
-END Mark;
+END Mark8;
+
+PROCEDURE Mark16*(msg: ARRAY OF CHAR16);
+VAR msg8: ARRAY 100 OF CHAR8;  len: INTEGER;
+BEGIN len := Rtl.Utf16ToUtf8(msg, msg8);  Mark8(msg8) END Mark16;
 
 PROCEDURE Read;
 VAR n: INTEGER;
@@ -136,15 +141,17 @@ RETURN LSL(lastLine, 10) + (lastColumn MOD 400H) END SourcePos;
 
 PROCEDURE Identifier(VAR sym: INTEGER);
 VAR i, j, k: INTEGER;
-BEGIN i := 0;  sym := ident;
+BEGIN i := 0;  j := 0;  sym := ident;
   WHILE (i < MaxIdLen) & (   (ch >= ORD('0')) & (ch <= ORD('9'))
                           OR (ch >= ORD('A')) & (ch <= ORD('Z'))
                           OR (ch >= ORD('a')) & (ch <= ORD('z'))
                           OR (ch =  ORD('_'))) DO
-    Rtl.PutUtf16(ch, id, i);  Read
+    Rtl.PutUtf16(ch, id,  i);
+    Rtl.PutUtf8 (ch, id8, j);
+    Read
   END;
-  id[i] := 0X;
-  IF i >= MaxIdLen THEN Mark('identifier too long') END;
+  id[i] := 0X;  id8[j] := 0Y;
+  IF (i >= MaxIdLen) OR (j >= MaxIdLen) THEN Mark16('identifier too long') END;
   (* search for keyword *)
   IF i < LEN(KWX) THEN
     j := KWX[i-1];  k := KWX[i];
@@ -160,7 +167,7 @@ BEGIN
     Rtl.PutUtf8(ch, str8, slen); Read
   END;
   Read;  str8[slen] := 0;  INC(slen);
-  IF slen >= MaxStrLen THEN Mark('String too long') END;
+  IF slen >= MaxStrLen THEN Mark16('String too long') END;
 END String8;
 
 PROCEDURE String(quoteCh: INTEGER);
@@ -170,7 +177,7 @@ BEGIN
     Rtl.PutUtf16(ch, str, slen); Read
   END;
   Read;  str[slen] := 0X;  INC(slen);
-  IF slen >= MaxStrLen THEN Mark('String too long') END;
+  IF slen >= MaxStrLen THEN Mark16('String too long') END;
 END String;
 
 PROCEDURE HexString(): INTEGER;
@@ -181,7 +188,7 @@ VAR i, m, n, o, p, sym: INTEGER;
   BEGIN
     IF    (ORD('0') <= ch) & (ch <= ORD('9')) THEN n := ch - 30H; Read
     ELSIF (ORD('A') <= ch) & (ch <= ORD('F')) THEN n := ch - 37H; Read
-    ELSE n := 0;  Mark('Hex digit expected')  END
+    ELSE n := 0;  Mark16('Hex digit expected')  END
   RETURN n END hexdigit;
 BEGIN
   i := 0;  Read;
@@ -194,7 +201,7 @@ BEGIN
       str8[slen] := m * 10H + n;
       INC(slen)
     END;
-    IF slen > MaxStrLen THEN Mark("Hex string too long") END;
+    IF slen > MaxStrLen THEN Mark16("Hex string too long") END;
     Read;
     str8[slen] := 0;  (* Guaranteed terminator, not included in string length *)
     sym := string8
@@ -204,7 +211,7 @@ BEGIN
       m := hexdigit();  n := hexdigit();
       o := hexdigit();  p := hexdigit();
       IF i < MaxStrLen THEN str[i] := CHR(o*1000H + p*100H + m*10H +n);  INC(i)
-      ELSE Mark('String too long')
+      ELSE Mark16('String too long')
       END
     END;
     Read;  slen := i;  (* no 0X appended! *)
@@ -218,7 +225,7 @@ VAR x, f, max, min, half: BigNums.BigNum;
     i, k, e, float, last: INTEGER;  negE: BOOLEAN;
 BEGIN i := n-1;  k := 0;  x := BigNums.Zero;  f := BigNums.Zero;
   REPEAT
-    IF d[i] > 10 THEN Mark('Bad number')
+    IF d[i] > 10 THEN Mark16('Bad number')
     ELSE BigNums.SetDecimalDigit(x, k, d[i])
     END;
     DEC(i);  INC(k)
@@ -227,7 +234,7 @@ BEGIN i := n-1;  k := 0;  x := BigNums.Zero;  f := BigNums.Zero;
   WHILE (ch >= ORD('0')) & (ch <= ORD('9')) DO (* fraction *)
     IF i > BigNums.MaxDecimalDigits-19 THEN
       BigNums.SetDecimalDigit(f, i, ch-30H)
-    ELSIF i = BigNums.MaxDecimalDigits-19 THEN Mark('Fraction too long')
+    ELSIF i = BigNums.MaxDecimalDigits-19 THEN Mark16('Fraction too long')
     END;
     DEC(i);  Read
   END;
@@ -239,11 +246,11 @@ BEGIN i := n-1;  k := 0;  x := BigNums.Zero;  f := BigNums.Zero;
     IF (ch >= ORD('0')) & (ch <= ORD('9')) THEN
       REPEAT e := e*10 + ch-30H;  Read
       UNTIL (ch < ORD('0')) OR (ch > ORD('9')) OR (e > maxExp);
-      IF e > maxExp THEN Mark('Exponent too large');
+      IF e > maxExp THEN Mark16('Exponent too large');
         WHILE (ch < ORD('0')) OR (ch > ORD('9')) DO Read END
       END;
       IF negE THEN e := -e END
-    ELSE Mark('Digit?')
+    ELSE Mark16('Digit?')
     END;
     i := BigNums.MaxDecimalDigits-1;
     WHILE e > 0 DO BigNums.MultiplyByTen(x, x);
@@ -298,7 +305,7 @@ BEGIN
   ival := 0;  i := 0;  n := 0;  k2 := 0;
   REPEAT
     IF n < LEN(d) THEN d[n] := ch - 30H;  INC(n)
-    ELSE Mark('Too many digits');  n := 0
+    ELSE Mark16('Too many digits');  n := 0
     END;
     Read
   UNTIL (ch < ORD('0')) OR (ch > ORD('9')) & (ch < ORD('A')) OR (ch > ORD('F'));
@@ -309,13 +316,13 @@ BEGIN
     UNTIL i = n;
     IF ch = ORD('X') THEN sym := string;
       IF k2 < 10000H THEN ival := k2
-      ELSE Mark('Illegal value');  ival := 0
+      ELSE Mark16('Illegal value');  ival := 0
       END;
       IF k2 = 0 THEN str[0] := 0X;  slen := 1
       ELSE str[0] := CHR(k2);  str[1] := 0X;  slen := 2
       END
     ELSIF ch = ORD('Y') THEN sym := string8;
-      IF k2 < 100H THEN ival := k2 ELSE Mark('Illegal value');  ival := 0  END;
+      IF k2 < 100H THEN ival := k2 ELSE Mark16('Illegal value');  ival := 0  END;
       IF k2 = 0 THEN str8[0] := 0;  slen := 1
       ELSE str8[0] := k2;  str8[1] := 0;  slen := 2
       END
@@ -328,9 +335,9 @@ BEGIN
       REPEAT
         IF d[i] < 10 THEN
           IF k2 <= (max-d[i]) DIV 10 THEN k2 := k2 * 10 + d[i]
-          ELSE Mark('Too large');  k2 := 0
+          ELSE Mark16('Too large');  k2 := 0
           END
-        ELSE Mark('Bad integer')
+        ELSE Mark16('Bad integer')
         END;
         INC(i)
       UNTIL i = n;
@@ -342,9 +349,9 @@ BEGIN
     REPEAT
       IF d[i] < 10 THEN
         IF k2 <= (max-d[i]) DIV 10 THEN k2 := k2*10 + d[i]
-        ELSE Mark ('Too large');  k2 := 0
+        ELSE Mark16('Too large');  k2 := 0
         END
-      ELSE Mark('Bad integer')
+      ELSE Mark16('Bad integer')
       END;
       INC(i)
     UNTIL i = n;
@@ -363,7 +370,7 @@ VAR exit: BOOLEAN;
     END;
     pragma[i] := 0X;
     IF ch = ORD('*') THEN SetCompilerFlag(pragma)
-    ELSE Mark('Incorrect compiler directive')
+    ELSE Mark16('Incorrect compiler directive')
     END
   END SetPragma;
 
@@ -457,8 +464,8 @@ PROCEDURE InstallSetCompilerFlag*(proc: SetCompilerFlagProc);
 BEGIN SetCompilerFlag := proc
 END InstallSetCompilerFlag;
 
-PROCEDURE InstallNotifyError*(proc: NotifyErrorProc);
-BEGIN NotifyError := proc
+PROCEDURE InstallNotifyError*(proc8: NotifyError8Proc);
+BEGIN NotifyError8 := proc8
 END InstallNotifyError;
 
 PROCEDURE EnterKW(sym: INTEGER;  name: IdStr);

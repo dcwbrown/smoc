@@ -2,82 +2,95 @@ MODULE Smoc;
 (*$CONSOLE*)
 
 IMPORT
-  SYSTEM, Rtl, Out, Files, S := Scanner, B := Base, G := Generator, P := Parser;
+  SYSTEM, Rtl, Files, S := Scanner, B := Base, G := Generator, P := Parser, w := Write8;
 
 VAR
-  arg, fname: ARRAY 1024 OF CHAR16;
-  buildfile: Files.File;  argIdx: INTEGER;
-  buildMode, errFlag: BOOLEAN;
+  arg, fname: ARRAY 1024 OF CHAR8;
+  argIdx:     INTEGER;
+  buildfile:  Files.File;
+  buildMode,
+  errFlag:    BOOLEAN;
 
-PROCEDURE outSep(i, w: INTEGER);
+PROCEDURE outSep(i, n: INTEGER);
 BEGIN
-   IF w < 0 THEN w := 0 END;
-   IF i < 1000 THEN Out.Int(i, w)
+   IF n < 0 THEN n := 0 END;
+   IF i < 1000 THEN w.in(i, n)
    ELSE
-      outSep(i DIV 1000, w-4);  Out.Char(',');
+      outSep(i DIV 1000, n-4);  w.c(`,`);
       i := i MOD 1000;
-      Out.Char(CHR(ORD('0') + i DIV 100));  i := i MOD 100;
-      Out.Char(CHR(ORD('0') + i DIV 10));   i := i MOD 10;
-      Out.Char(CHR(ORD('0') + i));
+      w.c(CHR8(ORD(`0`) + i DIV 100));  i := i MOD 100;
+      w.c(CHR8(ORD(`0`) + i DIV 10));   i := i MOD 10;
+      w.c(CHR8(ORD(`0`) + i));
    END
 END outSep;
 
 (* Write filename part of path in a fixed 20 column field *)
-PROCEDURE outFname(fname: ARRAY OF CHAR16);
+PROCEDURE outFname(fname: ARRAY OF CHAR8);
 VAR basename: ARRAY 1024 OF CHAR16;  i, j: INTEGER;
 BEGIN
   i := 0;
-  WHILE fname[i] # 0X DO INC(i) END;
-  WHILE (i > 0) & (fname[i-1] # '\') DO DEC(i) END;
-  j := i;  WHILE fname[i] # 0X DO Out.Char(fname[i]); INC(i) END;
-  WHILE i-j < 20 DO Out.Char(' '); INC(i) END
+  WHILE fname[i] # 0Y DO INC(i) END;
+  WHILE (i > 0) & (fname[i-1] # `\`) DO DEC(i) END;
+  j := i;  WHILE fname[i] # 0Y DO w.c(fname[i]); INC(i) END;
+  WHILE i-j < 20 DO w.c(` `); INC(i) END
 END outFname;
 
 
-PROCEDURE Compile(fname: ARRAY OF CHAR16);
+PROCEDURE Compile(fname: ARRAY OF CHAR8);
 VAR srcfile: Files.File;  modinit: B.Node;
     i, sym, startTime, endTime: INTEGER;
 BEGIN
   outFname(fname);
-  B.SetSrcPath(fname);  srcfile := Files.Old(fname);
+  B.SetSrcPath(fname);  srcfile := Files.Old8(fname);
   S.Init(srcfile);  S.Get(sym);
 
   startTime := Rtl.Time();
-  IF sym = S.module THEN modinit := P.Module() ELSE S.Mark("Expected 'MODULE'") END;
+  IF sym = S.module THEN modinit := P.Module() ELSE S.Mark8(`Expected 'MODULE'`) END;
   IF S.errCnt = 0 THEN
     B.WriteSymfile;  G.Generate(modinit);
     B.Cleanup;  G.Cleanup;  endTime := Rtl.Time();
     outSep(G.pc,          10);   outSep(G.staticSize,  10);
     outSep(G.varSize,     10);   outSep(Rtl.TimeToMSecs(endTime - startTime), 5);
-    Out.String('ms');  Out.Ln
+    w.s(`ms`);  w.l
   END
 END Compile;
 
-PROCEDURE ErrorNotFound(fname: ARRAY OF CHAR16);
+
+PROCEDURE ErrorNotFound(fname: ARRAY OF CHAR8);
 BEGIN
-  Out.String('File ');  Out.String(fname);
-  Out.String(' not found');  Out.Ln
+  w.s(`File `);  w.s(fname);
+  w.s(` not found`);  w.l
 END ErrorNotFound;
 
-PROCEDURE Build(fname: ARRAY OF CHAR16);
-VAR r: Files.Rider;  i: INTEGER;  x: BYTE;  start, end: INTEGER;
-    byteStr: ARRAY 1024 OF BYTE;  srcfname: ARRAY 1024 OF CHAR16;
-    codesize, staticsize, varsize: INTEGER;
+
+PROCEDURE Build(fname: ARRAY OF CHAR8);
+VAR
+  r:          Files.Rider;
+  i:          INTEGER;
+  x:          BYTE;
+  start, end: INTEGER;
+  srcfname:   ARRAY 1024 OF CHAR8;
+  codesize:   INTEGER;
+  staticsize: INTEGER;
+  varsize:    INTEGER;
 BEGIN
-  Out.String("File name                 code      data    global   time"); Out.Ln;
-  start := Rtl.Time();  buildfile := Files.Old(fname);
+  w.sl(`File name                 code      data    global   time`);
+  start := Rtl.Time();  buildfile := Files.Old8(fname);
   codesize := 0;  staticsize := 0;  varsize := 0;
-  Files.Set(r, buildfile, 0);  i := 0;  Files.Read(r, x);
+  Files.Set(r, buildfile, 0);  i := 0;
+  Files.Read(r, x);
   WHILE ~r.eof DO
     WHILE (x <= 32) & ~r.eof DO Files.Read(r, x) END;
     WHILE (x > 32) & ~r.eof DO
-      byteStr[i] := x;  Files.Read(r, x);  INC(i)
+      srcfname[i] := CHR8(x);  Files.Read(r, x);  INC(i)
     END;
     IF i > 0 THEN
-      byteStr[i] := 0;  i := Rtl.Utf8ToUtf16(byteStr, srcfname);
-      IF Files.Old(srcfname) # NIL THEN
-        Compile(srcfname);  INC(codesize, G.pc);
-        INC(staticsize, G.staticSize);  INC(varsize, G.varSize);
+      srcfname[i] := 0Y;
+      IF Files.Old8(srcfname) # NIL THEN
+        Compile(srcfname);
+        INC(codesize,   G.pc);
+        INC(staticsize, G.staticSize);
+        INC(varsize,    G.varSize);
       ELSE ErrorNotFound(srcfname)
       END;
       IF S.errCnt # 0 THEN Rtl.Halt(1) END;
@@ -85,10 +98,10 @@ BEGIN
     END
   END;
   end := Rtl.Time();
-  Out.String('Total               ');
+  w.s(`Total               `);
   outSep(codesize, 10);   outSep(staticsize,  10);
   outSep(varsize,  10);   outSep(Rtl.TimeToMSecs(end-start), 5);
-  Out.String('ms');       Out.Ln
+  w.s(`ms`);       w.l
 END Build;
 
 (* -------------------------------------------------------------------------- *)
@@ -98,51 +111,51 @@ PROCEDURE Get;
 BEGIN INC(argIdx);  Rtl.GetArg(arg, argIdx)
 END Get;
 
-PROCEDURE Mark(msg: ARRAY OF CHAR16);
+PROCEDURE Mark8(msg: ARRAY OF CHAR8);
 BEGIN
-  Out.String('arg ');  Out.Int(argIdx, 0);  Out.String(': ');
-  Out.String(msg);  Out.Ln;  errFlag := TRUE
-END Mark;
+  w.s(`arg `);  w.i(argIdx);  w.s(`: `);
+  w.s(msg);  w.l;  errFlag := TRUE
+END Mark8;
 
 PROCEDURE Arguments;
   PROCEDURE Option;
   BEGIN (*Rtl.LowerCase(arg);*)
-    IF arg = '/b' THEN buildMode := TRUE;  Get;  Arguments
-    ELSIF arg = '/sym' THEN Get;
-      IF arg[0] = '/' THEN Mark('path to symbols?');  Option
+    IF arg = `/b` THEN buildMode := TRUE;  Get;  Arguments
+    ELSIF arg = `/sym` THEN Get;
+      IF arg[0] = `/` THEN Mark8(`path to symbols?`);  Option
       ELSE B.SetSymPath(arg);  Get;  Arguments
       END
     ELSE (* unhandled *) Get;  Arguments
     END
   END Option;
 BEGIN (* Arguments *)
-  IF arg = 0X THEN (* end parsing *)
-  ELSIF arg[0] # '/' THEN
-    IF fname[0] = 0X THEN fname := arg
-    ELSE Mark('another filename?')
+  IF arg[0] = 0Y THEN (* end parsing *)
+  ELSIF arg[0] # `/` THEN
+    IF fname[0] = 0Y THEN fname := arg
+    ELSE Mark8(`expecting another filename`)
     END;
     Get;  Arguments
-  ELSIF arg[0] = '/' THEN Option
+  ELSIF arg[0] = `/` THEN Option
   END
 END Arguments;
 
-PROCEDURE NotifyError(line, column: INTEGER;  msg: ARRAY OF CHAR16);
+PROCEDURE NotifyError8(line, column: INTEGER;  msg: ARRAY OF CHAR8);
 BEGIN
-  IF S.errCnt = 0 THEN Out.Ln END;
-  Out.String('  [');  Out.Int(line, 1);
-  Out.Char(':');      Out.Int(column, 1);
-  Out.String("] ");   Out.String(msg);  Out.Ln
-END NotifyError;
+  IF S.errCnt = 0 THEN w.l END;
+  w.s(`  [`);  w.i(line);
+  w.c(`:`);    w.i(column);
+  w.s(`] `);   w.sl(msg);
+END NotifyError8;
 
 BEGIN
-  S.InstallNotifyError(NotifyError);  Get;  Arguments;
-  IF fname[0] # 0X THEN
-    IF Files.Old(fname) # NIL THEN
+  S.InstallNotifyError(NotifyError8);  Get;  Arguments;
+  IF fname[0] # 0Y THEN
+    IF Files.Old8(fname) # NIL THEN
       IF ~buildMode THEN Compile(fname) ELSE Build(fname) END
     ELSE ErrorNotFound(fname)
     END
   ELSE
-    Out.String('Small Oberon-07 Compiler');  Out.Ln;
-    Out.String('Usage: Smoc <inputfile>');   Out.Ln
+    w.sl(`Small Oberon-07 Compiler`);
+    w.sl(`Usage: Smoc <inputfile>`);
   END
 END Smoc.

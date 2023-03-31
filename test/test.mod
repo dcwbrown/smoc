@@ -67,6 +67,6 @@ BEGIN
 
   ASSERT(s[2] # 1Y);
 
-  IF TRUE  THEN i := 50;  s[i] := ` ` END;
+  IF FALSE THEN i := 50;  s[i] := ` ` END;
   IF FALSE THEN ASSERT(FALSE)         END;
 END test.

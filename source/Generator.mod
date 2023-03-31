@@ -483,7 +483,7 @@ END EmitRep;
 
 PROCEDURE CheckTypeSize(VAR sz: INTEGER);
 BEGIN
-  IF sz > MaxSize THEN S.Mark('type too big');  sz := 8 END
+  IF sz > MaxSize THEN S.Mark8(`type too big`);  sz := 8 END
 END CheckTypeSize;
 
 PROCEDURE SetTypeSize*(tp: B.Type);
@@ -536,7 +536,7 @@ BEGIN
   Align(varSize, x.type.align);  INC(varSize, x.type.size);
   x(B.Var).adr := -varSize;
   IF varSize > MaxSize THEN varSize := 8;
-    S.Mark('global var size limit reached')
+    S.Mark8(`global var size limit reached`)
   END
 END SetGlobalVarSize;
 
@@ -546,7 +546,7 @@ BEGIN size := proc.locblksize;
   Align(size, x.type.align);  INC(size, x.type.size);
   x(B.Var).adr := -size;  proc.locblksize := size;
   IF size > MaxLocBlkSize THEN proc.locblksize := 8;
-    S.Mark('local var size limit reached')
+    S.Mark8(`local var size limit reached`)
   END
 END SetProcVarSize;
 
@@ -569,7 +569,7 @@ BEGIN
   Align(staticSize, 16);  imod := B.modList;
   WHILE imod # NIL DO
     IF imod.import OR (imod.impList # NIL) THEN
-      size := B.Str16Len(imod.id)+5;
+      size := B.Str8Len(imod.id)+5;
       imod.adr8 := staticSize;  INC(staticSize, size)
     END;
     imod := imod.next
@@ -608,7 +608,7 @@ BEGIN
   AllocImportModules;
 
   IF staticSize + varSize > MaxSize THEN
-    S.Mark('static variables size too big');  ASSERT(FALSE)
+    S.Mark8(`static variables size too big`);  ASSERT(FALSE)
   END
 END AllocStaticData;
 
@@ -754,27 +754,38 @@ BEGIN
 END NewProc;
 
 
-PROCEDURE Append16(s: ARRAY OF CHAR16; VAR d: ARRAY OF BYTE);
+PROCEDURE Append(s: ARRAY OF CHAR8; VAR d: ARRAY OF CHAR8);
 VAR si, di: INTEGER;
 BEGIN  si:= 0;  di := 0;
-  WHILE (di < LEN(d))  &  (d[di] # 0) DO INC(di) END;
+  WHILE (di < LEN(d))  &  (d[di] # 0Y) DO INC(di) END;
+  WHILE (si < LEN(s))  &  (s[si] # 0Y)  &  (di < LEN(d)) DO
+    d[di] := s[si];  INC(di);  INC(si);
+  END;
+  IF di < LEN(d) THEN d[di] := 0Y ELSE d[LEN(d)-1] := 0Y END
+END Append;
+
+PROCEDURE Append16(s: ARRAY OF CHAR16; VAR d: ARRAY OF CHAR8);
+VAR si, di: INTEGER;
+BEGIN  si:= 0;  di := 0;
+  WHILE (di < LEN(d))  &  (d[di] # 0Y) DO INC(di) END;
   WHILE (si < LEN(s))  &  (s[si] # 0X)  &  (di < LEN(d)) DO
     Rtl.PutUtf8(Rtl.GetUtf16(s, si), d, di);
-  END
+  END;
+  IF di < LEN(d) THEN d[di] := 0Y ELSE d[LEN(d)-1] := 0Y END
 END Append16;
 
+
 PROCEDURE Pass1(VAR modinit: B.Node);
-VAR i: INTEGER;  str: ARRAY 512 OF CHAR8;
+VAR str: ARRAY 512 OF CHAR8;
 BEGIN
-  i := Rtl.Utf16ToUtf8(B.modid, str);
-  modidStr    := B.NewStr8Z(str);
+  modidStr    := B.NewStr8Z(B.modid);
   errFmtStr   := B.NewStr8Z(`[%d:%d]: %16.16s`);
   err2FmtStr  := B.NewStr8Z(`Module key of %s is mismatched`);
   err3FmtStr  := B.NewStr8Z(`Unknown exception;  PC: %x`);
   err4FmtStr  := B.NewStr8Z(`Cannot load module %s (not exist?)`);
   rtlName     := B.NewStr8Z(`Rtl.dll`);
   user32name  := B.NewStr8Z(`user32.dll`);
-  str         := `Error in module `;  Append16(B.modid, str);
+  str         := `Error in module `;  Append(B.modid, str);
   err5FmtStr  := B.NewStr8Z(str);
   trapDesc    := B.NewStr8Z(`Module key      Array index     Type mismatch   String index    Nil dereference Nil proc call   Divide by zero  Assertion false Run time missing`);
 
@@ -1016,7 +1027,7 @@ BEGIN
       WHILE (reg < 12) & (reg IN cantAlloc) DO INC(reg) END;
       IF reg >= 12 THEN reg := 6;
         WHILE (reg < 16) & (reg IN cantAlloc) DO INC(reg) END;
-        IF reg >= 16 THEN S.Mark('Reg stack overflow') END
+        IF reg >= 16 THEN S.Mark8(`Reg stack overflow`) END
       END
     END
   ELSE reg := MkItmStat.bestReg
@@ -1033,7 +1044,7 @@ BEGIN cantAlloc := avoid + allocReg + {reg_SP, reg_BP, reg_B};
     WHILE (reg < 12) & (reg IN cantAlloc) DO INC(reg) END;
     IF reg >= 12 THEN reg := 6;
       WHILE (reg < 16) & (reg IN cantAlloc) DO INC(reg) END;
-      IF reg >= 16 THEN S.Mark('Reg stack overflow') END
+      IF reg >= 16 THEN S.Mark8(`Reg stack overflow`) END
     END
   END;
   ASSERT(reg < 16);  SetAlloc(reg);
@@ -1054,7 +1065,7 @@ BEGIN
   cantAlloc := MkItmStat.xAvoid + allocXReg;
   IF (MkItmStat.bestXReg = 255) OR (MkItmStat.bestXReg IN cantAlloc) THEN
     reg := 0;  WHILE (reg < 16) & (reg IN cantAlloc) DO INC(reg) END;
-    IF reg >= 16 THEN S.Mark('Reg stack overflow');  ASSERT(FALSE) END
+    IF reg >= 16 THEN S.Mark8(`Reg stack overflow`);  ASSERT(FALSE) END
   ELSE reg := MkItmStat.bestXReg
   END;
   SetAllocX(reg);
@@ -1065,7 +1076,7 @@ PROCEDURE AllocXReg2(avoid: SET): BYTE;
 VAR reg: BYTE;  cantAlloc: SET;
 BEGIN cantAlloc := avoid + allocXReg;
   reg := 0;  WHILE (reg < 16) & (reg IN cantAlloc) DO INC(reg) END;
-  IF reg >= 16 THEN S.Mark('Reg stack overflow');  ASSERT(FALSE) END;
+  IF reg >= 16 THEN S.Mark8(`Reg stack overflow`);  ASSERT(FALSE) END;
   SetAllocX(reg);
   RETURN reg
 END AllocXReg2;
@@ -1498,7 +1509,6 @@ BEGIN
   FreeXReg(x.r);  FreeReg2(y);  SetCond(x, OpToCc(node.op))
 END CompareReal;
 
-
 PROCEDURE Compare(VAR x: Item;  node: Node);
 VAR cx, r, size: BYTE;  first, L: INTEGER;
     y, len: Item;  tp: B.Type;  oldStat: MakeItemState;
@@ -1538,7 +1548,7 @@ BEGIN
                                   EmitBare(CMPSB);
     L := pc;                      Jcc1(ccNZ, 0);
     SetRm_regI(reg_SI, -1);       EmitRmImm(CMPi, 1, 0);
-                                  BJump(first, ccNZ);  (* -2 to -1 correct? *)
+                                  BJump(first, ccNZ);
     Fixup(L, pc);
     FreeReg(reg_DI);  FreeReg(reg_SI);
                                   SetCond(x, OpToCc(node.op))
@@ -1577,7 +1587,6 @@ BEGIN
   END;
   MkItmStat := oldStat
 END Compare;
-
 
 PROCEDURE MemberTest(VAR x: Item;  node: Node);
 VAR y: Item;  oldStat: MakeItemState;
@@ -2287,17 +2296,17 @@ BEGIN
   ELSIF obj.class = B.cType THEN ASSERT(FALSE)
   ELSIF obj IS Node THEN
     node := obj(Node);  sourcePos := node.sourcePos;  x.mode := mNothing;
-    IF node.op = S.plus THEN Op2(x, node)
-    ELSIF node.op = S.minus THEN
-      IF node.right # NIL THEN Op2(x, node) ELSE Negate(x, node) END
-    ELSIF node.op = S.times THEN Op2(x, node)
+    IF    node.op = S.plus   THEN Op2(x, node)
+    ELSIF node.op = S.minus  THEN
+      IF node.right # NIL    THEN Op2(x, node) ELSE Negate(x, node) END
+    ELSIF node.op = S.times  THEN Op2(x, node)
     ELSIF (node.op = S.div) OR (node.op = S.mod) THEN IntDiv(x, node)
-    ELSIF node.op = S.rdiv THEN Op2(x, node)
-    ELSIF node.op = S.and  THEN And(x, node)
-    ELSIF node.op = S.or   THEN Or(x, node)
-    ELSIF node.op = S.not  THEN Not(x, node)
+    ELSIF node.op = S.rdiv   THEN Op2(x, node)
+    ELSIF node.op = S.and    THEN And(x, node)
+    ELSIF node.op = S.or     THEN Or(x, node)
+    ELSIF node.op = S.not    THEN Not(x, node)
     ELSIF (node.op >= S.eql) & (node.op <= S.geq) THEN Compare(x, node)
-    ELSIF node.op = S.in    THEN MemberTest(x, node)
+    ELSIF node.op = S.in     THEN MemberTest(x, node)
     ELSIF node.op = S.is     THEN TypeTest(x, node)
     ELSIF node.op = S.arrow  THEN Deref(x, node)
     ELSIF node.op = S.period THEN Field(x, node)
@@ -2848,7 +2857,7 @@ VAR val: INTEGER;
 BEGIN
   IF x IS B.Const THEN val := x(B.Const).val ELSE val := 0 END;
   IF (val < 0) OR (val > 63) THEN
-    S.Mark('Set element must be >= 0 and <= 63')
+    S.Mark8(`Set element must be >= 0 and <= 63`)
   END
 END CheckSetElement;
 
@@ -2921,13 +2930,13 @@ BEGIN
     val := x(B.Const).val;  fraction := val MOD 10000000000000H;
     exp := val DIV 10000000000000H MOD 800H;  sign := val < 0;
     IF exp = 0 (* subnormal *) THEN val := 0
-    ELSIF exp = 7FFH (* Inf or NaN *) THEN S.Mark('Float too large')
+    ELSIF exp = 7FFH (* Inf or NaN *) THEN S.Mark8(`Float too large`)
     ELSE DEC(exp, 1023);  INC(fraction, 10000000000000H);  p := 52;
       IF exp < 0 THEN val := 0 ELSIF exp = 0 THEN val := 1
       ELSE WHILE (p > 0) & (exp > 0) DO DEC(p);  DEC(exp) END;
         IF exp = 0 THEN val := ASR(fraction, p)
         ELSIF exp <= 11 THEN val := LSL(fraction, exp)
-        ELSE S.Mark('Float too large')
+        ELSE S.Mark8(`Float too large`)
         END
       END;
       IF sign THEN val := -val END
@@ -3040,7 +3049,7 @@ BEGIN
       ELSIF op = S.minus THEN val := xval - yval
       ELSIF op = S.times THEN val := xval * yval
       ELSIF (op = S.div) OR (op = S.mod) THEN
-        IF yval <= 0 THEN S.Mark('invalid divisor')
+        IF yval <= 0 THEN S.Mark8(`invalid divisor`)
         ELSIF op = S.div THEN val := xval DIV yval
         ELSE val := xval MOD yval
         END

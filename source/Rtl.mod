@@ -61,38 +61,6 @@ VAR
 
 (* -------------------------------------------------------------------------- *)
 (* -------------------------------------------------------------------------- *)
-(* Utility procedures *)
-
-PROCEDURE MessageBox16*(title, msg: ARRAY OF CHAR);
-VAR iRes: Int;
-BEGIN iRes := MessageBoxW(0, SYSTEM.ADR(msg), SYSTEM.ADR(title), 0)
-END MessageBox16;
-
-PROCEDURE GetArg*(VAR out: ARRAY OF CHAR;  n: INTEGER);
-VAR i, arg: INTEGER;
-BEGIN (* GetArg *)
-  ASSERT(argv # 0);
-  IF (n < numArgs) & (n >= 0) THEN i := 0;
-    SYSTEM.GET(argv+n*8, arg);  ASSERT(arg # 0);  SYSTEM.GET(arg, out[i]);
-    WHILE out[i] # 0X DO INC(arg, 2);  INC(i);  SYSTEM.GET(arg, out[i]) END
-  ELSE out[0] := 0X
-  END
-END GetArg;
-
-PROCEDURE Time*(): INTEGER;
-VAR tick: INTEGER;
-BEGIN
-  GetSystemTimeAsFileTime(SYSTEM.ADR(tick));
-  RETURN tick
-END Time;
-
-PROCEDURE TimeToMSecs*(time: INTEGER): INTEGER;
-  RETURN time DIV 10000
-END TimeToMSecs;
-
-
-(* -------------------------------------------------------------------------- *)
-(* -------------------------------------------------------------------------- *)
 (* Unicode *)
 
 (* UTF8:                                                                                           *)
@@ -185,6 +153,41 @@ BEGIN  i := 0;  j := 0;
   WHILE (i < LEN(src)) & (src[i] # 0X) DO PutUtf8(GetUtf16(src, i), dst, j) END;
   IF j < LEN(dst) THEN dst[j] := 0;  INC(j) END
 RETURN j END Utf16ToUtf8;
+
+
+(* -------------------------------------------------------------------------- *)
+(* -------------------------------------------------------------------------- *)
+(* Utility procedures *)
+
+PROCEDURE MessageBox16*(title, msg: ARRAY OF CHAR);
+VAR iRes: Int;
+BEGIN iRes := MessageBoxW(0, SYSTEM.ADR(msg), SYSTEM.ADR(title), 0)
+END MessageBox16;
+
+PROCEDURE GetArg*(VAR out: ARRAY OF CHAR8;  n: INTEGER);
+VAR i, arg: INTEGER;  str16: ARRAY 1024 OF CHAR16;
+BEGIN (* GetArg *)
+  ASSERT(argv # 0);
+  IF (n < numArgs) & (n >= 0) THEN i := 0;
+    SYSTEM.GET(argv+n*8, arg);  ASSERT(arg # 0);
+
+    SYSTEM.GET(arg, str16[i]);
+    WHILE str16[i] # 0X DO INC(arg, 2);  INC(i);  SYSTEM.GET(arg, str16[i]) END
+  ELSE str16[0] := 0X
+  END;
+  i := Utf16ToUtf8(str16, out);
+END GetArg;
+
+PROCEDURE Time*(): INTEGER;
+VAR tick: INTEGER;
+BEGIN
+  GetSystemTimeAsFileTime(SYSTEM.ADR(tick));
+  RETURN tick
+END Time;
+
+PROCEDURE TimeToMSecs*(time: INTEGER): INTEGER;
+  RETURN time DIV 10000
+END TimeToMSecs;
 
 
 (* -------------------------------------------------------------------------- *)

@@ -1,5 +1,5 @@
 MODULE Parser;
-IMPORT S := Scanner, B := Base, G := Generator;
+IMPORT S := Scanner, B := Base, G := Generator, w := Write8;
 
 TYPE
   UndefPtrList = POINTER TO RECORD
@@ -17,32 +17,32 @@ VAR
 (* -------------------------------------------------------------------------- *)
 (* -------------------------------------------------------------------------- *)
 
-PROCEDURE GetSym;                      BEGIN S.Get(sym)  END GetSym;
-PROCEDURE Mark(msg: ARRAY OF CHAR16);  BEGIN S.Mark(msg) END Mark;
+PROCEDURE GetSym;                      BEGIN S.Get(sym)   END GetSym;
+PROCEDURE Mark8(msg: ARRAY OF CHAR8);  BEGIN S.Mark8(msg) END Mark8;
 
 PROCEDURE Missing(s: INTEGER);
 BEGIN
-  IF    s = S.ident     THEN Mark("Missing identifier")
-  ELSIF s = S.return    THEN Mark("Missing 'RETURN'")
-  ELSIF s = S.comma     THEN Mark("Missing ','")
-  ELSIF s = S.semicolon THEN Mark("Missing ';'")
-  ELSIF s = S.period    THEN Mark("Missing '.'")
-  ELSIF s = S.semicolon THEN Mark("Missing ';'")
-  ELSIF s = S.eql       THEN Mark("Missing '='")
-  ELSIF s = S.colon     THEN Mark("Missing ':'")
-  ELSIF s = S.of        THEN Mark("Missing 'OF'")
-  ELSIF s = S.end       THEN Mark("Missing 'END'")
-  ELSIF s = S.to        THEN Mark("Missing 'TO'")
-  ELSIF s = S.rparen    THEN Mark("Missing ')'")
-  ELSIF s = S.rbrak     THEN Mark("Missing ']'")
-  ELSIF s = S.rbrace    THEN Mark("Missing '}'")
-  ELSIF s = S.then      THEN Mark("Missing 'THEN'")
-  ELSIF s = S.do        THEN Mark("Missing 'DO'")
-  ELSIF s = S.until     THEN Mark("Missing 'UNTIL'")
-  ELSIF s = S.becomes   THEN Mark("Missing ':='")
-  ELSIF s = S.period    THEN Mark("Missing '.'")
-  ELSIF s = S.comma     THEN Mark("Missing ','")
-  ELSE                       Mark("Missing something")
+  IF    s = S.ident     THEN Mark8(`Missing identifier`)
+  ELSIF s = S.return    THEN Mark8(`Missing 'RETURN'`)
+  ELSIF s = S.comma     THEN Mark8(`Missing ','`)
+  ELSIF s = S.semicolon THEN Mark8(`Missing ';'`)
+  ELSIF s = S.period    THEN Mark8(`Missing '.'`)
+  ELSIF s = S.semicolon THEN Mark8(`Missing ';'`)
+  ELSIF s = S.eql       THEN Mark8(`Missing '='`)
+  ELSIF s = S.colon     THEN Mark8(`Missing ':'`)
+  ELSIF s = S.of        THEN Mark8(`Missing 'OF'`)
+  ELSIF s = S.end       THEN Mark8(`Missing 'END'`)
+  ELSIF s = S.to        THEN Mark8(`Missing 'TO'`)
+  ELSIF s = S.rparen    THEN Mark8(`Missing ')'`)
+  ELSIF s = S.rbrak     THEN Mark8(`Missing ']'`)
+  ELSIF s = S.rbrace    THEN Mark8(`Missing '}'`)
+  ELSIF s = S.then      THEN Mark8(`Missing 'THEN'`)
+  ELSIF s = S.do        THEN Mark8(`Missing 'DO'`)
+  ELSIF s = S.until     THEN Mark8(`Missing 'UNTIL'`)
+  ELSIF s = S.becomes   THEN Mark8(`Missing ':='`)
+  ELSIF s = S.period    THEN Mark8(`Missing '.'`)
+  ELSIF s = S.comma     THEN Mark8(`Missing ','`)
+  ELSE                       Mark8(`Missing something`)
   END
 END Missing;
 
@@ -129,27 +129,27 @@ END IsChar16Str;
 
 PROCEDURE CheckInt(x: B.Object);
 BEGIN
-  IF x.type.form # B.tInt THEN Mark('not int') END
+  IF x.type.form # B.tInt THEN Mark8(`not int`) END
 END CheckInt;
 
 PROCEDURE CheckInt2(x: B.Object);
 BEGIN
-  IF x.type # B.intType THEN Mark('not INTEGER') END
+  IF x.type # B.intType THEN Mark8(`not INTEGER`) END
 END CheckInt2;
 
 PROCEDURE CheckBool(x: B.Object);
 BEGIN
-  IF x.type # B.boolType THEN Mark('not bool') END
+  IF x.type # B.boolType THEN Mark8(`not bool`) END
 END CheckBool;
 
 PROCEDURE CheckSet(x: B.Object);
 BEGIN
-  IF x.type # B.setType THEN Mark('not set') END
+  IF x.type # B.setType THEN Mark8(`not set`) END
 END CheckSet;
 
 PROCEDURE CheckReal(x: B.Object);
 BEGIN
-  IF x.type.form # B.tReal THEN Mark('not real number') END
+  IF x.type.form # B.tReal THEN Mark8(`not real number`) END
 END CheckReal;
 
 PROCEDURE TypeTestable(x: B.Object): BOOLEAN;
@@ -162,13 +162,13 @@ VAR op: INTEGER;
 BEGIN
   IF x.class = B.cNode THEN op := x(B.Node).op END;
   IF x IS B.Var THEN
-    IF ~ronly & x(B.Var).ronly THEN Mark('read only') END
+    IF ~ronly & x(B.Var).ronly THEN Mark8(`read only`) END
   ELSIF (x.class = B.cNode)
     & ((op = S.arrow) OR (op = S.period)
     OR (op = S.lparen) OR (op = S.lbrak))
   THEN
-    IF ~ronly & x(B.Node).ronly THEN Mark('read only') END
-  ELSE Mark('not var')
+    IF ~ronly & x(B.Node).ronly THEN Mark8(`read only`) END
+  ELSE Mark8(`not var`)
   END
 END CheckVar;
 
@@ -176,7 +176,7 @@ PROCEDURE CheckStrLen(xtype: B.Type;  y: B.Object);
 BEGIN
   IF (xtype.len >= 0) & (    (y IS B.Str8)  & (y(B.Str8).len >  xtype.len)
                          OR  (y IS B.Str16) & (y(B.Str16).len > xtype.len)) THEN
-    Mark('string longer than dest')
+    Mark8(`string longer than dest`)
   END
 END CheckStrLen;
 
@@ -184,18 +184,18 @@ PROCEDURE CheckPar(fpar: B.Par;  x: B.Object);
 VAR xtype, ftype: B.Type;  xform, fform: INTEGER;
 BEGIN xtype := x.type;  ftype := fpar.type;
   IF IsOpenArray(ftype) THEN CheckVar(x, fpar.ronly);
-    IF IsOpenArray0(xtype) & ~ftype.notag THEN Mark('untagged open array')
+    IF IsOpenArray0(xtype) & ~ftype.notag THEN Mark8(`untagged open array`)
     ELSIF CompArray(ftype, xtype)
        OR (ftype.base = B.byteType)
        OR B.IsStr8(xtype)  & B.IsStr8(ftype)
        OR B.IsStr16(xtype) & B.IsStr16(ftype) THEN (*valid*)
-    ELSE Mark('invalid par type')
+    ELSE Mark8(`invalid par type`)
     END
   ELSIF ~fpar.varpar THEN
     IF ~CompTypes(ftype, xtype) THEN
       IF ((ftype = B.char16Type) & (x IS B.Str16) & (x(B.Str16).len <= 2))
       OR ((ftype = B.char8Type)  & (x IS B.Str8)  & (x(B.Str8).len  <= 2))
-      THEN (*valid*) ELSE Mark('invalid par type')
+      THEN (*valid*) ELSE Mark8(`invalid par type`)
       END
     ELSIF B.IsStr8(ftype) OR B.IsStr16(ftype) THEN CheckStrLen(ftype, x)
     END
@@ -203,29 +203,27 @@ BEGIN xtype := x.type;  ftype := fpar.type;
     CheckVar(x, fpar.ronly);  xform := xtype.form;  fform := ftype.form;
     IF (xtype = ftype) OR CompArray(xtype, ftype) & (ftype.len = xtype.len)
     OR (fform = B.tRec) & (xform = B.tRec) & IsExt0(xtype, ftype)
-    THEN (*valid*) ELSE Mark('invalid par type')
+    THEN (*valid*) ELSE Mark8(`invalid par type`)
     END
   END
 END CheckPar;
 
 PROCEDURE CheckLeft(x: B.Object;  op: INTEGER);
-  CONST ivlType = 'Invalid type';
 BEGIN
   IF (op >= S.eql) & (op <= S.geq) THEN
-    IF IsOpenArray0(x.type) THEN Mark('untagged open array')
+    IF IsOpenArray0(x.type) THEN Mark8(`untagged open array`)
     ELSIF (x.type.form IN B.typCmp) OR B.IsStr8(x.type) OR B.IsStr16(x.type)
     OR (op <= S.neq) & (x.type.form IN B.typEql) THEN (*valid*)
-    ELSE Mark(ivlType)
+    ELSE Mark8(`Invalid type`)
     END
   ELSIF op = S.is THEN
-    IF TypeTestable(x) THEN (*valid*) ELSE Mark(ivlType) END
+    IF TypeTestable(x) THEN (*valid*) ELSE Mark8(`Invalid type`) END
   END
 END CheckLeft;
 
 PROCEDURE Check1(x: B.Object;  forms: SET);
-  CONST ivlType = 'Invalid type';
 BEGIN
-  IF ~(x.type.form IN forms) THEN Mark(ivlType) END
+  IF ~(x.type.form IN forms) THEN Mark8(`Invalid type`) END
 END Check1;
 
 PROCEDURE Str8ToChar8(x: B.Object): B.Object;
@@ -246,7 +244,7 @@ BEGIN
   IF B.topScope.first = NIL THEN B.topScope.first := ident
   ELSE p := B.topScope.first;
     WHILE (p.next # NIL) & (p.name # name) DO p := p.next END;
-    IF p.name = name THEN Mark('Ident already used');  ident := NIL
+    IF p.name = name THEN Mark8(`Ident already used`);  ident := NIL
     ELSE p.next := ident
     END
   END;
@@ -271,10 +269,10 @@ BEGIN scope := B.topScope;  found := FALSE;
   WHILE (scope # NIL) & ~found DO ident := scope.first;
     WHILE (ident # NIL) & (ident.name # S.id) DO ident := ident.next END;
     IF ident # NIL THEN x := ident.obj;  found := TRUE;
-      IF x = NIL THEN Mark('identifier undefined')
+      IF x = NIL THEN Mark8(`identifier undefined`)
       ELSIF x IS B.Var THEN xlev := x(B.Var).lev;
         IF (xlev > 0) & (xlev # B.curLev) THEN
-          Mark('Access to non strictly local variable')
+          Mark8(`Access to non strictly local variable`)
         END
       END
     ELSE scope := scope.dsc
@@ -313,7 +311,7 @@ BEGIN x := FindIdent();  GetSym;
       END;
       IF ident # NIL THEN
         x := ident.obj;  CheckImport(x, mod)
-      ELSE Mark('identifier not declared');  x := NIL
+      ELSE Mark8(`identifier not declared`);  x := NIL
       END;  GetSym
     ELSE Missing(S.ident);  x := NIL
     END
@@ -342,18 +340,18 @@ BEGIN (* Call *)
       WHILE sym = S.comma DO
         IF fpar # NIL THEN fpar := fpar.next END;  GetSym;
         IF sym # S.rparen THEN Parameter(last, fpar);  nact := nact + 1
-        ELSE Mark('remove ,')
+        ELSE Mark8(`remove ,`)
         END
       END;
       IF nact = proc.nfpar THEN (*valid*)
-      ELSIF nact > proc.nfpar THEN Mark('too many params')
-      ELSE Mark('not enough params')
+      ELSIF nact > proc.nfpar THEN Mark8(`too many params`)
+      ELSE Mark8(`not enough params`)
       END;
       CheckSym(S.rparen)
     ELSIF sym = S.rparen THEN
-      IF proc.nfpar # 0 THEN Mark('need params') END;  GetSym
+      IF proc.nfpar # 0 THEN Mark8(`need params`) END;  GetSym
     END
-  ELSIF proc.nfpar # 0 THEN Mark('need params')
+  ELSIF proc.nfpar # 0 THEN Mark8(`need params`)
   END;
   RETURN call
 END Call;
@@ -363,13 +361,13 @@ VAR x, y: B.Object;  fid: S.IdStr;  fld: B.Ident;  ronly: BOOLEAN;
     node, next: B.Node;  xtype, ytype, recType: B.Type;
 BEGIN x := qualident();
   IF (x = NIL) OR (x.class <= B.cType) THEN
-    IF x = NIL THEN Mark('identifier not declared') ELSE Mark('invalid value') END;
+    IF x = NIL THEN Mark8(`identifier not declared`) ELSE Mark8(`invalid value`) END;
     x := B.NewConst(B.intType, 0)
   END;
   IF x IS B.Var THEN ronly := x(B.Var).ronly END;
   WHILE sym = S.period DO
     Check1(x, {B.tPtr, B.tRec});  GetSym;
-    IF sym # S.ident THEN Mark('no field?')
+    IF sym # S.ident THEN Mark8(`no field?`)
     ELSE fid := S.id;  recType := x.type;
       IF (recType.form = B.tPtr) & (recType.base # NIL) THEN
         x := NewNode(S.arrow, x, NIL);
@@ -386,7 +384,7 @@ BEGIN x := qualident();
             x.type := y.type;  x(B.Node).ronly := ronly
           ELSE recType := recType.base
           END;
-          IF recType = NIL THEN Mark('Field not found') END
+          IF recType = NIL THEN Mark8(`Field not found`) END
         UNTIL (fld # NIL) OR (recType = NIL)
       END;
       GetSym
@@ -396,12 +394,12 @@ BEGIN x := qualident();
     xtype := x.type;  x := NewNode(S.lbrak, x, y);  x(B.Node).ronly := ronly;
     IF (xtype.form = B.tArray) & (xtype.len >= 0) THEN
       IF (y IS B.Const) & (y(B.Const).val >= xtype.len) THEN
-        Mark('index out of range')
+        Mark8(`index out of range`)
       END
     END;
     IF xtype.base # NIL THEN x.type := xtype.base ELSE x.type := xtype END;
     WHILE sym = S.comma DO
-      IF x.type.form # B.tArray THEN Mark('not multi-dimension') END;
+      IF x.type.form # B.tArray THEN Mark8(`not multi-dimension`) END;
       GetSym;  y := expression0();  CheckInt(y);  xtype := x.type;
       x := NewNode(S.lbrak, x, y);  x(B.Node).ronly := ronly;
       IF xtype.base # NIL THEN x.type := xtype.base
@@ -418,25 +416,25 @@ BEGIN x := qualident();
     IF sym = S.ident THEN y := qualident() ELSE Missing(S.ident) END;
     IF (y # NIL) & (y.class = B.cType) THEN ytype := y.type;
       IF y.type.form = xtype.form THEN (*valid*)
-      ELSE Mark('invalid type');  ytype := xtype
+      ELSE Mark8(`invalid type`);  ytype := xtype
       END
-    ELSE Mark('not type');  ytype := xtype
+    ELSE Mark8(`not type`);  ytype := xtype
     END;
     IF ytype # xtype THEN
       x := NewNode(S.lparen, x, y);  x(B.Node).ronly := ronly;
-      IF ~IsExt(ytype, xtype) THEN Mark('not extension') END;
+      IF ~IsExt(ytype, xtype) THEN Mark8(`not extension`) END;
       x.type := ytype
     END;
     CheckSym(S.rparen)
   ELSIF sym = S.lbrace DO
-    IF ~B.system THEN Mark('Casting not allowed') END;
+    IF ~B.system THEN Mark8(`Casting not allowed`) END;
     CheckInt(x);  GetSym;  y := NIL;  ytype := x.type;
     IF sym = S.ident THEN y := qualident() ELSE Missing(S.ident) END;
     IF (y # NIL) & (y.class = B.cType) THEN
       IF y.type.form = B.tRec THEN ytype := y.type
-      ELSE Mark('not record type')
+      ELSE Mark8(`not record type`)
       END
-    ELSE Mark('not type')
+    ELSE Mark8(`not type`)
     END;
     x := NewNode(S.lbrace, x, y);  x.type := ytype;
     x(B.Node).ronly := FALSE;  ronly := FALSE;  CheckSym(S.rbrace)
@@ -471,7 +469,7 @@ BEGIN GetSym;
       x := B.NewConst(B.intType, y(B.Str16).len)
     ELSIF ~y.type.notag THEN
       x := NewNode(S.sfLEN, y, NIL);  x.type := B.intType
-    ELSE Mark('open array without length tag')
+    ELSE Mark8(`open array without length tag`)
     END
   ELSIF (f.id >= S.sfLSL) & (f.id <= S.sfROR) THEN
     y := expression0();  CheckInt(y);
@@ -508,20 +506,20 @@ BEGIN GetSym;
     y := expression0();  CheckVar(y, TRUE);
     x := NewNode(S.sfADR, y, NIL);  x.type := B.intType
   ELSIF f.id = S.sfSIZE THEN y := qualident();
-    IF y.class # B.cType THEN Mark('not type') END;
+    IF y.class # B.cType THEN Mark8(`not type`) END;
     x := B.NewConst(B.intType, y.type.size)
   ELSIF f.id = S.sfBIT THEN
     y := expression0();  CheckInt(y);
     CheckSym(S.comma);  z := expression0();  CheckInt(z);
     x := NewNode(S.sfBIT, y, z);  x.type := B.boolType
   ELSIF f.id = S.sfVAL THEN y := qualident();
-    IF y.class # B.cType THEN Mark('not type')
-    ELSIF y.type.form IN {B.tArray, B.tRec} THEN Mark('not scalar')
+    IF y.class # B.cType THEN Mark8(`not type`)
+    ELSIF y.type.form IN {B.tArray, B.tRec} THEN Mark8(`not scalar`)
     END;
     CheckSym(S.comma);  z := expression0();
-    IF z.type.form IN {B.tArray, B.tRec} THEN Mark('not scalar')
+    IF z.type.form IN {B.tArray, B.tRec} THEN Mark8(`not scalar`)
     ELSIF (z IS B.Str8)  & (z(B.Str8).len  > 2)
-       OR (z IS B.Str16) & (z(B.Str16).len > 2) THEN Mark('not scalar')
+       OR (z IS B.Str16) & (z(B.Str16).len > 2) THEN Mark8(`not scalar`)
     END;
     IF IsConst(z) THEN x := G.TypeTransferConst(y.type, z)
     ELSE x := NewNode(S.sfVAL, z, NIL);  x.type := y.type
@@ -570,7 +568,7 @@ BEGIN
           x := NewNode(S.plus, x, y);  x.type := B.setType
         ELSE x := y
         END
-      ELSE Mark('remove ,')
+      ELSE Mark8(`remove ,`)
       END
     END;
     IF (const(B.Const).val # 0) & (x # NIL) THEN
@@ -593,15 +591,15 @@ BEGIN
   ELSIF sym = S.false   THEN x := B.NewConst(B.boolType, 0);       GetSym
   ELSIF sym = S.lbrace  THEN x := set()
   ELSIF sym = S.ident   THEN x := designator();
-    IF x.class = B.cSProc THEN Mark('not function');
+    IF x.class = B.cSProc THEN Mark8(`not function`);
       x := B.NewConst(B.intType, 0)
     ELSIF x.class = B.cSFunc THEN
-      IF sym # S.lparen THEN Mark('invalid factor');
+      IF sym # S.lparen THEN Mark8(`invalid factor`);
         x := B.NewConst(B.intType, 0)
       ELSE x := StdFunc(x(B.SProc))
       END
     ELSIF (sym = S.lparen) & (x.type.form = B.tProc) THEN
-      IF x.type.base = NIL THEN Mark('not function') END;
+      IF x.type.base = NIL THEN Mark8(`not function`) END;
       x := Call(x);  IF x.type = NIL THEN x.type := B.intType END
     END
   ELSIF sym = S.lparen THEN GetSym;  x := expression0();  CheckSym(S.rparen)
@@ -609,7 +607,7 @@ BEGIN
     IF IsConst(x) THEN x := G.NegateConst(x)
     ELSE x := NewNode(S.not, x, NIL);  x.type := B.boolType
     END
-  ELSE Mark('Invalid factor');  x := B.NewConst(B.intType, 0)
+  ELSE Mark8(`Invalid factor`);  x := B.NewConst(B.intType, 0)
   END;
   RETURN x
 END factor;
@@ -619,13 +617,13 @@ VAR x, y: B.Object;  xtype: B.Type;  op: INTEGER;
 BEGIN x := factor();
   WHILE sym = S.times DO
     Check1(x, {B.tInt, B.tReal, B.tSet});  GetSym;  y := factor();
-    IF ~CompTypes(x.type, y.type) THEN Mark('invalid type') END;
+    IF ~CompTypes(x.type, y.type) THEN Mark8(`invalid type`) END;
     IF IsConst(x) & IsConst(y) THEN x := G.FoldConst(S.times, x, y)
     ELSE xtype := x.type;  x := NewNode(S.times, x, y);  x.type := xtype
     END
   ELSIF sym = S.rdiv DO
     Check1(x, {B.tReal, B.tSet});  GetSym;  y := factor();
-    IF ~CompTypes(x.type, y.type) THEN Mark('invalid type') END;
+    IF ~CompTypes(x.type, y.type) THEN Mark8(`invalid type`) END;
     IF IsConst(x) & IsConst(y) THEN x := G.FoldConst(S.rdiv, x, y)
     ELSE xtype := x.type;  x := NewNode(S.rdiv, x, y);  x.type := xtype
     END
@@ -657,7 +655,7 @@ BEGIN
   END;
   WHILE (sym = S.plus) OR (sym = S.minus) DO
     Check1(x, {B.tInt, B.tReal, B.tSet});  op := sym;  GetSym;  y := term();
-    IF ~CompTypes(x.type, y.type) THEN Mark('invalid type') END;
+    IF ~CompTypes(x.type, y.type) THEN Mark8(`invalid type`) END;
     IF IsConst(x) & IsConst(y) THEN x := G.FoldConst(op, x, y)
     ELSE xtype := x.type;  x := NewNode(op, x, y);  x.type := xtype
     END
@@ -680,7 +678,7 @@ BEGIN x := SimpleExpression();
       ELSE x := NewNode(op, x, y);  x.type := B.boolType
       END
     ELSIF CompTypes2(x.type, y.type) THEN
-      IF IsOpenArray0(y.type) THEN Mark('untagged open array') END;
+      IF IsOpenArray0(y.type) THEN Mark8(`untagged open array`) END;
       IF IsConst(x) & IsConst(y) THEN x := G.FoldConst(op, x, y)
       ELSE x := NewNode(op, x, y);  x.type := B.boolType
       END
@@ -692,7 +690,7 @@ BEGIN x := SimpleExpression();
       x := NewNode(op, x, Str8ToChar8(y));  x.type := B.boolType
     ELSIF (y.type = B.char8Type) & IsChar8Str(x) THEN
       x := NewNode(op, Str8ToChar8(x), y);  x.type := B.boolType
-    ELSE Mark('invalid type')
+    ELSE Mark8(`invalid type`)
     END
   ELSIF sym = S.in THEN
     CheckInt(x);  G.CheckSetElement(x);
@@ -705,12 +703,12 @@ BEGIN x := SimpleExpression();
     IF sym = S.ident THEN y := qualident() ELSE Missing(S.ident) END;
     IF (y # NIL) & (y.class = B.cType) THEN tp := y.type;
       IF xt.form = tp.form THEN (* valid *)
-      ELSE Mark('invalid type');  tp := xt
+      ELSE Mark8(`invalid type`);  tp := xt
       END
-    ELSE Mark('not type');  tp := xt
+    ELSE Mark8(`not type`);  tp := xt
     END;
     IF xt # tp THEN
-      IF ~IsExt(tp, xt) THEN Mark('not extension') END;
+      IF ~IsExt(tp, xt) THEN Mark8(`not extension`) END;
       x := NewNode(S.is, x, y);  x.type := B.boolType
     ELSE x := B.NewConst(B.boolType, 1)
     END
@@ -722,7 +720,7 @@ PROCEDURE ConstExpression(): B.Object;
 VAR x: B.Object;
 BEGIN x := expression();
   IF IsConst(x) THEN (*valid*)
-  ELSE Mark('not const');  x := B.NewConst(B.intType, 0)
+  ELSE Mark8(`not const`);  x := B.NewConst(B.intType, 0)
   END;
   RETURN x
 END ConstExpression;
@@ -746,7 +744,7 @@ BEGIN hasParen := TRUE;
     x := designator();  CheckSet(x);  CheckVar(x, FALSE);  CheckSym(S.comma);
     y := expression();  CheckInt(y);  x := NewNode(f.id, x, y)
   ELSIF f.id = S.spNEW THEN
-    IF ~B.Flag.rtl THEN Mark('Must have RTL to call NEW') END;
+    IF ~B.Flag.rtl THEN Mark8(`Must have RTL to call NEW`) END;
     x := designator();  Check1(x, {B.tPtr});
     CheckVar(x, FALSE);  bType := x.type.base;
     IF (S.errCnt # 0) & (bType = NIL) THEN (* ignore *)
@@ -767,11 +765,11 @@ BEGIN hasParen := TRUE;
   ELSIF f.id = S.spGET THEN
     x := expression();  CheckInt(x);  CheckSym(S.comma);
     y := designator();  CheckVar(y, FALSE);  x := NewNode(S.spGET, x, y);
-    IF y.type.form IN {B.tArray, B.tRec} THEN Mark('invalid type') END
+    IF y.type.form IN {B.tArray, B.tRec} THEN Mark8(`invalid type`) END
   ELSIF f.id = S.spPUT THEN
     x := expression();  CheckInt(x);  CheckSym(S.comma);
     y := expression();  x := NewNode(S.spPUT, x, y);
-    IF y.type.form IN {B.tArray, B.tRec} THEN Mark('invalid type') END
+    IF y.type.form IN {B.tArray, B.tRec} THEN Mark8(`invalid type`) END
   ELSIF f.id = S.spCOPY THEN
     x := expression();  CheckInt(x);  CheckSym(S.comma);
     y := expression();  CheckInt(y);  CheckSym(S.comma);
@@ -779,18 +777,18 @@ BEGIN hasParen := TRUE;
     x := NewNode(S.spCOPY, x, NewNode(S.null, y, z))
   ELSIF f.id = S.spLoadLibraryA THEN
     x := designator();  CheckVar(x, FALSE);
-    IF x.type # B.intType THEN Mark('not INTEGER') END;  CheckSym(S.comma);
-    y := expression();  IF ~B.IsStr8(y.type) THEN Mark('not string') END;
+    IF x.type # B.intType THEN Mark8(`not INTEGER`) END;  CheckSym(S.comma);
+    y := expression();  IF ~B.IsStr8(y.type) THEN Mark8(`not string`) END;
     x := NewNode(S.spLoadLibraryA, x, y)
   ELSIF f.id = S.spLoadLibraryW THEN
     x := designator();  CheckVar(x, FALSE);
-    IF x.type # B.intType THEN Mark('not INTEGER') END;  CheckSym(S.comma);
-    y := expression();  IF ~B.IsStr16(y.type) THEN Mark('not string') END;
+    IF x.type # B.intType THEN Mark8(`not INTEGER`) END;  CheckSym(S.comma);
+    y := expression();  IF ~B.IsStr16(y.type) THEN Mark8(`not string`) END;
     x := NewNode(S.spLoadLibraryW, x, y)
   ELSIF f.id = S.spGetProcAddress THEN
     x := designator();  CheckVar(x, FALSE);
     IF (x.type.form # B.tProc) & (x.type # B.intType) THEN
-      Mark('not INTEGER or procedure variable')
+      Mark8(`not INTEGER or procedure variable`)
     END;  CheckSym(S.comma);
     y := expression();  CheckInt(y);  CheckSym(S.comma);
     z := expression();  CheckInt(z);
@@ -799,7 +797,7 @@ BEGIN hasParen := TRUE;
     x := NewNode(S.spINT3, NIL, NIL)
   ELSIF f.id = S.spPAUSE THEN
     x := NewNode(S.spPAUSE, NIL, NIL)
-  ELSE Mark('unsupported');
+  ELSE Mark8(`unsupported`);
   END;
   IF hasParen THEN CheckSym(S.rparen) END;
   RETURN x
@@ -856,19 +854,19 @@ VAR x, y: B.Object;  xform: INTEGER;
     case: B.Node;  isTypeCase: BOOLEAN;
 
   PROCEDURE TypeCase(x: B.Object): B.Node;
-    VAR bar, colon: B.Node;  y, z: B.Object;  org, xt, yt: B.Type;
+  VAR bar, colon: B.Node;  y, z: B.Object;  org, xt, yt: B.Type;
   BEGIN
     IF sym = S.ident THEN
       xt := x.type;  org := x.type;  y := qualident();
       IF (y # NIL) & (y.class = B.cType) THEN yt := y.type;
         IF xt.form = yt.form THEN (* valid *)
-        ELSE Mark('invalid type');  yt := xt
+        ELSE Mark8(`invalid type`);  yt := xt
         END
-      ELSE Mark('not type');  yt := xt
+      ELSE Mark8(`not type`);  yt := xt
       END;
       IF yt # xt THEN y := NewNode(S.is, x, y);
         IF IsExt(yt, xt) THEN x.type := yt
-        ELSE Mark('not extension')
+        ELSE Mark8(`not extension`)
         END
       ELSE y := B.NewConst(B.boolType, 1)
       END;
@@ -882,38 +880,37 @@ VAR x, y: B.Object;  xform: INTEGER;
   END TypeCase;
 
   PROCEDURE label(x: B.Object;  VAR y: B.Object);
-    CONST errMsg = 'Invalid value';
-    VAR xform: INTEGER;
+  VAR xform: INTEGER;
   BEGIN xform := x.type.form;
     IF sym = S.int THEN y := factor();
-      IF xform # B.tInt THEN Mark(errMsg) END
+      IF xform # B.tInt THEN Mark8(`Invalid value`) END
     ELSIF sym = S.string THEN
-      IF xform # B.tChar16 THEN Mark(errMsg) END;
-      IF S.slen > 2 THEN Mark('not char') END;
+      IF xform # B.tChar16 THEN Mark8(`Invalid value`) END;
+      IF S.slen > 2 THEN Mark8(`not char`) END;
       y := B.NewConst(B.char16Type, ORD(S.str[0]));  GetSym
     ELSIF sym = S.ident THEN y := qualident();
-      IF y = NIL THEN Mark(errMsg)
+      IF y = NIL THEN Mark8(`Invalid value`)
       ELSIF y IS B.Const THEN
         IF xform = B.tInt THEN CheckInt(y)
         ELSIF xform = B.tChar16 THEN
-          IF y.type.form # B.tChar16 THEN Mark('not char') END
+          IF y.type.form # B.tChar16 THEN Mark8(`not char`) END
         END
       ELSIF y IS B.Str8 THEN
-        IF xform # B.tChar8 THEN Mark(errMsg) END;
-        IF y(B.Str8).len > 2 THEN Mark('not char') END;
+        IF xform # B.tChar8 THEN Mark8(`Invalid value`) END;
+        IF y(B.Str8).len > 2 THEN Mark8(`not char`) END;
         y := B.NewConst(B.char8Type, ORD(S.str[0]));  GetSym
       ELSIF y IS B.Str16 THEN
-        IF xform # B.tChar16 THEN Mark(errMsg) END;
-        IF y(B.Str16).len > 2 THEN Mark('not char') END;
+        IF xform # B.tChar16 THEN Mark8(`Invalid value`) END;
+        IF y(B.Str16).len > 2 THEN Mark8(`not char`) END;
         y := B.NewConst(B.char16Type, ORD(S.str[0]));  GetSym
-      ELSE Mark(errMsg);  y := NIL
+      ELSE Mark8(`Invalid value`);  y := NIL
       END
-    ELSE Mark('Integer or char required')
+    ELSE Mark8(`Integer or char required`)
     END
   END label;
 
   PROCEDURE LabelRange(x: B.Object): B.Node;
-    VAR y: B.Object;  cond: B.Node;
+  VAR y: B.Object;  cond: B.Node;
   BEGIN label(x, y);
     IF sym # S.upto THEN cond := NewNode(S.eql, x, y)
     ELSE
@@ -924,7 +921,7 @@ VAR x, y: B.Object;  xform: INTEGER;
   END LabelRange;
 
   PROCEDURE NumericCase(x: B.Object): B.Node;
-    VAR bar, colon: B.Node;  y: B.Node;
+  VAR bar, colon: B.Node;  y: B.Node;
   BEGIN
     IF (sym = S.int) OR (sym = S.string) OR (sym = S.ident) THEN
       y := LabelRange(x);
@@ -948,7 +945,7 @@ BEGIN (* Case *)
   ELSIF (xform = B.tChar16) OR IsChar16Str(x) THEN
     y := B.NewTempVar(B.char16Type);  case.left := NewNode(S.becomes, y, x)
   ELSIF isTypeCase THEN (*valid*)
-  ELSE Mark('invalid case expression')
+  ELSE Mark8(`invalid case expression`)
   END;
   CheckSym(S.of);
   IF isTypeCase THEN case.right := TypeCase(x)
@@ -966,12 +963,12 @@ BEGIN
     IF (sym = S.ident) OR (sym >= S.semicolon)
     OR (sym >= S.if) & (sym <= S.for) THEN (*valid*)
     ELSE
-      Mark('Statement?');
+      Mark8(`Statement?`);
       REPEAT GetSym UNTIL (sym = S.ident) OR (sym >= S.semicolon)
     END;
     IF sym = S.ident THEN x := designator();
       IF sym = S.becomes THEN CheckVar(x, FALSE);
-        IF x.type.notag THEN Mark('untagged open array') END;
+        IF x.type.notag THEN Mark8(`untagged open array`) END;
         GetSym;  y := expression();
         IF x.type = y.type THEN stat.left := NewNode(S.becomes, x, y)
         ELSIF CompTypes(x.type, y.type) THEN
@@ -982,19 +979,19 @@ BEGIN
         ELSIF (x.type = B.char16Type) & IsChar16Str(y) THEN
           stat.left := NewNode(S.becomes, x, Str16ToChar16(y))
         ELSIF CompArray(x.type, y.type) & IsOpenArray(y.type) THEN
-          IF y.type.notag THEN Mark('untagged open array') END;
+          IF y.type.notag THEN Mark8(`untagged open array`) END;
           stat.left := NewNode(S.becomes, x, y)
         ELSE
-          Mark('Invalid assignment')
+          Mark8(`Invalid assignment`)
         END
       ELSIF sym = S.eql THEN
-        Mark("'=' Should be ':='");  GetSym;  y := expression()
+        Mark8(`'=' Should be ':='`);  GetSym;  y := expression()
       ELSIF x.type.form = B.tProc THEN
-        IF x.type.base # NIL THEN Mark('Not proper procedure') END;
+        IF x.type.base # NIL THEN Mark8(`Not proper procedure`) END;
         stat.left := Call(x)
       ELSIF x.class = B.cSProc THEN
         stat.left := StdProc(x(B.SProc))
-      ELSE Mark('Invalid statement')
+      ELSE Mark8(`Invalid statement`)
       END
     ELSIF sym = S.if THEN stat.left := If(0)
     ELSIF sym = S.while THEN stat.left := While(0)
@@ -1021,7 +1018,7 @@ BEGIN
   IF sym = S.times THEN
     IF B.curLev = 0 THEN
       IF ident # NIL THEN ident.export := TRUE END
-    ELSE Mark('remove *')
+    ELSE Mark8(`remove *`)
     END;
     GetSym
   END
@@ -1032,19 +1029,19 @@ VAR x: B.Object;  tp: B.Type;
 BEGIN tp := B.intType;
   IF sym = S.ident THEN x := qualident();
     IF (x # NIL) & (x.class = B.cType) THEN tp := x.type
-    ELSE Mark('not type')
+    ELSE Mark8(`not type`)
     END
   ELSIF sym = S.array THEN
     tp := B.NewArray(-1);  GetSym;
     IF sym = S.lbrak THEN GetSym;
       IF (sym = S.ident) & (S.id = 'untagged') THEN
         IF B.system THEN tp.notag := TRUE
-        ELSE Mark('untagged not allowed')
+        ELSE Mark8(`untagged not allowed`)
         END;  GetSym
       END;  CheckSym(S.rbrak)
     END;
     CheckSym(S.of);
-    IF sym = S.array THEN Mark('Multi-dim open array not supported') END;
+    IF sym = S.array THEN Mark8(`Multi-dim open array not supported`) END;
     tp.base := FormalType()
   END;
   RETURN tp
@@ -1061,10 +1058,10 @@ BEGIN
       IF sym = S.ident THEN
         ident := NewIdent(S.id);  GetSym;
         IF first = NIL THEN first := ident END
-      ELSE Mark('remove ,')
+      ELSE Mark8(`remove ,`)
       END
     END
-  ELSE Mark('No params?')
+  ELSE Mark8(`No params?`)
   END;
   CheckSym(S.colon);  tp := FormalType();  ident := first;
   WHILE ident # NIL DO
@@ -1080,7 +1077,7 @@ BEGIN GetSym;
     B.OpenScope;  FPSection(proc);
     WHILE sym = S.semicolon DO GetSym;
       IF (sym = S.ident) OR (sym = S.var) THEN FPSection(proc)
-      ELSE Mark('param section?')
+      ELSE Mark8(`param section?`)
       END
     END;
     proc.fields := B.topScope.first;  B.CloseScope
@@ -1090,9 +1087,9 @@ BEGIN GetSym;
     IF sym = S.ident THEN x := qualident() ELSE Missing(S.ident) END;
     IF (x # NIL) & (x.class = B.cType) THEN
       IF ~(x.type.form IN {B.tArray, B.tRec}) THEN proc.base := x.type
-      ELSE Mark('invalid type')
+      ELSE Mark8(`invalid type`)
       END
-    ELSE Mark('not type')
+    ELSE Mark8(`not type`)
     END
   END
 END FormalParameters;
@@ -1105,7 +1102,7 @@ BEGIN
   IF sym = S.lbrak THEN GetSym;
     IF (sym = S.ident) & (S.id = 'untraced') THEN
       IF B.system THEN ptrType.nTraced := 0
-      ELSE Mark('untraced not allowed')
+      ELSE Mark8(`untraced not allowed`)
       END;  GetSym
     END;  CheckSym(S.rbrak)
   END;
@@ -1113,17 +1110,17 @@ BEGIN
   IF sym = S.ident THEN ident := B.universe.first;
     WHILE (ident # NIL) & (ident.name # S.id) DO ident := ident.next END;
     IF ident # NIL THEN x := ident.obj;
-      IF x = NIL THEN Mark('Type not defined yet')
+      IF x = NIL THEN Mark8(`Type not defined yet`)
       ELSIF (x.class = B.cType) & (x.type.form = B.tRec) THEN
         ptrType.base := x.type
-      ELSE Mark('not record type')
+      ELSE Mark8(`not record type`)
       END
     ELSE NEW(undef);  undef.tp := ptrType;  undef.name := S.id;
       undef.next := undefList;  undefList := undef
     END;
     GetSym
   ELSIF sym = S.record THEN ptrType.base := type0()
-  ELSE Mark('base type?')
+  ELSE Mark8(`base type?`)
   END;
   G.SetTypeSize(ptrType);
   RETURN ptrType
@@ -1138,7 +1135,7 @@ BEGIN
       field := NewIdent(S.id);  GetSym;  CheckExport(field);
       IF first = NIL THEN first := field END
     ELSIF sym < S.ident THEN Missing(S.ident)
-    ELSE Mark('remove ,')
+    ELSE Mark8(`remove ,`)
     END
   END;
   CheckSym(S.colon);  ft := type0();  field := first;
@@ -1157,12 +1154,12 @@ BEGIN
       ELSIF (x.class = B.cType) & (x.type.form = B.tPtr) THEN
         p := x.type;
         IF p.base # NIL THEN btype := p.base
-        ELSE Mark('this type is not defined yet')
+        ELSE Mark8(`this type is not defined yet`)
         END
-      ELSE Mark('not record type')
+      ELSE Mark8(`not record type`)
       END;
       IF (btype # NIL) & (btype.len >= B.MaxExt) THEN
-        Mark('max extension limit reached');  btype := NIL
+        Mark8(`max extension limit reached`);  btype := NIL
       END
     END
   ELSE Missing(S.ident)
@@ -1173,9 +1170,9 @@ END BaseType;
 PROCEDURE length(): INTEGER;
 VAR x: B.Object;  n: INTEGER;
 BEGIN x := ConstExpression();  n := 0;
-  IF x.type.form = B.tInt THEN n := x(B.Const).val ELSE Mark('not int') END;
-  IF n < 0 THEN Mark('invalid array length')
-  ELSIF n >= 80000000H THEN Mark('too long')
+  IF x.type.form = B.tInt THEN n := x(B.Const).val ELSE Mark8(`not int`) END;
+  IF n < 0 THEN Mark8(`invalid array length`)
+  ELSIF n >= 80000000H THEN Mark8(`too long`)
   END;
   RETURN n
 END length;
@@ -1186,14 +1183,14 @@ VAR tp, lastArr, t: B.Type;  x: B.Object;  proc: B.Proc;
 BEGIN tp := B.intType;
   IF sym = S.ident THEN x := qualident();
     IF (x # NIL) & (x.class = B.cType) THEN tp := x.type
-    ELSE Mark('not type')
+    ELSE Mark8(`not type`)
     END
   ELSIF sym = S.array THEN
     GetSym;  len := length();  tp := B.NewArray(len);  lastArr := tp;
     WHILE sym = S.comma DO GetSym;
       IF sym <= S.ident THEN len := length();
         lastArr.base := B.NewArray(len);  lastArr := lastArr.base
-      ELSE Mark('remove ,')
+      ELSE Mark8(`remove ,`)
       END
     END;
     CheckSym(S.of);  lastArr.base := type();  B.CompleteArray(tp^)
@@ -1202,20 +1199,20 @@ BEGIN tp := B.intType;
     IF sym = S.lbrak THEN GetSym;
       IF (sym = S.ident) & (S.id = 'union') THEN
         IF B.system THEN tp.union := TRUE
-        ELSE Mark('union not allowed')
+        ELSE Mark8(`union not allowed`)
         END;  GetSym
       END;  CheckSym(S.rbrak)
     END;
     IF sym = S.lparen THEN
       GetSym;  tp.base := BaseType();  CheckSym(S.rparen);
-      IF tp.union THEN Mark('Cannot extend union') END;
+      IF tp.union THEN Mark8(`Cannot extend union`) END;
       IF tp.base # NIL THEN B.ExtendRecord(tp^) END
     END;
     B.OpenScope;
     IF sym = S.ident THEN FieldList(tp);
       WHILE sym = S.semicolon DO GetSym;
         IF sym = S.ident THEN FieldList(tp);
-        ELSE Mark('no fieldlist, remove ;')
+        ELSE Mark8(`no fieldlist, remove ;`)
         END
       END
     END;
@@ -1225,7 +1222,7 @@ BEGIN tp := B.intType;
   ELSIF sym = S.procedure THEN
     GetSym;  tp := B.NewProcType();
     IF sym = S.lparen THEN FormalParameters(tp) END
-  ELSE Mark('no type?')
+  ELSE Mark8(`no type?`)
   END;
   G.SetTypeSize(tp);
   RETURN tp
@@ -1269,7 +1266,7 @@ BEGIN
       END
     END;
     IF undefList # NIL THEN
-      undefList := NIL;  Mark('some pointers didnt have base type')
+      undefList := NIL;  Mark8(`some pointers didnt have base type`)
     END
   END;
   IF sym = S.var THEN GetSym;
@@ -1296,7 +1293,7 @@ BEGIN
     END
   END;
   WHILE sym = S.procedure DO GetSym;
-    IF sym # S.ident THEN procid := NIL;  Mark('Expected procedure name')
+    IF sym # S.ident THEN procid := NIL;  Mark8(`Expected procedure name`)
     ELSE procid := NewIdent(S.id);  GetSym;  CheckExport(procid)
     END;
     proc := B.NewProc();  tp := B.NewProcType();  proc.type := tp;
@@ -1316,15 +1313,15 @@ BEGIN
     DeclarationSequence(proc);  proc.decl := B.topScope.first;
     IF sym = S.begin THEN GetSym;  proc.statseq := StatementSequence() END;
     IF sym = S.return THEN
-      IF tp.base = NIL THEN Mark('Not function procedure') END;
+      IF tp.base = NIL THEN Mark8(`Not function procedure`) END;
       GetSym;  x := expression();  proc.return := x;
-      IF x.type.form IN {B.tArray, B.tRec} THEN Mark('Invalid type') END
+      IF x.type.form IN {B.tArray, B.tRec} THEN Mark8(`Invalid type`) END
     ELSIF tp.base # NIL THEN Missing(S.return)
     END;
     B.CloseScope;  B.IncLev(-1);  CheckSym(S.end);
     IF sym = S.ident THEN
       IF (procid # NIL) & (procid.name # S.id) THEN
-        Mark('Wrong procedure name')
+        Mark8(`Wrong procedure name`)
       END;
       GetSym
     ELSIF procid # NIL THEN Missing(S.ident)
@@ -1334,14 +1331,14 @@ BEGIN
 END DeclarationSequence;
 
 PROCEDURE import;
-VAR ident: B.Ident;  name: S.IdStr;
+VAR ident: B.Ident;  name: S.IdStr8;
 BEGIN
-  ident := NewIdent(S.id);  name := S.id;  GetSym;
+  ident := NewIdent(S.id);  name := S.id8;  GetSym;
   IF sym = S.becomes THEN GetSym;
-    IF sym = S.ident THEN name := S.id;  GetSym ELSE Missing(S.ident) END
+    IF sym = S.ident THEN name := S.id8;  GetSym ELSE Missing(S.ident) END
   END;
   IF S.errCnt = 0 THEN
-    IF name = 'SYSTEM' THEN B.NewSystemModule(ident)
+    IF name = `SYSTEM` THEN B.NewSystemModule(ident)
     ELSE B.NewModule(ident, name) END
   END
 END import;
@@ -1356,9 +1353,10 @@ BEGIN GetSym;
 END ImportList;
 
 PROCEDURE Module*(): B.Node;
-VAR modid: S.IdStr;  modinit: B.Node;
+VAR modid: S.IdStr8;  modinit: B.Node;
 BEGIN
-  GetSym;  IF sym # S.ident THEN Missing(S.ident) ELSE modid := S.id;  GetSym END;
+  GetSym;  IF sym # S.ident THEN Missing(S.ident)
+  ELSE modid := S.id8;  GetSym END;
   IF S.errCnt = 0 THEN
     B.Init(modid);  G.Init;  CheckSym(S.semicolon);
     IF sym = S.import THEN ImportList END
@@ -1368,7 +1366,7 @@ BEGIN
     IF sym = S.begin THEN GetSym;  modinit := StatementSequence() END;
     CheckSym(S.end);
     IF sym = S.ident THEN
-      IF S.id # modid THEN Mark('Module name mismatch') END;  GetSym
+      IF S.id8 # modid THEN Mark8(`Module name mismatch`) END;  GetSym
     ELSE Missing(S.ident)
     END;
     CheckSym(S.period)

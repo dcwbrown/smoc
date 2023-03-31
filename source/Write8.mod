@@ -35,26 +35,42 @@ PROCEDURE l*();                   BEGIN write(crlf) END l;
 PROCEDURE c*(c: CHAR8);           BEGIN write(c)    END c;
 PROCEDURE s*(s: ARRAY OF CHAR8);  BEGIN writesz(s)  END s;
 PROCEDURE sl*(t: ARRAY OF CHAR8); BEGIN s(t); l     END sl;
-PROCEDURE b*(i: INTEGER);         BEGIN WHILE i > 0 DO writebyte(ORD(' '));  DEC(i) END END b;
+PROCEDURE b*(n: INTEGER);         BEGIN WHILE n > 0 DO writebyte(ORD(' ')); DEC(n) END END b;
 
 PROCEDURE h1*(i: INTEGER);  BEGIN IF i<10 THEN writebyte(i + 48) ELSE writebyte(i + 87) END END h1;
 
 PROCEDURE hn*(i, n: INTEGER); BEGIN IF n>1 THEN hn(i DIV 16, n-1) END;  h1(i MOD 16) END hn;
 
-PROCEDURE h*(n: INTEGER);
+PROCEDURE h*(i: INTEGER);
 BEGIN
-  IF (n < 0) OR (n > 15) THEN h((n DIV 16) MOD 1000000000000000H) END;
-  h1(n MOD 16);
+  IF (i < 0) OR (i > 15) THEN h((i DIV 16) MOD 1000000000000000H) END;
+  h1(i MOD 16);
 END h;
 
-PROCEDURE hs*(n: INTEGER); BEGIN IF n < 0 THEN writebyte(ORD('-'));  n := -n END;  h(n) END hs;
+PROCEDURE hs*(i: INTEGER); BEGIN IF i < 0 THEN writebyte(ORD('-'));  i := -i END;  h(i) END hs;
 
-PROCEDURE i*(n: INTEGER);
+PROCEDURE i*(j: INTEGER);
 BEGIN
-  IF n < 0 THEN writebyte(ORD('-')); n := -n END;
-  IF n > 9 THEN i(n DIV 10) END;
-  writebyte(n MOD 10 + 48)
+  IF j < 0 THEN writebyte(ORD('-')); j := -j END;
+  IF j > 9 THEN i(j DIV 10) END;
+  writebyte(j MOD 10 + 48)
 END i;
+
+PROCEDURE ini*(i, n: INTEGER);
+BEGIN
+  IF i < 0 THEN writebyte(ORD('-'));  i := -i;  DEC(n) END;
+  IF n > 1 THEN ini(i DIV 10, n-1) END;
+  IF (i = 0) THEN c(` `) ELSE writebyte(i MOD 10 + 48) END
+END ini;
+
+PROCEDURE in*(i, n: INTEGER);
+BEGIN
+  IF i = 0 THEN b(n-1); c(`0`)
+  ELSE
+    IF i < 0 THEN writebyte(ORD('-'));  i := -i;  DEC(n) END;
+    ini(i, n)
+  END
+END in;
 
 PROCEDURE init;
 CONST
