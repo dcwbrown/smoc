@@ -3,7 +3,7 @@ IMPORT S := Scanner, B := Base, G := Generator, w := Write8;
 
 TYPE
   UndefPtrList = POINTER TO RECORD
-    name: S.IdStr;  tp: B.Type;  next: UndefPtrList
+    name: S.IdStr8;  tp: B.Type;  next: UndefPtrList
   END;
 
 VAR
@@ -237,7 +237,7 @@ END Str16ToChar16;
 (* -------------------------------------------------------------------------- *)
 (* -------------------------------------------------------------------------- *)
 
-PROCEDURE NewIdent(name: S.IdStr): B.Ident;
+PROCEDURE NewIdent(name: S.IdStr8): B.Ident;
 VAR ident, p: B.Ident;
 BEGIN
   NEW(ident);  ident.name := name;  ident.next := NIL;  ident.export := FALSE;
@@ -267,7 +267,7 @@ VAR found: BOOLEAN;  xlev: INTEGER;
     x: B.Object;  ident: B.Ident;  scope: B.Scope;
 BEGIN scope := B.topScope;  found := FALSE;
   WHILE (scope # NIL) & ~found DO ident := scope.first;
-    WHILE (ident # NIL) & (ident.name # S.id) DO ident := ident.next END;
+    WHILE (ident # NIL) & (ident.name # S.id8) DO ident := ident.next END;
     IF ident # NIL THEN x := ident.obj;  found := TRUE;
       IF x = NIL THEN Mark8(`identifier undefined`)
       ELSIF x IS B.Var THEN xlev := x(B.Var).lev;
@@ -306,7 +306,7 @@ BEGIN x := FindIdent();  GetSym;
   IF (x # NIL) & (x IS B.Module) & (sym = S.period) THEN GetSym;
     IF sym = S.ident THEN
       mod := x(B.Module);  ident := mod.first;
-      WHILE (ident # NIL) & (ident.name # S.id) DO
+      WHILE (ident # NIL) & (ident.name # S.id8) DO
         ident := ident.next
       END;
       IF ident # NIL THEN
@@ -357,7 +357,7 @@ BEGIN (* Call *)
 END Call;
 
 PROCEDURE designator(): B.Object;
-VAR x, y: B.Object;  fid: S.IdStr;  fld: B.Ident;  ronly: BOOLEAN;
+VAR x, y: B.Object;  fid: S.IdStr8;  fld: B.Ident;  ronly: BOOLEAN;
     node, next: B.Node;  xtype, ytype, recType: B.Type;
 BEGIN x := qualident();
   IF (x = NIL) OR (x.class <= B.cType) THEN
@@ -368,7 +368,7 @@ BEGIN x := qualident();
   WHILE sym = S.period DO
     Check1(x, {B.tPtr, B.tRec});  GetSym;
     IF sym # S.ident THEN Mark8(`no field?`)
-    ELSE fid := S.id;  recType := x.type;
+    ELSE fid := S.id8;  recType := x.type;
       IF (recType.form = B.tPtr) & (recType.base # NIL) THEN
         x := NewNode(S.arrow, x, NIL);
         x(B.Node).ronly := FALSE;  ronly := FALSE;
@@ -1053,10 +1053,10 @@ VAR ronly, varpar: BOOLEAN;
 BEGIN
   IF sym = S.var THEN varpar := TRUE;  GetSym ELSE varpar := FALSE END;
   IF sym = S.ident THEN
-    first := NewIdent(S.id);  GetSym;
+    first := NewIdent(S.id8);  GetSym;
     WHILE sym = S.comma DO GetSym;
       IF sym = S.ident THEN
-        ident := NewIdent(S.id);  GetSym;
+        ident := NewIdent(S.id8);  GetSym;
         IF first = NIL THEN first := ident END
       ELSE Mark8(`remove ,`)
       END
@@ -1108,14 +1108,14 @@ BEGIN
   END;
   CheckSym(S.to);  IF defobj # NIL THEN defobj.type := ptrType END;
   IF sym = S.ident THEN ident := B.universe.first;
-    WHILE (ident # NIL) & (ident.name # S.id) DO ident := ident.next END;
+    WHILE (ident # NIL) & (ident.name # S.id8) DO ident := ident.next END;
     IF ident # NIL THEN x := ident.obj;
       IF x = NIL THEN Mark8(`Type not defined yet`)
       ELSIF (x.class = B.cType) & (x.type.form = B.tRec) THEN
         ptrType.base := x.type
       ELSE Mark8(`not record type`)
       END
-    ELSE NEW(undef);  undef.tp := ptrType;  undef.name := S.id;
+    ELSE NEW(undef);  undef.tp := ptrType;  undef.name := S.id8;
       undef.next := undefList;  undefList := undef
     END;
     GetSym
@@ -1129,10 +1129,10 @@ END PointerType;
 PROCEDURE FieldList(rec: B.Type);
 VAR first, field: B.Ident;  ft: B.Type;
 BEGIN
-  first := NewIdent(S.id);  GetSym;  CheckExport(first);
+  first := NewIdent(S.id8);  GetSym;  CheckExport(first);
   WHILE sym = S.comma DO GetSym;
     IF sym = S.ident THEN
-      field := NewIdent(S.id);  GetSym;  CheckExport(field);
+      field := NewIdent(S.id8);  GetSym;  CheckExport(field);
       IF first = NIL THEN first := field END
     ELSIF sym < S.ident THEN Missing(S.ident)
     ELSE Mark8(`remove ,`)
@@ -1235,7 +1235,7 @@ VAR first, ident, par, procid: B.Ident;  x: B.Object;  tp: B.Type;
 BEGIN
   IF sym = S.const THEN GetSym;
     WHILE sym = S.ident DO
-      ident := NewIdent(S.id);  GetSym;  CheckExport(ident);
+      ident := NewIdent(S.id8);  GetSym;  CheckExport(ident);
       CheckSym(S.eql);  x := ConstExpression();
       IF ident # NIL THEN ident.obj := x;  x.ident := ident END;
       CheckSym(S.semicolon)
@@ -1243,7 +1243,7 @@ BEGIN
   END;
   IF sym = S.type THEN GetSym;  undefList := NIL;
     WHILE sym = S.ident DO
-      ident := NewIdent(S.id);  GetSym;  CheckExport(ident);  CheckSym(S.eql);
+      ident := NewIdent(S.id8);  GetSym;  CheckExport(ident);  CheckSym(S.eql);
       IF sym # S.pointer THEN
         tp := type();  x := B.NewTypeObj(tp);
         IF ident # NIL THEN ident.obj := x;  x.ident := ident END
@@ -1271,10 +1271,10 @@ BEGIN
   END;
   IF sym = S.var THEN GetSym;
     WHILE sym = S.ident DO
-      first := NewIdent(S.id);  GetSym;  CheckExport(first);
+      first := NewIdent(S.id8);  GetSym;  CheckExport(first);
       WHILE sym = S.comma DO GetSym;
         IF sym = S.ident THEN
-          ident := NewIdent(S.id);  GetSym;  CheckExport(ident);
+          ident := NewIdent(S.id8);  GetSym;  CheckExport(ident);
           IF first = NIL THEN first := ident END
         ELSE Missing(S.ident);  ident := NIL
         END
@@ -1294,7 +1294,7 @@ BEGIN
   END;
   WHILE sym = S.procedure DO GetSym;
     IF sym # S.ident THEN procid := NIL;  Mark8(`Expected procedure name`)
-    ELSE procid := NewIdent(S.id);  GetSym;  CheckExport(procid)
+    ELSE procid := NewIdent(S.id8);  GetSym;  CheckExport(procid)
     END;
     proc := B.NewProc();  tp := B.NewProcType();  proc.type := tp;
     IF sym = S.lparen THEN FormalParameters(tp) END;  CheckSym(S.semicolon);
@@ -1320,7 +1320,7 @@ BEGIN
     END;
     B.CloseScope;  B.IncLev(-1);  CheckSym(S.end);
     IF sym = S.ident THEN
-      IF (procid # NIL) & (procid.name # S.id) THEN
+      IF (procid # NIL) & (procid.name # S.id8) THEN
         Mark8(`Wrong procedure name`)
       END;
       GetSym
@@ -1333,7 +1333,7 @@ END DeclarationSequence;
 PROCEDURE import;
 VAR ident: B.Ident;  name: S.IdStr8;
 BEGIN
-  ident := NewIdent(S.id);  name := S.id8;  GetSym;
+  ident := NewIdent(S.id8);  name := S.id8;  GetSym;
   IF sym = S.becomes THEN GetSym;
     IF sym = S.ident THEN name := S.id8;  GetSym ELSE Missing(S.ident) END
   END;

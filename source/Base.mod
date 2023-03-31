@@ -33,7 +33,7 @@ TYPE
 
   Const*   = POINTER TO RECORD (ObjDesc)  val*: INTEGER END;
   Field*   = POINTER TO RECORD (ObjDesc)  off*: INTEGER END;
-  SProc*   = POINTER TO RECORD (ObjDesc)  id*: INTEGER END;
+  SProc*   = POINTER TO RECORD (ObjDesc)  id*:  INTEGER END;
 
   Var*     = POINTER TO RECORD (ObjDesc)
                adr*, expno*, lev*: INTEGER;
@@ -90,7 +90,7 @@ TYPE
 
   IdentDesc* = RECORD
     export*: BOOLEAN;
-    name*:   S.IdStr;
+    name*:   S.IdStr8;
     obj*:    Object;
     next*:   Ident
   END;
@@ -420,7 +420,7 @@ PROCEDURE IncLev*(n: INTEGER);
 BEGIN curLev := curLev + n
 END IncLev;
 
-PROCEDURE Enter(x: Object;  name: S.IdStr);
+PROCEDURE Enter(x: Object;  name: S.IdStr8);
 VAR ident: Ident;
 BEGIN
   NEW(ident);  ident.name := name;  ident.export := FALSE;
@@ -485,7 +485,7 @@ BEGIN
   Files.WriteNum(rider, typ.parblksize);  DetectType(typ.base);
   par := typ.fields;
   WHILE par # NIL DO x := par.obj(Par);
-    Files.WriteNum(rider, cVar);  Files.WriteByteStr(rider, par.name);
+    Files.WriteNum(rider, cVar);  Files.WriteString8(rider, par.name);
     Files.WriteBool(rider, x.varpar);  DetectType(x.type);  par := par.next
   END;
   Files.WriteNum(rider, cNull)
@@ -512,8 +512,8 @@ BEGIN
     WHILE fld # NIL DO ftyp := fld.obj.type;
       IF fld.export OR (ftyp.nPtr > 0) OR (ftyp.nProc > 0) THEN
         Files.WriteNum(rider, cField);
-        IF fld.export THEN Files.WriteByteStr(rider, fld.name)
-        ELSE Files.WriteByteStr(rider, 0X)
+        IF fld.export THEN Files.WriteString8(rider, fld.name)
+        ELSE Files.WriteString8(rider, 0Y)
         END;
         Files.WriteNum(rider, fld.obj(Field).off);  DetectType(ftyp)
       END;
@@ -565,29 +565,29 @@ BEGIN
     IF ident.export THEN x := ident.obj;
       IF x.class = cConst THEN
         Files.WriteNum(rider, cConst);
-        Files.WriteByteStr(rider, ident.name);
+        Files.WriteString8(rider, ident.name);
         Files.WriteNum(rider, x(Const).val);
         DetectType(x.type)
       ELSIF x.class = cType THEN
         Files.WriteNum(rider, cType);
-        Files.WriteByteStr(rider, ident.name);
+        Files.WriteString8(rider, ident.name);
         DetectType(x.type)
       ELSIF x.class = cVar THEN
         IF x IS Str16 THEN
           Files.WriteNum(rider, cConst);
-          Files.WriteByteStr(rider, ident.name);
+          Files.WriteString8(rider, ident.name);
           NewExport(exp);  exp.obj := x;
           Files.WriteNum(rider, expno);  DetectType(x.type);
           Files.WriteNum(rider, x(Str16).len)
         ELSE
           Files.WriteNum(rider, cVar);
-          Files.WriteByteStr(rider, ident.name);
+          Files.WriteString8(rider, ident.name);
           NewExport(exp);  exp.obj := x;
           Files.WriteNum(rider, expno);  DetectType(x.type)
         END
       ELSIF x.class = cProc THEN
         Files.WriteNum(rider, cProc);
-        Files.WriteByteStr(rider, ident.name);
+        Files.WriteString8(rider, ident.name);
         NewExport(exp);  exp.obj := x;
         Files.WriteNum(rider, expno);  DetectType(x.type)
       ELSE ASSERT(FALSE)
@@ -625,7 +625,7 @@ BEGIN p := types;
   RETURN typ
 END FindType;
 
-PROCEDURE NewImport(name: S.IdStr;  x: Object);
+PROCEDURE NewImport(name: S.IdStr8;  x: Object);
 VAR ident, p: Ident;
 BEGIN
   NEW(ident);  p := topScope.last;
@@ -692,7 +692,7 @@ PROCEDURE ImportType(VAR typ: Type;  mod: Module);
 VAR typ0: TypeDesc;  form, ref, len: INTEGER;
 
   PROCEDURE ImportRecord(VAR typ: TypeDesc;  new: BOOLEAN);
-    VAR cls, off: INTEGER;  fltype: Type;  x: Field;  name: S.IdStr;
+    VAR cls, off: INTEGER;  fltype: Type;  x: Field;  name: S.IdStr8;
   BEGIN
     Files.ReadNum(rider, typ.expno);  Files.ReadNum(rider, typ.size0);
     Files.ReadNum(rider, typ.size);  Files.ReadNum(rider, typ.align);
@@ -700,7 +700,7 @@ VAR typ0: TypeDesc;  form, ref, len: INTEGER;
     IF S.errCnt = 0 THEN ExtendRecord(typ);
       Files.ReadNum(rider, cls);  OpenScope;
       WHILE (cls = cField) & (S.errCnt = 0) DO
-        Files.ReadByteStr(rider, name);  Files.ReadNum(rider, off);
+        Files.ReadString8(rider, name);  Files.ReadNum(rider, off);
         DetectTypeI(fltype);  Files.ReadNum(rider, cls);
         IF new & (S.errCnt = 0) THEN
           x := NewField(typ, fltype);
@@ -727,14 +727,14 @@ VAR typ0: TypeDesc;  form, ref, len: INTEGER;
 
   PROCEDURE ImportProc(VAR typ: TypeDesc;  new: BOOLEAN);
     VAR cls: INTEGER;  varpar: BOOLEAN;
-      par: Ident;  x: Par;  xtype: Type;  name: S.IdStr;
+      par: Ident;  x: Par;  xtype: Type;  name: S.IdStr8;
   BEGIN
     Files.ReadNum(rider, typ.size);  Files.ReadNum(rider, typ.align);
     Files.ReadNum(rider, typ.parblksize);  DetectTypeI(typ.base);
     IF S.errCnt = 0 THEN
       Files.ReadNum(rider, cls);  OpenScope;
       WHILE (cls = cVar) & (S.errCnt = 0) DO
-        Files.ReadByteStr(rider, name);  Files.ReadBool(rider, varpar);
+        Files.ReadString8(rider, name);  Files.ReadBool(rider, varpar);
         DetectTypeI(xtype);  Files.ReadNum(rider, cls);
         IF new & (S.errCnt = 0) THEN
           x := NewPar(typ, xtype, varpar);  NewImport(name, x)
@@ -791,7 +791,7 @@ VAR dep:       Module;
     cls, slen: INTEGER;
     tp:        Type;
     depid:     S.IdStr8;
-    name:      S.IdStr;
+    name:      S.IdStr8;
     msg:       ARRAY 512 OF CHAR8;
 BEGIN
   Files.Set(rider, symfile, 0);
@@ -829,7 +829,7 @@ BEGIN
       Files.ReadNum(rider, cls)
     END;
     WHILE (cls = cConst) & (S.errCnt = 0) DO
-      Files.ReadByteStr(rider, name);
+      Files.ReadString8(rider, name);
       Files.ReadNum(rider, val);  DetectTypeI(tp);
       IF S.errCnt = 0 THEN
         IF tp # str16Type THEN x := NewConst(tp, val)
@@ -841,12 +841,12 @@ BEGIN
       Files.ReadNum(rider, cls)
     END;
     WHILE (cls = cType) & (S.errCnt = 0) DO
-      Files.ReadByteStr(rider, name);  DetectTypeI(tp);
+      Files.ReadString8(rider, name);  DetectTypeI(tp);
       IF S.errCnt = 0 THEN x := NewTypeObj(tp);  NewImport(name, x) END;
       Files.ReadNum(rider, cls)
     END;
     WHILE (cls = cVar) & (S.errCnt = 0) DO
-      Files.ReadByteStr(rider, name);
+      Files.ReadString8(rider, name);
       Files.ReadNum(rider, val);  DetectTypeI(tp);
       IF S.errCnt = 0 THEN
         x := NewVar(tp);  x(Var).ronly := TRUE;
@@ -855,7 +855,7 @@ BEGIN
       Files.ReadNum(rider, cls)
     END;
     WHILE (cls = cProc) & (S.errCnt = 0) DO
-      Files.ReadByteStr(rider, name);
+      Files.ReadString8(rider, name);
       Files.ReadNum(rider, val);  DetectTypeI(tp);
       IF S.errCnt = 0 THEN
         x := NewProc();  x(Proc).adr := 0;
@@ -964,60 +964,60 @@ BEGIN
   expList := NIL;  lastExp := NIL;  str16List := NIL;  recList := NIL;
   InitCompilerFlag;
 
-  Enter(NewTypeObj(intType),    'INTEGER');
-  Enter(NewTypeObj(byteType),   'BYTE');
-  Enter(NewTypeObj(realType),   'REAL');
-  Enter(NewTypeObj(setType),    'SET');
-  Enter(NewTypeObj(boolType),   'BOOLEAN');
-  Enter(NewTypeObj(char8Type),  'CHAR8');
-  Enter(NewTypeObj(char16Type), 'CHAR');
-  Enter(NewTypeObj(char16Type), 'CHAR16');
+  Enter(NewTypeObj(intType),    `INTEGER`);
+  Enter(NewTypeObj(byteType),   `BYTE`);
+  Enter(NewTypeObj(realType),   `REAL`);
+  Enter(NewTypeObj(setType),    `SET`);
+  Enter(NewTypeObj(boolType),   `BOOLEAN`);
+  Enter(NewTypeObj(char8Type),  `CHAR8`);
+  Enter(NewTypeObj(char16Type), `CHAR`);
+  Enter(NewTypeObj(char16Type), `CHAR16`);
 
-  Enter(NewSProc(S.spINC,    cSProc), 'INC');
-  Enter(NewSProc(S.spDEC,    cSProc), 'DEC');
-  Enter(NewSProc(S.spINCL,   cSProc), 'INCL');
-  Enter(NewSProc(S.spEXCL,   cSProc), 'EXCL');
-  Enter(NewSProc(S.spNEW,    cSProc), 'NEW');
-  Enter(NewSProc(S.spASSERT, cSProc), 'ASSERT');
-  Enter(NewSProc(S.spPACK,   cSProc), 'PACK');
-  Enter(NewSProc(S.spUNPK,   cSProc), 'UNPK');
+  Enter(NewSProc(S.spINC,    cSProc), `INC`);
+  Enter(NewSProc(S.spDEC,    cSProc), `DEC`);
+  Enter(NewSProc(S.spINCL,   cSProc), `INCL`);
+  Enter(NewSProc(S.spEXCL,   cSProc), `EXCL`);
+  Enter(NewSProc(S.spNEW,    cSProc), `NEW`);
+  Enter(NewSProc(S.spASSERT, cSProc), `ASSERT`);
+  Enter(NewSProc(S.spPACK,   cSProc), `PACK`);
+  Enter(NewSProc(S.spUNPK,   cSProc), `UNPK`);
 
-  Enter(NewSProc(S.sfABS,   cSFunc), 'ABS');
-  Enter(NewSProc(S.sfODD,   cSFunc), 'ODD');
-  Enter(NewSProc(S.sfLEN,   cSFunc), 'LEN');
-  Enter(NewSProc(S.sfLSL,   cSFunc), 'LSL');
-  Enter(NewSProc(S.sfASR,   cSFunc), 'ASR');
-  Enter(NewSProc(S.sfROR,   cSFunc), 'ROR');
-  Enter(NewSProc(S.sfFLOOR, cSFunc), 'FLOOR');
-  Enter(NewSProc(S.sfFLT,   cSFunc), 'FLT');
-  Enter(NewSProc(S.sfORD,   cSFunc), 'ORD');
-  Enter(NewSProc(S.sfCHR,   cSFunc), 'CHR');
-  Enter(NewSProc(S.sfCHR,   cSFunc), 'CHR16');
-  Enter(NewSProc(S.sfCHR8,  cSFunc), 'CHR8');
+  Enter(NewSProc(S.sfABS,   cSFunc), `ABS`);
+  Enter(NewSProc(S.sfODD,   cSFunc), `ODD`);
+  Enter(NewSProc(S.sfLEN,   cSFunc), `LEN`);
+  Enter(NewSProc(S.sfLSL,   cSFunc), `LSL`);
+  Enter(NewSProc(S.sfASR,   cSFunc), `ASR`);
+  Enter(NewSProc(S.sfROR,   cSFunc), `ROR`);
+  Enter(NewSProc(S.sfFLOOR, cSFunc), `FLOOR`);
+  Enter(NewSProc(S.sfFLT,   cSFunc), `FLT`);
+  Enter(NewSProc(S.sfORD,   cSFunc), `ORD`);
+  Enter(NewSProc(S.sfCHR,   cSFunc), `CHR`);
+  Enter(NewSProc(S.sfCHR,   cSFunc), `CHR16`);
+  Enter(NewSProc(S.sfCHR8,  cSFunc), `CHR8`);
 
   OpenScope;
-  Enter(NewSProc(S.spGET,            cSProc), 'GET');
-  Enter(NewSProc(S.spPUT,            cSProc), 'PUT');
-  Enter(NewSProc(S.spCOPY,           cSProc), 'COPY');
-  Enter(NewSProc(S.spLoadLibraryW,   cSProc), 'LoadLibraryW');
-  Enter(NewSProc(S.spLoadLibraryA,   cSProc), 'LoadLibraryA');
-  Enter(NewSProc(S.spGetProcAddress, cSProc), 'GetProcAddress');
-  Enter(NewSProc(S.spINT3,           cSProc), 'INT3');
-  Enter(NewSProc(S.spPAUSE,          cSProc), 'PAUSE');
+  Enter(NewSProc(S.spGET,            cSProc), `GET`);
+  Enter(NewSProc(S.spPUT,            cSProc), `PUT`);
+  Enter(NewSProc(S.spCOPY,           cSProc), `COPY`);
+  Enter(NewSProc(S.spLoadLibraryW,   cSProc), `LoadLibraryW`);
+  Enter(NewSProc(S.spLoadLibraryA,   cSProc), `LoadLibraryA`);
+  Enter(NewSProc(S.spGetProcAddress, cSProc), `GetProcAddress`);
+  Enter(NewSProc(S.spINT3,           cSProc), `INT3`);
+  Enter(NewSProc(S.spPAUSE,          cSProc), `PAUSE`);
 
-  Enter(NewSProc(S.sfADR,            cSFunc), 'ADR');
-  Enter(NewSProc(S.sfSIZE,           cSFunc), 'SIZE');
-  Enter(NewSProc(S.sfBIT,            cSFunc), 'BIT');
-  Enter(NewSProc(S.sfVAL,            cSFunc), 'VAL');
-  Enter(NewSProc(S.sfNtCurrentTeb,   cSFunc), 'NtCurrentTeb');
-  Enter(NewSProc(S.sfCAS,            cSFunc), 'CAS');
+  Enter(NewSProc(S.sfADR,            cSFunc), `ADR`);
+  Enter(NewSProc(S.sfSIZE,           cSFunc), `SIZE`);
+  Enter(NewSProc(S.sfBIT,            cSFunc), `BIT`);
+  Enter(NewSProc(S.sfVAL,            cSFunc), `VAL`);
+  Enter(NewSProc(S.sfNtCurrentTeb,   cSFunc), `NtCurrentTeb`);
+  Enter(NewSProc(S.sfCAS,            cSFunc), `CAS`);
 
-  Enter(NewTypeObj(byteType),   'BYTE');
-  Enter(NewTypeObj(card16Type), 'CARD16');
-  Enter(NewTypeObj(card32Type), 'CARD32');
-  Enter(NewTypeObj(int8Type),   'INT8');
-  Enter(NewTypeObj(int16Type),  'INT16');
-  Enter(NewTypeObj(int32Type),  'INT32');
+  Enter(NewTypeObj(byteType),   `BYTE`);
+  Enter(NewTypeObj(card16Type), `CARD16`);
+  Enter(NewTypeObj(card32Type), `CARD32`);
+  Enter(NewTypeObj(int8Type),   `INT8`);
+  Enter(NewTypeObj(int16Type),  `INT16`);
+  Enter(NewTypeObj(int32Type),  `INT32`);
   systemScope := topScope;  CloseScope;
 
   curLev := 0

@@ -449,7 +449,7 @@ BEGIN (* WriteExports *)
   name := names;  nameRva := namesRva + moduleNameSize;
   WHILE name # NIL DO
     Files.WriteCard32(Rider, nameRva);
-    INC(nameRva, B.Str16Len(name.ident.name)+1);
+    INC(nameRva, B.Str8Len(name.ident.name)+1);
     name := name.next
   END;
 
@@ -464,7 +464,7 @@ BEGIN (* WriteExports *)
   Files.WriteString8(Rider, FileName);
   name := names;
   WHILE name # NIL DO
-    Files.WriteByteStr(Rider, name.ident.name);
+    Files.WriteString8(Rider, name.ident.name);
     name := name.next
   END;
 
