@@ -1,3 +1,4 @@
 # Specify filepatterns you want to assign special attributes.
 
-* eol=lf
+# Don't even consider messing with line endings.
+* -text
