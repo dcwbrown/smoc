@@ -1,6 +1,6 @@
 MODULE Generator;
 IMPORT
-  SYSTEM, Files, Out, S := Scanner, B := Base, Linker;
+  SYSTEM, Files, Out, S := Scanner, B := Base, Linker, Rtl;
 
 
 (*    Windows x64 subroutine register conventions
@@ -121,8 +121,7 @@ VAR
   errFmtStr,  err2FmtStr,
   err3FmtStr, err4FmtStr,
   err5FmtStr, err6FmtStr,
-  rtlName,    user32name:  B.Str16;
-  rtlNamea,   user32namea: B.Str8;
+  rtlName,    user32name:  B.Str8;
 
   mem: RECORD
          mod, rm, bas, idx, scl, disp: INTEGER
@@ -138,8 +137,8 @@ VAR
   LoadLibraryW, LoadLibraryA,
   GetProcAddress,
   AddVectoredExceptionHandler,
-  MessageBoxW,
-  wsprintfW:  INTEGER;
+  MessageBoxA,
+  wsprintfA:  INTEGER;
 
    (* others *)
   adrOfNEW, modPtrTable, adrOfPtrTable, adrOfStackPtrList: INTEGER;
@@ -566,16 +565,6 @@ END AllocImport;
 PROCEDURE AllocImportModules;
 VAR size: INTEGER;  imod: B.Module;
 BEGIN
-  (* Save module names as 16 bit characters *)
-  Align(staticSize, 16);  imod := B.modList;
-  WHILE imod # NIL DO
-    IF imod.import OR (imod.impList # NIL) THEN
-      size := (B.Str16Len(imod.id)+5)*2;
-      imod.adr := staticSize;  INC(staticSize, size)
-    END;
-    imod := imod.next
-  END;
-
   (* Save module names as 8 bit characters *)
   Align(staticSize, 16);  imod := B.modList;
   WHILE imod # NIL DO
@@ -753,6 +742,7 @@ BEGIN ident := decl;
   END
 END ScanDeclaration;
 
+
 PROCEDURE NewProc(VAR proc: Proc;  statseq: Node);
 BEGIN
   proc := B.NewProc();  proc.statseq := statseq;
@@ -763,24 +753,30 @@ BEGIN
   curProc.obj := proc
 END NewProc;
 
+
+PROCEDURE Append16(s: ARRAY OF CHAR16; VAR d: ARRAY OF BYTE);
+VAR si, di: INTEGER;
+BEGIN  si:= 0;  di := 0;
+  WHILE (di < LEN(d))  &  (d[di] # 0) DO INC(di) END;
+  WHILE (si < LEN(s))  &  (s[si] # 0X)  &  (di < LEN(d)) DO
+    Rtl.PutUtf8(Rtl.GetUtf16(s, si), d, di);
+  END
+END Append16;
+
 PROCEDURE Pass1(VAR modinit: B.Node);
-VAR fixAmount: INTEGER;  obj: B.Proc;
-    str: ARRAY 512 OF CHAR16;
+VAR i: INTEGER;  str: ARRAY 512 OF CHAR8;
 BEGIN
-  modidStr    := B.NewStr16Z(B.modid);
-  errFmtStr   := B.NewStr16Z('[%d:%d]: %16.16s');
-  err2FmtStr  := B.NewStr16Z('Module key of %s is mismatched');
-  err3FmtStr  := B.NewStr16Z('Unknown exception;  PC: %x');
-  err4FmtStr  := B.NewStr16Z('Cannot load module %s (not exist?)');
-  rtlName     := B.NewStr16Z(B.RtlName);
-  rtlNamea    := B.NewStr8Z(`Rtl.dll`);
-  user32name  := B.NewStr16Z('USER32.DLL');
-  user32namea := B.NewStr8Z(`USER32.DLL`);
-
-  str := 'Error in module ';  B.Append(B.modid, str);
-  err5FmtStr := B.NewStr16Z(str);
-
-  trapDesc := B.NewStr16Z("Module key      Array index     Type mismatch   String index    Nil dereference Nil proc call   Divide by zero  Assertion false Run time missing");
+  i := Rtl.Utf16ToUtf8(B.modid, str);
+  modidStr    := B.NewStr8Z(str);
+  errFmtStr   := B.NewStr8Z(`[%d:%d]: %16.16s`);
+  err2FmtStr  := B.NewStr8Z(`Module key of %s is mismatched`);
+  err3FmtStr  := B.NewStr8Z(`Unknown exception;  PC: %x`);
+  err4FmtStr  := B.NewStr8Z(`Cannot load module %s (not exist?)`);
+  rtlName     := B.NewStr8Z(`Rtl.dll`);
+  user32name  := B.NewStr8Z(`user32.dll`);
+  str         := `Error in module `;  Append16(B.modid, str);
+  err5FmtStr  := B.NewStr8Z(str);
+  trapDesc    := B.NewStr8Z(`Module key      Array index     Type mismatch   String index    Nil dereference Nil proc call   Divide by zero  Assertion false Run time missing`);
 
   AllocStaticData;
   ScanDeclaration(B.universe.first, 0);
@@ -984,7 +980,7 @@ PROCEDURE ModKeyTrap(cond, errno: INTEGER;  imod: B.Module);
 VAR L: INTEGER;
 BEGIN
   L := pc;  Jcc1(negated(cond), 0);
-  SetRm_regI(reg_B, imod.adr);  EmitRegRm(LEA, reg_C, 8);
+  SetRm_regI(reg_B, imod.adr8);  EmitRegRm(LEA, reg_C, 8);
   MoveRI(reg_D, 1, errno);  CallProc(trapProc2);  Fixup(L, pc)
 END ModKeyTrap;
 
@@ -2474,7 +2470,7 @@ END Procedure;
 PROCEDURE ImportRTL;
 VAR L: INTEGER;
 BEGIN
-  SetRm_regI(reg_B, rtlNamea.adr);    EmitRegRm(LEA,  reg_C, 8);
+  SetRm_regI(reg_B, rtlName.adr);     EmitRegRm(LEA,  reg_C, 8);
   SetRm_regI(reg_B, LoadLibraryA);    EmitRm   (CALL, 4);
                                       EmitRR   (TEST, reg_A, 8, reg_A);
                                       Trap     (ccZ, rtlTrap);
@@ -2528,27 +2524,28 @@ BEGIN
                                         EmitRI   (SUBi, reg_SP, 8, 64);
     SetRm_RIP(baseOffset-pc-7);         EmitRegRm(LEA,  reg_B, 8);               (* RBX := module base *)
 
-    SetRm_regI(reg_B, user32namea.adr); EmitRegRm(LEA,  reg_C, 8);               (* Import USER32.DLL *)
+    SetRm_regI(reg_B, user32name.adr);  EmitRegRm(LEA,  reg_C, 8);               (* Import USER32.DLL *)
     SetRm_regI(reg_B, LoadLibraryA);    EmitRm   (CALL, 4);
                                         EmitRR   (MOVd, reg_SI, 8, reg_A);
 
                                         EmitRR   (MOVd, reg_C, 8, reg_A);
                                         LoadImm  (reg_A, 8, 66746E6972707377H);  (* RAX := 'wsprintf' *)
     SetRm_regI(reg_SP, 32);             EmitRegRm(MOV,  reg_A, 8);
-                                        LoadImm  (reg_A, 4, 0000000000000057H);  (* RAX := 'W' *)
+(*                                      LoadImm  (reg_A, 4, 0000000000000057H);  (* RAX := 'W' *) *)
+                                        LoadImm  (reg_A, 4, 0000000000000041H);  (* RAX := 'A' *)
     SetRm_regI(reg_SP, 40);             EmitRegRm(MOV,  reg_A, 8);
     SetRm_regI(reg_SP, 32);             EmitRegRm(LEA,  reg_D, 8);
     SetRm_regI(reg_B, GetProcAddress);  EmitRm   (CALL, 4);
-    SetRm_regI(reg_B, wsprintfW);       EmitRegRm(MOV,  reg_A, 8);
+    SetRm_regI(reg_B, wsprintfA);       EmitRegRm(MOV,  reg_A, 8);
 
                                         EmitRR   (MOVd, reg_C, 8, reg_SI);
                                         LoadImm  (reg_A, 8, 426567617373654DH);  (* RAX := 'MessageB' *)
     SetRm_regI(reg_SP, 32);             EmitRegRm(MOV,  reg_A, 8);
-                                        LoadImm  (reg_A, 4, 000000000057786FH);  (* RAX := 'oxW' *)
+                                        LoadImm  (reg_A, 4, 000000000041786FH);  (* RAX := 'oxA' *)
     SetRm_regI(reg_SP, 40);             EmitRegRm(MOV,  reg_A, 8);
     SetRm_regI(reg_SP, 32);             EmitRegRm(LEA,  reg_D, 8);
     SetRm_regI(reg_B, GetProcAddress);  EmitRm   (CALL, 4);
-    SetRm_regI(reg_B, MessageBoxW);     EmitRegRm(MOV,  reg_A, 8);
+    SetRm_regI(reg_B, MessageBoxA);     EmitRegRm(MOV,  reg_A, 8);
 
     (* Register Trap Handler *)
                                         ClearReg (reg_C);
@@ -2751,7 +2748,7 @@ BEGIN
 
     SetRm_regI(reg_DI, -8);             EmitRegRm(MOVd, reg_R8, 8);         (* R8 := trap entry *)
                                         EmitRI   (SHRi, reg_R8, 8, 60);     (* Extract trap number (top 4 bits) *)
-                                        EmitRI   (SHLi, reg_R8, 8, 5);      (* R8 := message offset (16 wchars per message) *)
+                                        EmitRI   (SHLi, reg_R8, 8, 4);      (* R8 := message offset (16 wchars per message) *)
     SetRm_regI(reg_B, trapDesc.adr);    EmitRegRm(LEA,  reg_R9, 8);         (* R9 := message start *)
                                         EmitRR   (ADDd, reg_R9, 8, reg_R8); (* R9 := R8 + R9 *)
     SetRm_regI(reg_SP, 32);             EmitRegRm(MOV,  reg_R9, 8);         (* [sp+32] := trap description *)
@@ -2766,16 +2763,16 @@ BEGIN
 
     SetRm_regI(reg_SP, 64);             EmitRegRm(LEA,  reg_C, 8);          (* RCX := stack space for formatted string *)
     SetRm_regI(reg_B, errFmtStr.adr);   EmitRegRm(LEA,  reg_D, 8);          (* RDX := "[%d]: %16.16s" *)
-    SetRm_regI(reg_B, wsprintfW);       EmitRm   (CALL, 4);                 (* wsprintfW(stack, errFmtStr *)
+    SetRm_regI(reg_B, wsprintfA);       EmitRm   (CALL, 4);                 (* wsprintfA(stack, errFmtStr *)
 
                                         ClearReg (reg_C);                   (* RCX := 0 *)
     SetRm_regI(reg_SP, 64);             EmitRegRm(LEA,  reg_D, 8);          (* RDX := stack space *)
     SetRm_regI(reg_B, err5FmtStr.adr);  EmitRegRm(LEA,  reg_R8, 8);         (* R8 := "Error in module ..." *)
                                         EmitRR   (XOR,  reg_R9, 4, reg_R9); (* R9 := 0 *)
-    SetRm_regI(reg_B, MessageBoxW);     EmitRm   (CALL, 4);                 (* wsprintfW(stack, errFmtStr *)
+    SetRm_regI(reg_B, MessageBoxA);     EmitRm   (CALL, 4);                 (* wsprintfA(stack, errFmtStr *)
 
                                         ClearReg (reg_C);                   (* RCX := 0 *)
-    SetRm_regI(reg_B, ExitProcess);     EmitRm   (CALL, 4);                 (* MessageBoxW *)
+    SetRm_regI(reg_B, ExitProcess);     EmitRm   (CALL, 4);                 (* MessageBoxA *)
 
 (* Trap not found *)
 
@@ -2784,13 +2781,13 @@ BEGIN
     SetRm_regI(reg_SP, 64);             EmitRegRm(LEA,  reg_C, 8);          (* RCX := stack space for formaatted string *)
     SetRm_regI(reg_B, err3FmtStr.adr);  EmitRegRm(LEA,  reg_D, 8);          (* RDX := "Unknown exception;  Pc: %x" *)
                                         EmitRR   (MOVd, reg_R8, 8, reg_R12);(* R8 := R12 *)
-    SetRm_regI(reg_B, wsprintfW);       EmitRm   (CALL, 4);                 (* wsprintfW *)
+    SetRm_regI(reg_B, wsprintfA);       EmitRm   (CALL, 4);                 (* wsprintfA *)
 
                                         ClearReg (reg_C);                   (* RCX := 0 *)
     SetRm_regI(reg_SP, 64);             EmitRegRm(LEA,  reg_D, 8);          (* RDX := formatted string on stack *)
     SetRm_regI(reg_B, err5FmtStr.adr);  EmitRegRm(LEA,  reg_R8, 8);         (* R8 := "Error in module ..." *)
                                         ClearReg (reg_R9);                  (* R9 := 0 *)
-    SetRm_regI(reg_B, MessageBoxW);     EmitRm   (CALL, 4);                 (* MessageBoxW *)
+    SetRm_regI(reg_B, MessageBoxA);     EmitRm   (CALL, 4);                 (* MessageBoxA *)
 
                                         ClearReg (reg_C);                   (* RCX := 0 *)
     SetRm_regI(reg_B, ExitProcess);     EmitRm   (CALL, 4)                  (* ExitProcess *)
@@ -2815,13 +2812,13 @@ BEGIN
     Fixup(L, pc);
     SetRm_regI(reg_B, err4FmtStr.adr);  EmitRegRm(LEA,  reg_D, 8);
     Fixup(L2, pc);                      EmitRR   (MOVd, reg_R8, 8, reg_R13);
-    SetRm_regI(reg_B, wsprintfW);       EmitRm   (CALL, 4);
+    SetRm_regI(reg_B, wsprintfA);       EmitRm   (CALL, 4);
 
                                         ClearReg (reg_C);
     SetRm_regI(reg_SP, 64);             EmitRegRm(LEA,  reg_D, 8);
     SetRm_regI(reg_B, err5FmtStr.adr);  EmitRegRm(LEA,  reg_R8, 8);
                                         EmitRR   (XOR,  reg_R9, 4, reg_R9);
-    SetRm_regI(reg_B, MessageBoxW);     EmitRm   (CALL, 4);
+    SetRm_regI(reg_B, MessageBoxA);     EmitRm   (CALL, 4);
 
                                         ClearReg (reg_C);
     SetRm_regI(reg_B, ExitProcess);     EmitRm   (CALL, 4)
@@ -3092,8 +3089,8 @@ BEGIN
   adrOfNEW          := 120;
   adrOfPtrTable     := 112;
   adrOfStackPtrList := 104;
-  wsprintfW         := 96;
-  MessageBoxW       := 88;
+  wsprintfA         := 96;
+  MessageBoxA       := 88;
   (* Note: offset 80 is reserved for the RVA of the static data from the      *)
   (* Windows module base.                                                     *)
 
@@ -3155,8 +3152,7 @@ BEGIN
   trapProc   := NIL;  trapProc2   := NIL;  dllInitProc := NIL;
   errFmtStr  := NIL;  err2FmtStr  := NIL;  err3FmtStr  := NIL;
   err4FmtStr := NIL;  err5FmtStr  := NIL;  modidStr    := NIL;
-  rtlName    := NIL;  rtlNamea    := NIL;  trapDesc    := NIL;
-  user32name := NIL;  user32namea := NIL;
+  rtlName    := NIL;  trapDesc    := NIL;  user32name  := NIL;
 END Cleanup;
 
 BEGIN

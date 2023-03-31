@@ -196,20 +196,8 @@ BEGIN
   Files.Set(Rider, Out, metrics.fadr + 80);
   Files.WriteInt(Rider, RvaInitGlobals);
 
-  (* Write names of imported modules at offsets specified by the .adr field *)
-  (* of each module object.                                                 *)
-  imod := B.modList;
-  WHILE imod # NIL DO
-    IF imod.import OR (imod.impList # NIL) THEN
-      Files.Set(Rider, Out, metrics.fadr + imod.adr);
-      i := 0;  B.Insert(imod.id, str, i);
-      B.Insert('.dll', str, i);  Files.WriteString(Rider, str)
-    END;
-    imod := imod.next
-  END;
-
-  (* Also write 8 bit character names of imported modules at offsets *)
-  (* specified by the .adr8 field of each module object.             *)
+  (* Write 8 bit character names of imported modules at offsets *)
+  (* specified by the .adr8 field of each module object.        *)
   imod := B.modList;
   WHILE imod # NIL DO
     IF imod.import OR (imod.impList # NIL) THEN

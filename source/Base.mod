@@ -64,7 +64,7 @@ TYPE
     id*:              S.IdStr;
     key*:             ModuleKey;
     no*, lev*:        INTEGER;
-    adr*, adr8*:      INTEGER;
+    adr8*:            INTEGER;
     next*:            Module;
     first*, impList*: Ident;
     types*:           TypeList
@@ -234,7 +234,7 @@ BEGIN
   x.type := str8Type;  x.lev := curLev;  x.len := slen;
   IF x.lev >= -1 (* need to alloc buffer *) THEN
     IF str8bufSize + slen >= LEN(str8buf) THEN
-      S.Mark('too many strings');  x.bufpos := -1
+      S.Mark('too many 8 bit strings');  x.bufpos := -1
     ELSE x.bufpos  := str8bufSize;  str8bufSize := str8bufSize + slen;
       FOR i := 0 TO slen-1 DO str8buf[x.bufpos+i] := str[i] END;
       NEW(p);  p.obj := x;  p.next := str8List;  str8List := p
@@ -258,7 +258,7 @@ BEGIN
   x.type := str16Type;  x.lev := curLev;  x.len := slen;
   IF x.lev >= -1 (* need to alloc buffer *) THEN
     IF str16bufSize + slen >= LEN(str16buf) THEN
-      S.Mark('too many strings');  x.bufpos := -1
+      S.Mark('too many 16 bit strings');  x.bufpos := -1
     ELSE x.bufpos  := str16bufSize;  str16bufSize := str16bufSize + slen;
       FOR i := 0 TO slen-1 DO str16buf[x.bufpos+i] := str[i] END;
       NEW(p);  p.obj := x;  p.next := str16List;  str16List := p
@@ -755,7 +755,7 @@ BEGIN
   ReadModkey(key);  Files.ReadNum(rider, lev);
 
   IF imod = NIL THEN
-    NEW(imod);  imod.id := imodid;  imod.adr := 0;  imod.import := TRUE;
+    NEW(imod);  imod.id := imodid;  imod.adr8 := 0;  imod.import := TRUE;
     imod.next := modList;  modList := imod;  imod.no := modno;
     DEC(modno);  imod.key := key;  imod.lev := lev;  imod.export := FALSE;
     IF lev >= modlev THEN
@@ -763,7 +763,7 @@ BEGIN
       IF modlev > MaxModLev THEN S.Mark('Module level too high') END
     END
   ELSIF (key[0] = imod.key[0]) & (key[1] = imod.key[1]) THEN
-    imod.adr := 0;  imod.lev := lev;  imod.export := FALSE
+    imod.adr8 := 0;  imod.lev := lev;  imod.export := FALSE
   ELSE S.Mark('Was imported with a different key')
   END;
 
@@ -910,7 +910,7 @@ BEGIN
   Files.Delete(symfname, res);
 
   NEW(universe);  topScope := universe;  curLev := -1;
-  system := FALSE;  modno := -2;  str16bufSize := 0;
+  system := FALSE;  modno := -2;  str8bufSize := 0;  str16bufSize := 0;
   expList := NIL;  lastExp := NIL;  str16List := NIL;  recList := NIL;
   InitCompilerFlag;
 
