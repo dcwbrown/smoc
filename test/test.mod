@@ -50,6 +50,9 @@ BEGIN
          42 43 00$;
   w.s(`s: '`);  w.s(s);  w.sl(`'.`);
   s[2] := 50Y;
+  w.s(`s: '`);  w.s(s);  w.sl(`'.`);
+
+  ASSERT(s[2] # 1Y);
 
   IF TRUE  THEN i := 50;  s[i] := ` ` END;
   IF FALSE THEN ASSERT(FALSE)         END;

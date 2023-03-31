@@ -688,6 +688,10 @@ BEGIN x := SimpleExpression();
       x := NewNode(op, x, Str16ToChar16(y));  x.type := B.boolType
     ELSIF (y.type = B.char16Type) & IsChar16Str(x) THEN
       x := NewNode(op, Str16ToChar16(x), y);  x.type := B.boolType
+    ELSIF (x.type = B.char8Type) & IsChar8Str(y) THEN
+      x := NewNode(op, x, Str8ToChar8(y));  x.type := B.boolType
+    ELSIF (y.type = B.char8Type) & IsChar8Str(x) THEN
+      x := NewNode(op, Str8ToChar8(x), y);  x.type := B.boolType
     ELSE Mark('invalid type')
     END
   ELSIF sym = S.in THEN
