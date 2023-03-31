@@ -447,7 +447,6 @@ END designator;
 
 PROCEDURE StdFunc(f: B.SProc): B.Object;
 VAR par, par2: B.Node;  x, y, z: B.Object;
-    ch: CHAR16;
 BEGIN GetSym;
   IF f.id = S.sfABS THEN y := expression0();  Check1(y, {B.tInt, B.tReal});
     IF y IS B.Const THEN x := G.AbsConst(y)

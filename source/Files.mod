@@ -345,10 +345,10 @@ BEGIN
   x := n + LSL(b MOD 64 - b DIV 64 * 64, s)
 END ReadNum;
 
-PROCEDURE ReadChar*(VAR r: Rider; VAR x: CHAR16);
+PROCEDURE ReadChar16*(VAR r: Rider; VAR x: CHAR16);
 VAR bRes: Bool; byteRead: Dword; f: File;
 BEGIN Read0(r, x)
-END ReadChar;
+END ReadChar16;
 
 PROCEDURE ReadString8*(VAR r: Rider; VAR x: ARRAY OF CHAR8);
 VAR i: INTEGER;  done: BOOLEAN;  b: BYTE;
@@ -360,25 +360,15 @@ BEGIN
   END
 END ReadString8;
 
-PROCEDURE ReadString*(VAR r: Rider; VAR x: ARRAY OF CHAR16);
+PROCEDURE ReadString16*(VAR r: Rider; VAR x: ARRAY OF CHAR16);
 VAR i: INTEGER; done: BOOLEAN;
 BEGIN
   done := FALSE; i := 0;
   WHILE ~r.eof & ~done DO
-    ReadChar(r, x[i]);
+    ReadChar16(r, x[i]);
     IF r.eof THEN x[i] := 0X ELSE done := x[i] = 0X; INC(i) END
   END
-END ReadString;
-
-PROCEDURE ReadByteStr*(VAR r: Rider; VAR x: ARRAY OF CHAR16);
-VAR i: INTEGER; done: BOOLEAN; b: BYTE;
-BEGIN
-  done := FALSE; i := 0;
-  WHILE ~r.eof & ~done DO
-    Read(r, b); x[i] := CHR(b);
-    IF r.eof THEN x[i] := 0X ELSE done := x[i] = 0X; INC(i) END
-  END
-END ReadByteStr;
+END ReadString16;
 
 PROCEDURE ReadSet*(VAR r: Rider; VAR x: SET);
 VAR bRes: Bool; byteRead: Dword; f: File;
@@ -444,9 +434,9 @@ BEGIN
   Write(r, x MOD 128)
 END WriteNum;
 
-PROCEDURE WriteChar*(VAR r: Rider; x: CHAR16);
+PROCEDURE WriteChar16*(VAR r: Rider; x: CHAR16);
 BEGIN Write0(r, x)
-END WriteChar;
+END WriteChar16;
 
 PROCEDURE WriteString8*(VAR r: Rider; x: ARRAY OF BYTE);
 VAR i: INTEGER;
@@ -455,21 +445,12 @@ BEGIN i := 0;
   Write(r, 0)
 END WriteString8;
 
-PROCEDURE WriteString*(VAR r: Rider; x: ARRAY OF CHAR16);
+PROCEDURE WriteString16*(VAR r: Rider; x: ARRAY OF CHAR16);
 VAR i: INTEGER;
 BEGIN i := 0;
-  WHILE (i < LEN(x)) & (x[i] # 0X) DO WriteChar(r, x[i]); INC(i) END;
-  WriteChar(r, 0X)
-END WriteString;
-
-PROCEDURE WriteByteStr*(VAR r: Rider; x: ARRAY OF CHAR16);
-VAR i: INTEGER;
-BEGIN i := 0;
-  WHILE x[i] # 0X DO
-    ASSERT(x[i] < 100X); Write(r, ORD(x[i])); INC(i)
-  END;
-  Write(r, 0)
-END WriteByteStr;
+  WHILE (i < LEN(x)) & (x[i] # 0X) DO WriteChar16(r, x[i]); INC(i) END;
+  WriteChar16(r, 0X)
+END WriteString16;
 
 PROCEDURE WriteSet*(VAR r: Rider; x: SET);
 BEGIN Write0(r, x)

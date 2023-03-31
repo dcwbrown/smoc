@@ -26,7 +26,7 @@ END outSep;
 
 (* Write filename part of path in a fixed 20 column field *)
 PROCEDURE outFname(fname: ARRAY OF CHAR8);
-VAR basename: ARRAY 1024 OF CHAR16;  i, j: INTEGER;
+VAR i, j: INTEGER;
 BEGIN
   i := 0;
   WHILE fname[i] # 0Y DO INC(i) END;

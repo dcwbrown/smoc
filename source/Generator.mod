@@ -769,16 +769,6 @@ BEGIN  si:= 0;  di := 0;
   IF di < LEN(d) THEN d[di] := 0Y ELSE d[LEN(d)-1] := 0Y END
 END Append;
 
-PROCEDURE Append16(s: ARRAY OF CHAR16; VAR d: ARRAY OF CHAR8);
-VAR si, di: INTEGER;
-BEGIN  si:= 0;  di := 0;
-  WHILE (di < LEN(d))  &  (d[di] # 0Y) DO INC(di) END;
-  WHILE (si < LEN(s))  &  (s[si] # 0X)  &  (di < LEN(d)) DO
-    Rtl.PutUtf8(Rtl.GetUtf16(s, si), d, di);
-  END;
-  IF di < LEN(d) THEN d[di] := 0Y ELSE d[LEN(d)-1] := 0Y END
-END Append16;
-
 
 PROCEDURE Pass1(VAR modinit: B.Node);
 VAR str: ARRAY 512 OF CHAR8;
@@ -3092,7 +3082,6 @@ END FoldConst;
 (* -------------------------------------------------------------------------- *)
 
 PROCEDURE Init*;
-VAR fname: ARRAY 128 OF CHAR16;
 BEGIN
   varSize    := 0;
   staticSize := 128;  (* Leave 128 bytes for standard function addresses *)

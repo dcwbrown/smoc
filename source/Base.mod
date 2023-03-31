@@ -921,12 +921,12 @@ END NewModule;
 (* -------------------------------------------------------------------------- *)
 (* Compiler Flag *)
 
-PROCEDURE SetCompilerFlag(pragma: ARRAY OF CHAR16);
+PROCEDURE SetCompilerFlag(pragma: ARRAY OF CHAR8);
 VAR i: INTEGER;
 BEGIN
-  IF    pragma = 'MAIN'    THEN Flag.main  := TRUE
-  ELSIF pragma = 'CONSOLE' THEN Flag.main  := TRUE;  Flag.console := TRUE
-  ELSIF pragma = 'RTL-'    THEN Flag.rtl   := FALSE;
+  IF    pragma = `MAIN`    THEN Flag.main  := TRUE
+  ELSIF pragma = `CONSOLE` THEN Flag.main  := TRUE;  Flag.console := TRUE
+  ELSIF pragma = `RTL-`    THEN Flag.rtl   := FALSE;
   END
 END SetCompilerFlag;
 

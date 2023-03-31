@@ -221,7 +221,7 @@ BEGIN
   WHILE slist16 # NIL DO x := slist16.obj;
     Files.Set(Rider, Out, metrics.fadr + x.adr);  i := 0;
     WHILE i < x.len DO
-      Files.WriteChar(Rider, B.str16buf[x.bufpos+i]);  INC(i)
+      Files.WriteChar16(Rider, B.str16buf[x.bufpos+i]);  INC(i)
     END;
     slist16 := slist16.next
   END;
@@ -480,11 +480,11 @@ END WriteExports;
 (* -------------------------------------------------------------------------- *)
 (* PE Header *)
 
-PROCEDURE WriteSectionHeader(sec: INTEGER; name: ARRAY OF CHAR16; flags: INTEGER);
+PROCEDURE WriteSectionHeader(sec: INTEGER; name: ARRAY OF CHAR8; flags: INTEGER);
 VAR i, l, filesize, virtualsize: INTEGER;
 BEGIN
   l := LEN(name);  i := 0;  IF l > 8 THEN l := 8 END;
-  WHILE (i < l) & (name[i] # 0X) DO Files.Write(Rider, ORD(name[i]));  INC(i) END;
+  WHILE (i < l) & (name[i] # 0Y) DO Files.Write(Rider, ORD(name[i]));  INC(i) END;
   WHILE (i < 8) DO Files.Write(Rider, 0); INC(i) END;
 
   virtualsize := Align(Section[sec].size, SectionAlignment);
@@ -686,12 +686,12 @@ BEGIN
   Files.WriteBytes(Rider, hdr, SYSTEM.SIZE(PEHDR));
 
   (* Write section headers *)
-  WriteSectionHeader(SecUninitGlobals, ".bss",   SReadable + SWriteable  + SUninitialised);
-  WriteSectionHeader(SecInitGlobals,   ".data",  SReadable + SWriteable  + SInitialised);
-  WriteSectionHeader(SecCode,          ".text",  SReadable + SExecutable + SCode);
-  WriteSectionHeader(SecImports,       ".idata", SReadable + SWriteable  + SInitialised);
-  WriteSectionHeader(SecTraps,         ".traps", SReadable +               SInitialised);
-  WriteSectionHeader(SecExports,       ".edata", SReadable +               SInitialised);
+  WriteSectionHeader(SecUninitGlobals, `.bss`,   SReadable + SWriteable  + SUninitialised);
+  WriteSectionHeader(SecInitGlobals,   `.data`,  SReadable + SWriteable  + SInitialised);
+  WriteSectionHeader(SecCode,          `.text`,  SReadable + SExecutable + SCode);
+  WriteSectionHeader(SecImports,       `.idata`, SReadable + SWriteable  + SInitialised);
+  WriteSectionHeader(SecTraps,         `.traps`, SReadable +               SInitialised);
+  WriteSectionHeader(SecExports,       `.edata`, SReadable +               SInitialised);
 
   (* Oberon compiler specific data *)
   Files.Set(Rider, Out, 400H - 40);  (* Insert before end of header *)
