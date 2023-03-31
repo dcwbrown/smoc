@@ -520,10 +520,16 @@ BEGIN
   END
 END ExportType;
 
+
 PROCEDURE WriteSymfile*;
-VAR ident: Ident;  exp: ObjList;  i, k, n, size: INTEGER;
-    hash: Crypt.MD5Hash;  chunk: ARRAY 64 OF BYTE;
-    symfname: ARRAY 512 OF CHAR16;  x: Object;
+VAR
+  ident:         Ident;
+  exp:           ObjList;
+  x:             Object;
+  i, k, n, size: INTEGER;
+  hash:          Crypt.MD5Hash;
+  chunk:         ARRAY 64 OF BYTE;
+  symfname:      ARRAY 512 OF CHAR16;
 BEGIN
   symfname := 0X;  refno := 0;  expno := 0;
   i := 0;  Insert(srcPath, symfname, i);

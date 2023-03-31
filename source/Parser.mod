@@ -894,6 +894,10 @@ VAR x, y: B.Object;  xform: INTEGER;
         ELSIF xform = B.tChar16 THEN
           IF y.type.form # B.tChar16 THEN Mark('not char') END
         END
+      ELSIF y IS B.Str8 THEN
+        IF xform # B.tChar8 THEN Mark(errMsg) END;
+        IF y(B.Str8).len > 2 THEN Mark('not char') END;
+        y := B.NewConst(B.char8Type, ORD(S.str[0]));  GetSym
       ELSIF y IS B.Str16 THEN
         IF xform # B.tChar16 THEN Mark(errMsg) END;
         IF y(B.Str16).len > 2 THEN Mark('not char') END;
@@ -976,10 +980,11 @@ BEGIN
         ELSIF CompArray(x.type, y.type) & IsOpenArray(y.type) THEN
           IF y.type.notag THEN Mark('untagged open array') END;
           stat.left := NewNode(S.becomes, x, y)
-        ELSE Mark('Invalid assignment')
+        ELSE
+          Mark('Invalid assignment')
         END
       ELSIF sym = S.eql THEN
-        Mark('Should be :=');  GetSym;  y := expression()
+        Mark("'=' Should be ':='");  GetSym;  y := expression()
       ELSIF x.type.form = B.tProc THEN
         IF x.type.base # NIL THEN Mark('Not proper procedure') END;
         stat.left := Call(x)

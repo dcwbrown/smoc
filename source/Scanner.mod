@@ -144,19 +144,6 @@ BEGIN i := 0;  sym := ident;
   END;
   id[i] := 0X;
   IF i >= MaxIdLen THEN Mark('identifier too long') END;
-
-  (*
-  REPEAT
-    IF i <= MaxIdLen THEN Rtl.PutUtf16(ch, id, i) END;  Read
-  UNTIL (ch < ORD('0'))
-     OR (ch > ORD('9')) & (ch < ORD('A'))
-     OR (ch # ORD('_')) & (ch > ORD('Z')) & (ch < ORD('a'))
-     OR (ch > ORD('z'));
-  IF i <= MaxIdLen THEN id[i] := 0X
-  ELSE Mark('identifier too long');  id[MaxIdLen] := 0X
-  END;
-  *)
-
   (* search for keyword *)
   IF i < LEN(KWX) THEN
     j := KWX[i-1];  k := KWX[i];
@@ -302,7 +289,7 @@ BEGIN i := n-1;  k := 0;  x := BigNums.Zero;  f := BigNums.Zero;
 END Real;
 
 PROCEDURE Number(VAR sym: INTEGER);
-  CONST max = MaxInt;
+CONST max = MaxInt;
 VAR i, k2, e, n, s, h: INTEGER;  x: REAL;
     d: ARRAY 21 OF INTEGER;
     negE: BOOLEAN;
@@ -314,7 +301,7 @@ BEGIN
     END;
     Read
   UNTIL (ch < ORD('0')) OR (ch > ORD('9')) & (ch < ORD('A')) OR (ch > ORD('F'));
-  IF (ch = ORD('H')) OR (ch = ORD('R')) OR (ch = ORD('X')) THEN  (* hex *)
+  IF (ch = ORD('H')) OR (ch = ORD('R')) OR (ch = ORD('X')) OR (ch = ORD('Y')) THEN  (* hex *)
     REPEAT h := d[i];
       IF h >= 10 THEN h := h-7 END;
       k2 := k2*10H + h;  INC(i) (* no overflow check *)
