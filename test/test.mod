@@ -10,9 +10,19 @@ VAR
   i: INTEGER;
   s: ARRAY 10 OF CHAR8;
   t: ARRAY 10 OF CHAR8;
+  u: ARRAY 10 OF CHAR16;
+  v: ARRAY 10 OF CHAR16;
+  b: BOOLEAN;
 
 BEGIN
   w.sl(`Hello teapots.`);
+
+  ASSERT(TRUE);
+  b := u # v;
+  ASSERT(TRUE);
+  b := s # t;
+  ASSERT(TRUE);
+
   w.s(`w.i(12345):      `); w.i(12345);      w.l;
   w.s(`w.h(12345):      `); w.h(12345);      w.l;
   w.s(`w.hn(12345, 12): `); w.hn(12345, 12); w.l;
@@ -43,8 +53,11 @@ BEGIN
   IF s = t THEN w.sl(`s=t.`) ELSE w.sl(`s#t.`) END;
   IF s < t THEN w.sl(`s<t.`) ELSE w.sl(`s¬<t.`) END;
   IF s > t THEN w.sl(`s>t.`) ELSE w.sl(`s¬>t.`) END;
+  w.sl(`Set s[1] := 'e'.`);
   s[1] := `e`;
   IF s = t THEN w.sl(`s=t.`) ELSE w.sl(`s#t.`) END;
+  IF s < t THEN w.sl(`s<t.`) ELSE w.sl(`s¬<t.`) END;
+  IF s > t THEN w.sl(`s>t.`) ELSE w.sl(`s¬>t.`) END;
 
   s := $$40 41
          42 43 00$;

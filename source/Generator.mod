@@ -1498,6 +1498,7 @@ BEGIN
   FreeXReg(x.r);  FreeReg2(y);  SetCond(x, OpToCc(node.op))
 END CompareReal;
 
+
 PROCEDURE Compare(VAR x: Item;  node: Node);
 VAR cx, r, size: BYTE;  first, L: INTEGER;
     y, len: Item;  tp: B.Type;  oldStat: MakeItemState;
@@ -1510,61 +1511,73 @@ BEGIN
     ELSE ASSERT(FALSE)
     END
   ELSIF B.IsStr8(tp) THEN  (* TODO Test thouroughly 8 bit string compare *)
-    SetBestReg(reg_SI);  AvoidUsedBy(node.right);  SetAvoid(reg_DI);
-    MakeItem0(x, node.left);  LoadAdr(x);  ResetMkItmStat;
-    SetBestReg(reg_DI);  MakeItem0(y, node.right);  LoadAdr(y);
+    SetBestReg(reg_SI);
+    AvoidUsedBy(node.right);
+    SetAvoid(reg_DI);
+    MakeItem0(x, node.left);      LoadAdr(x);
+    ResetMkItmStat;
+    SetBestReg(reg_DI);
+    MakeItem0(y, node.right);     LoadAdr(y);
     IF y.r # reg_DI THEN RelocReg(y.r, reg_DI) END;
     IF x.r # reg_SI THEN RelocReg(x.r, reg_SI) END;
-    cx := AllocReg2({});  ClearReg(cx);
+    cx := AllocReg2({});          ClearReg(cx);
 
-    first := pc;  EmitR(INC_, cx, 4);
-
+    first := pc;                  EmitR(INC_, cx, 4);
     ArrayLen(len, node.left);
-    IF len.mode = mImm THEN EmitRI(CMPi, cx, 4, len.a)
-    ELSE SetRmOperand(len);  EmitRegRm(CMPd, cx, 4);  FreeReg2(len)
+    IF len.mode = mImm THEN       EmitRI(CMPi, cx, 4, len.a)
+    ELSE SetRmOperand(len);       EmitRegRm(CMPd, cx, 4);  FreeReg2(len)
     END;
-    Trap(ccA, stringTrap);
+                                  Trap(ccA, stringTrap);
 
     ArrayLen(len, node.right);
-    IF len.mode = mImm THEN EmitRI(CMPi, cx, 4, len.a)
-    ELSE SetRmOperand(len);  EmitRegRm(CMPd, cx, 4);  FreeReg2(len)
+    IF len.mode = mImm THEN       EmitRI(CMPi, cx, 4, len.a)
+    ELSE SetRmOperand(len);       EmitRegRm(CMPd, cx, 4);  FreeReg2(len)
     END;
-    Trap(ccA, stringTrap);
+                                  Trap(ccA, stringTrap);
 
-    EmitBare(CMPSB);  L := pc;  Jcc1(ccNZ, 0);
-    SetRm_regI(reg_SI, -1);  EmitRmImm(CMPi, 2, 0);  BJump(first, ccNZ);  (* -2 to -1 correct? *)
-    Fixup(L, pc);  FreeReg(reg_DI);  FreeReg(reg_SI);
-    SetCond(x, OpToCc(node.op))
+                                  EmitBare(CMPSB);
+    L := pc;                      Jcc1(ccNZ, 0);
+    SetRm_regI(reg_SI, -1);       EmitRmImm(CMPi, 1, 0);
+                                  BJump(first, ccNZ);  (* -2 to -1 correct? *)
+    Fixup(L, pc);
+    FreeReg(reg_DI);  FreeReg(reg_SI);
+                                  SetCond(x, OpToCc(node.op))
   ELSIF B.IsStr16(tp) THEN
-    SetBestReg(reg_SI);  AvoidUsedBy(node.right);  SetAvoid(reg_DI);
-    MakeItem0(x, node.left);  LoadAdr(x);  ResetMkItmStat;
-    SetBestReg(reg_DI);  MakeItem0(y, node.right);  LoadAdr(y);
+    SetBestReg(reg_SI);
+    AvoidUsedBy(node.right);
+    SetAvoid(reg_DI);
+    MakeItem0(x, node.left);      LoadAdr(x);
+    ResetMkItmStat;
+    SetBestReg(reg_DI);
+    MakeItem0(y, node.right);     LoadAdr(y);
     IF y.r # reg_DI THEN RelocReg(y.r, reg_DI) END;
     IF x.r # reg_SI THEN RelocReg(x.r, reg_SI) END;
-    cx := AllocReg2({});  ClearReg(cx);
-
-    first := pc;  EmitR(INC_, cx, 4);
-
+    cx := AllocReg2({});          ClearReg(cx);
+    first := pc;                  EmitR(INC_, cx, 4);
     ArrayLen(len, node.left);
-    IF len.mode = mImm THEN EmitRI(CMPi, cx, 4, len.a)
-    ELSE SetRmOperand(len);  EmitRegRm(CMPd, cx, 4);  FreeReg2(len)
+    IF len.mode = mImm THEN       EmitRI(CMPi, cx, 4, len.a)
+    ELSE SetRmOperand(len);       EmitRegRm(CMPd, cx, 4);  FreeReg2(len)
     END;
-    Trap(ccA, stringTrap);
+                                  Trap(ccA, stringTrap);
 
     ArrayLen(len, node.right);
-    IF len.mode = mImm THEN EmitRI(CMPi, cx, 4, len.a)
-    ELSE SetRmOperand(len);  EmitRegRm(CMPd, cx, 4);  FreeReg2(len)
+    IF len.mode = mImm THEN       EmitRI(CMPi, cx, 4, len.a)
+    ELSE SetRmOperand(len);       EmitRegRm(CMPd, cx, 4);  FreeReg2(len)
     END;
-    Trap(ccA, stringTrap);
+                                  Trap(ccA, stringTrap);
 
-    EmitBare(CMPSW);  L := pc;  Jcc1(ccNZ, 0);
-    SetRm_regI(reg_SI, -2);  EmitRmImm(CMPi, 2, 0);  BJump(first, ccNZ);
-    Fixup(L, pc);  FreeReg(reg_DI);  FreeReg(reg_SI);
-    SetCond(x, OpToCc(node.op))
+                                  EmitBare(CMPSW);
+    L := pc;                      Jcc1(ccNZ, 0);
+    SetRm_regI(reg_SI, -2);       EmitRmImm(CMPi, 2, 0);
+                                  BJump(first, ccNZ);
+    Fixup(L, pc);
+    FreeReg(reg_DI);  FreeReg(reg_SI);
+                                  SetCond(x, OpToCc(node.op))
   ELSE ASSERT(FALSE)
   END;
   MkItmStat := oldStat
 END Compare;
+
 
 PROCEDURE MemberTest(VAR x: Item;  node: Node);
 VAR y: Item;  oldStat: MakeItemState;
