@@ -66,8 +66,8 @@ BEGIN
   SYSTEM.GetProcAddress(SetConsoleOutputCP, Rtl.HKernel, SYSTEM.ADR(`SetConsoleOutputCP`)); ASSERT(SetConsoleOutputCP # NIL);
   SYSTEM.GetProcAddress(WriteFile,          Rtl.HKernel, SYSTEM.ADR(`WriteFile`));          ASSERT(WriteFile          # NIL);
 
-  hOut := GetStdHandle(STD_OUTPUT_HANDLE);
-  IF SetConsoleOutputCP # NIL THEN result := SetConsoleOutputCP(UTF8) END;
+  hOut    := GetStdHandle(STD_OUTPUT_HANDLE);
+  result  := SetConsoleOutputCP(UTF8);
   crlf[0] := 13;  crlf[1] := 10;
 END init;
 
