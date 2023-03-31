@@ -45,11 +45,14 @@ TYPE
 
   Proc* = POINTER TO RECORD (ObjDesc)
             (* Generator independent fields*)
-            expno*, lev*, nPtr*, nProc*, nTraced*: INTEGER;
-            decl*: Ident;  statseq*: Node;  return*: Object;
+            expno*, lev*, nPtr*,
+            nProc*, nTraced*: INTEGER;
+            decl*:            Ident;
+            statseq*:         Node;
+            return*:          Object;
             (* Generator dependent fields *)
-            adr*, descAdr*, locblksize*: INTEGER;
-            usedReg*, usedXReg*: SET;
+            adr*, descAdr*, locblksize*:    INTEGER;
+            usedReg*, usedXReg*:            SET;
             homeSpace*, stack*, fix*, lim*: INTEGER
           END;
 
@@ -72,9 +75,13 @@ TYPE
 
   NodeDesc* = RECORD (ObjDesc)
     (* Generator independent fields*)
-    ronly*: BOOLEAN;  op*, sourcePos*: INTEGER;  left*, right*: Object;
+    ronly*:            BOOLEAN;
+    op*,   sourcePos*: INTEGER;
+    left*, right*:     Object;
     (* Generator dependent fields *)
-    link*: Node;  jmpSz*, jmpPc*: INTEGER;  xRegUsed*, regUsed*: SET
+    link*:               Node;
+    jmpSz*,    jmpPc*:   INTEGER;
+    xRegUsed*, regUsed*: SET
   END;
 
   IdentDesc* = RECORD
@@ -84,22 +91,29 @@ TYPE
   Scope* = POINTER TO RECORD first*, last: Ident;  dsc*: Scope END;
 
   TypeDesc* = RECORD
-    notag*, untagged*, union*, mark, predef: BOOLEAN;
-    form*: BYTE;  nPtr*, nTraced*, nProc*: INTEGER;
-    len*, size*, size0*, align*, parblksize*, nfpar*: INTEGER;
-    base*: Type;  fields*: Ident;  obj*: Object;
-    adr*, expno*, ref*: INTEGER;  mod*: Module
+    notag*, untagged*,   union*: BOOLEAN;
+    mark,   predef:              BOOLEAN;
+    nPtr*,  nTraced*,    nProc*: INTEGER;
+    len*,   size*,       size0*: INTEGER;
+    align*, parblksize*, nfpar*: INTEGER;
+    adr*,   expno*,      ref*:   INTEGER;
+    base*:                       Type;
+    form*:                       BYTE;
+    fields*:                     Ident;
+    obj*:                        Object;
+    mod*:                        Module
   END;
 
 VAR
   topScope*, universe*, systemScope: Scope;
-  curLev*, modlev*: INTEGER;
-  modid*: S.IdStr;
-  modkey*: ModuleKey;  system*: BOOLEAN;
-  expList*, lastExp: ObjList;
-  str8List*:         Str8List;
-  str16List*:        Str16List;
-  recList*:          TypeList;
+  curLev*, modlev*:                  INTEGER;
+  modid*:                            S.IdStr;
+  modkey*:                           ModuleKey;
+  system*:                           BOOLEAN;
+  expList*, lastExp:                 ObjList;
+  str8List*:                         Str8List;
+  str16List*:                        Str16List;
+  recList*:                          TypeList;
 
   (* Predefined Types *)
   nilType*,   noType*,
@@ -110,9 +124,7 @@ VAR
 
   predefTypes: TypeList;
 
-  Flag*: RECORD
-    main*, console*, rtl*: BOOLEAN
-  END;
+  Flag*: RECORD main*, console*, rtl*: BOOLEAN END;
 
   imod, modList*: Module;
 
