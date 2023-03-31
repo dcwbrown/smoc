@@ -63,6 +63,7 @@ CONST
 
   sfADR*          = 120;  sfBIT* = 121;  sfVAL* = 122;  sfSIZE* = 123;
   sfNtCurrentTeb* = 124;  sfCAS* = 125;
+  sfCHR8*         = 126;
   endSf*          = 129;
 
   begSp* = 130;
@@ -77,12 +78,12 @@ CONST
 
   (* Additions during conversion to 8 bit characters *)
   string8*        = 160;
-  sfCHR8*         = 161;
 
 TYPE
-  IdStr* = ARRAY MaxIdLen+1  OF CHAR16;
-  Str*   = ARRAY MaxStrLen+1 OF CHAR16;
-  Str8*  = ARRAY MaxStrLen+1 OF BYTE;
+  IdStr*  = ARRAY MaxIdLen+1  OF CHAR16;
+  IdStr8* = ARRAY MaxIdLen+1  OF CHAR8;
+  Str*    = ARRAY MaxStrLen+1 OF CHAR16;
+  Str8*   = ARRAY MaxStrLen+1 OF BYTE;
 
   SetCompilerFlagProc* = PROCEDURE(pragma: ARRAY OF CHAR16);
   NotifyErrorProc* = PROCEDURE(line, column: INTEGER;  msg: ARRAY OF CHAR16);
