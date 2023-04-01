@@ -19,8 +19,6 @@ CONST
   typEql*    = {tBool, tSet,  tPtr,   tProc,   tNil};
   typCmp*    = {tInt,  tReal, tChar8, tChar16, tStr8,   tStr16};
 
-  RtlName*  = 'Rtl.dll';
-
 TYPE
   ModuleKey* = ARRAY 2 OF INTEGER;
 
@@ -41,7 +39,6 @@ TYPE
              END;
   Par*     = POINTER TO RECORD (Var)  varpar*: BOOLEAN END;
   Str8*    = POINTER TO RECORD (Var)  bufpos*, len*: INTEGER END;
-  Str16*   = POINTER TO RECORD (Var)  bufpos*, len*: INTEGER END;
   TempVar* = POINTER TO RECORD (Var)  inited*: BOOLEAN END;
 
   Proc* = POINTER TO RECORD (ObjDesc)
@@ -64,7 +61,6 @@ TYPE
   TypeList*  = POINTER TO RECORD type*: Type;    next*: TypeList  END;
   ProcList*  = POINTER TO RECORD obj*:  Proc;    next*: ProcList  END;
   Str8List*  = POINTER TO RECORD obj*:  Str8;    next*: Str8List  END;
-  Str16List* = POINTER TO RECORD obj*:  Str16;   next*: Str16List END;
 
   Module* = POINTER TO RECORD (ObjDesc)
     export*, import*: BOOLEAN;
@@ -119,7 +115,6 @@ VAR
   system*:                           BOOLEAN;
   expList*, lastExp:                 ObjList;
   str8List*:                         Str8List;
-  str16List*:                        Str16List;
   recList*:                          TypeList;
 
   (* Predefined Types *)
@@ -145,7 +140,7 @@ VAR
   str8buf*:      ARRAY 1000H OF BYTE;  (* TODO change to CHAR8 *)
 
   str16bufSize*: INTEGER;
-  str16buf*:     ARRAY 1000H OF CHAR16;
+  str16buf*:     ARRAY 1000H OF SYSTEM.CARD16;
 
   symPath, srcPath, sym: ARRAY 1024 OF CHAR8;
 
@@ -179,13 +174,6 @@ BEGIN
   len := 0;  WHILE (len < LEN(str)) & (str[len] # 0Y) DO INC(len) END;
   RETURN len
 END Str8Len;
-
-PROCEDURE Str16Len* (str: ARRAY OF CHAR16): INTEGER;
-VAR len: INTEGER;
-BEGIN
-  len := 0;  WHILE (len < LEN(str)) & (str[len] # 0X) DO INC(len) END;
-  RETURN len
-END Str16Len;
 
 PROCEDURE Align(VAR n: INTEGER;  align: INTEGER);
 BEGIN
@@ -276,23 +264,6 @@ BEGIN
   slen := 0;  WHILE str[slen] # 0 DO INC(slen) END;  INC(slen);
   RETURN NewStr8(str, slen)
 END NewStr8Z;
-
-PROCEDURE NewStr16*(str: ARRAY OF CHAR16;  slen: INTEGER): Str16;
-VAR x: Str16;  i: INTEGER;  p: Str16List;
-BEGIN
-  NEW(x);  x.class := cVar;  x.ronly := TRUE;
-  x.type := str16Type;  x.lev := curLev;  x.len := slen;
-  IF x.lev >= -1 (* need to alloc buffer *) THEN
-    IF str16bufSize + slen >= LEN(str16buf) THEN
-      S.Mark8(`too many 16 bit strings`);  x.bufpos := -1
-    ELSE x.bufpos  := str16bufSize;  str16bufSize := str16bufSize + slen;
-      FOR i := 0 TO slen-1 DO str16buf[x.bufpos+i] := str[i] END;
-      NEW(p);  p.obj := x;  p.next := str16List;  str16List := p
-    END
-  ELSE x.bufpos := -1
-  END;
-  RETURN x
-END NewStr16;
 
 PROCEDURE NewProc*(): Proc;
 VAR p: Proc;
@@ -566,12 +537,12 @@ BEGIN
         Files.WriteString8(rider, ident.name);
         DetectType(x.type)
       ELSIF x.class = cVar THEN
-        IF x IS Str16 THEN
+        IF x IS Str8 THEN
           Files.WriteNum(rider, cConst);
           Files.WriteString8(rider, ident.name);
           NewExport(exp);  exp.obj := x;
           Files.WriteNum(rider, expno);  DetectType(x.type);
-          Files.WriteNum(rider, x(Str16).len)
+          Files.WriteNum(rider, x(Str8).len)
         ELSE
           Files.WriteNum(rider, cVar);
           Files.WriteString8(rider, ident.name);
@@ -828,9 +799,6 @@ BEGIN
         IF tp = str8Type THEN
           Files.ReadNum(rider, slen);  x := NewStr8(``, slen);
           x(Str8).adr := 0;  x(Str8).expno := val
-        ELSIF tp = str16Type THEN
-          Files.ReadNum(rider, slen);  x := NewStr16('', slen);
-          x(Str16).adr := 0;  x(Str16).expno := val
         ELSE
           x := NewConst(tp, val)
         END;
@@ -900,12 +868,12 @@ BEGIN (* NewModule *)
   IF id = modid THEN S.Mark8(`Cannot import self`)
   ELSIF mod = NIL THEN
     i := 0;  Insert(id, symfname, i);  Insert(`.sym`, symfname, i);
-    symfile := Files.Old8(symfname);  found := symfile # NIL;  i := 0;
+    symfile := Files.Old(symfname);  found := symfile # NIL;  i := 0;
     WHILE (symPath[i] # 0Y) & ~found DO
       GetPath(path, i);
       IF path # 0Y THEN
         Append(symfname, path);
-        symfile := Files.Old8(path);
+        symfile := Files.Old(path);
         found := symfile # NIL
       END
     END;
@@ -959,7 +927,7 @@ BEGIN
 
   NEW(universe);  topScope := universe;  curLev := -1;
   system := FALSE;  modno := -2;  str8bufSize := 0;  str16bufSize := 0;
-  expList := NIL;  lastExp := NIL;  str16List := NIL;  recList := NIL;
+  expList := NIL;  lastExp := NIL;  str8List := NIL;  recList := NIL;
   InitCompilerFlag;
 
   Enter(NewTypeObj(intType),    `INTEGER`);
@@ -968,7 +936,7 @@ BEGIN
   Enter(NewTypeObj(setType),    `SET`);
   Enter(NewTypeObj(boolType),   `BOOLEAN`);
   Enter(NewTypeObj(char8Type),  `CHAR8`);
-  Enter(NewTypeObj(char16Type), `CHAR`);
+  Enter(NewTypeObj(char8Type),  `CHAR`);
   Enter(NewTypeObj(char16Type), `CHAR16`);
 
   Enter(NewSProc(S.spINC,    cSProc), `INC`);
@@ -989,7 +957,7 @@ BEGIN
   Enter(NewSProc(S.sfFLOOR, cSFunc), `FLOOR`);
   Enter(NewSProc(S.sfFLT,   cSFunc), `FLT`);
   Enter(NewSProc(S.sfORD,   cSFunc), `ORD`);
-  Enter(NewSProc(S.sfCHR,   cSFunc), `CHR`);
+  Enter(NewSProc(S.sfCHR8,  cSFunc), `CHR`);
   Enter(NewSProc(S.sfCHR,   cSFunc), `CHR16`);
   Enter(NewSProc(S.sfCHR8,  cSFunc), `CHR8`);
 
@@ -1025,7 +993,7 @@ PROCEDURE Cleanup*;
 VAR i: INTEGER;
 BEGIN
   universe := NIL;  topScope := NIL;  systemScope := NIL;  modList := NIL;
-  expList  := NIL;  lastExp  := NIL;  str16List   := NIL;  recList := NIL
+  expList  := NIL;  lastExp  := NIL;  str8List    := NIL;  recList := NIL
 END Cleanup;
 
 BEGIN

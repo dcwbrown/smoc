@@ -81,7 +81,7 @@ CONST
 
 TYPE
   IdStr8* = ARRAY MaxIdLen+1  OF CHAR8;
-  Str*    = ARRAY MaxStrLen+1 OF CHAR16;
+  Str*    = ARRAY MaxStrLen+1 OF SYSTEM.CARD16;
   Str8*   = ARRAY MaxStrLen+1 OF CHAR8;
 
   SetCompilerFlagProc* = PROCEDURE(pragma: ARRAY OF CHAR8);
@@ -142,10 +142,10 @@ RETURN LSL(lastLine, 10) + (lastColumn MOD 400H) END SourcePos;
 PROCEDURE Identifier(VAR sym: INTEGER);
 VAR i, j, k: INTEGER;
 BEGIN i := 0;  sym := ident;
-  WHILE (i < MaxIdLen) & (   (ch >= ORD('0')) & (ch <= ORD('9'))
-                          OR (ch >= ORD('A')) & (ch <= ORD('Z'))
-                          OR (ch >= ORD('a')) & (ch <= ORD('z'))
-                          OR (ch =  ORD('_'))) DO
+  WHILE (i < MaxIdLen) & (   (ch >= ORD(`0`)) & (ch <= ORD(`9`))
+                          OR (ch >= ORD(`A`)) & (ch <= ORD(`Z`))
+                          OR (ch >= ORD(`a`)) & (ch <= ORD(`z`))
+                          OR (ch =  ORD(`_`))) DO
     Rtl.PutUtf8 (ch, id8, i);
     Read
   END;
@@ -175,12 +175,12 @@ BEGIN
   WHILE ~eof & (slen < MaxStrLen) & (ch # quoteCh) DO
     Rtl.PutUtf16(ch, str, slen); Read
   END;
-  Read;  str[slen] := 0X;  INC(slen);
+  Read;  str[slen] := 0;  INC(slen);
   IF slen >= MaxStrLen THEN Mark8(`String too long`) END;
 END String;
 
 PROCEDURE HexString(): INTEGER;
-VAR i, m, n, o, p, sym: INTEGER;
+VAR i, m, n, o, p: INTEGER;
 
   PROCEDURE hexdigit(): INTEGER;
   VAR n: INTEGER;
@@ -192,31 +192,18 @@ VAR i, m, n, o, p, sym: INTEGER;
 BEGIN
   i := 0;  Read;
 
-  IF ch = ORD(`$`) THEN  (* Hex CHAR8 string starts `$$` *)
-    Read;  slen := 0;
-    WHILE ~eof & (slen < MaxStrLen) & (ch # ORD(`$`)) DO
-      WHILE (ch = SP) OR (ch = TAB) OR (ch = CR)  OR (ch = LF) DO Read END;
-      m := hexdigit();  n := hexdigit();
-      str8[slen] := CHR8(m * 10H + n);
-      INC(slen)
-    END;
-    IF slen > MaxStrLen THEN Mark8(`Hex string too long`) END;
-    Read;
-    str8[slen] := 0Y;  (* Guaranteed terminator, not included in string length *)
-    sym := string8
-  ELSE
-    WHILE ~eof & (ch # ORD(`$`)) DO
-      WHILE (ch = SP) OR (ch = TAB) OR (ch = CR)  OR (ch = LF) DO Read END;
-      m := hexdigit();  n := hexdigit();
-      o := hexdigit();  p := hexdigit();
-      IF i < MaxStrLen THEN str[i] := CHR(o*1000H + p*100H + m*10H +n);  INC(i)
-      ELSE Mark8(`String too long`)
-      END
-    END;
-    Read;  slen := i;  (* no 0X appended! *)
-    sym := string
+  IF ch = ORD(`$`) THEN Read END;  (* Skip prototyping second `$` *)
+  slen := 0;
+  WHILE ~eof & (slen < MaxStrLen) & (ch # ORD(`$`)) DO
+    WHILE (ch = SP) OR (ch = TAB) OR (ch = CR)  OR (ch = LF) DO Read END;
+    m := hexdigit();  n := hexdigit();
+    str8[slen] := CHR8(m * 10H + n);
+    INC(slen)
   END;
-  RETURN sym
+  IF slen > MaxStrLen THEN Mark8(`Hex string too long`) END;
+  Read;
+  str8[slen] := 0Y;  (* Guaranteed terminator, not included in string length *)
+  RETURN string8
 END HexString;
 
 PROCEDURE Real(VAR sym: INTEGER;  d: ARRAY OF INTEGER;  n: INTEGER);
@@ -317,8 +304,8 @@ BEGIN
       IF k2 < 10000H THEN ival := k2
       ELSE Mark8(`Illegal value`);  ival := 0
       END;
-      IF k2 = 0 THEN str[0] := 0X;  slen := 1
-      ELSE str[0] := CHR(k2);  str[1] := 0X;  slen := 2
+      IF k2 = 0 THEN str[0] := 0;  slen := 1
+      ELSE str[0] := k2;  str[1] := 0;  slen := 2
       END
     ELSIF ch = ORD(`Y`) THEN sym := string8;
       IF k2 < 100H THEN ival := k2 ELSE Mark8(`Illegal value`);  ival := 0  END;

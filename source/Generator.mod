@@ -582,8 +582,8 @@ BEGIN
 END AllocImportModules;
 
 PROCEDURE AllocStaticData;
-VAR o: B.Str8List;  p: B.Str16List;  q: B.TypeList;
-    x: B.Object;   y: B.Str16;  z: B.Str8;
+VAR o: B.Str8List;  q: B.TypeList;
+    x: B.Object;    z: B.Str8;
     strSize, tdSize, align: INTEGER;
 BEGIN
   (* Allocate 8 bit literal strings *)
@@ -591,13 +591,6 @@ BEGIN
   WHILE o # NIL DO
     z := o.obj;  strSize := z.len;
     z.adr := staticSize;  INC(staticSize, strSize);  o := o.next
-  END;
-
-  (* Allocate 16 bit literal strings *)
-  Align(staticSize, 2);  p := B.str16List;
-  WHILE p # NIL DO
-    y := p.obj;  strSize := 2*y.len;
-    y.adr := staticSize;  INC(staticSize, strSize);  p := p.next
   END;
 
   (* Allocate ptrTable *)
@@ -734,7 +727,7 @@ BEGIN ident := decl;
   WHILE ident # NIL DO obj := ident.obj;
     IF obj IS B.Proc THEN
       ScanDeclaration(obj(B.Proc).decl, lev+1);  ScanProc(obj(B.Proc))
-    ELSIF (lev = 0) & (obj IS B.Var) & ~(obj IS B.Str8) & ~(obj IS B.Str16) THEN
+    ELSIF (lev = 0) & (obj IS B.Var) & ~(obj IS B.Str8) THEN
       IF obj.type.nTraced > 0 THEN
         INC(ptrTableSize, obj.type.nTraced*8)
       END
@@ -1216,7 +1209,6 @@ END LoadAdr;
 PROCEDURE ArrayLen(VAR x: Item;  obj: B.Object);
 BEGIN
   IF    obj IS B.Str8  THEN x.mode := mImm;  x.a := obj(B.Str8).len
-  ELSIF obj IS B.Str16 THEN x.mode := mImm;  x.a := obj(B.Str16).len
   ELSIF B.IsOpenArray(obj.type) THEN MakeItem0(x, obj);  INC(x.a, 8)
   ELSIF B.IsNormalArray(obj.type) THEN x.mode := mImm;  x.a := obj.type.len
   ELSE ASSERT(FALSE)
@@ -1228,7 +1220,6 @@ PROCEDURE SizeOf(VAR x: Item;  obj: B.Object);
 VAR size, e: INTEGER;
 BEGIN
   IF    obj IS B.Str8  THEN x.mode := mImm;  x.a := obj(B.Str8).len
-  ELSIF obj IS B.Str16 THEN x.mode := mImm;  x.a := obj(B.Str16).len*2
   ELSIF B.IsOpenArray(obj.type) THEN size := obj.type.base.size;
     IF size = 0 THEN x.mode := mImm;  x.a := 0
     ELSE ArrayLen(x, obj);  Load(x);  e := log2(size);
@@ -2275,7 +2266,6 @@ BEGIN
     IF objv.lev <= 0 THEN x.mode := mBX ELSE x.mode := mBP END;
     IF objv.lev < 0 THEN x.ref := TRUE END;
     IF    objv IS B.Str8  THEN x.mode := mBX;  x.strlen := objv(B.Str8).len
-    ELSIF objv IS B.Str16 THEN x.mode := mBX;  x.strlen := objv(B.Str16).len
     ELSIF objv IS B.Par THEN
       size := objv.type.size;
       x.ref := objv(B.Par).varpar OR (form = B.tArray)
@@ -2966,7 +2956,6 @@ PROCEDURE TypeTransferConst*(type: B.Type;  x: B.Object): B.Object;
 VAR val: INTEGER;
 BEGIN
   IF    x IS B.Str8  THEN val := B.str8buf[x(B.Str8).bufpos]
-  ELSIF x IS B.Str16 THEN val := ORD(B.str16buf[x(B.Str16).bufpos])
   ELSE val := x(B.Const).val
   END;
   IF type # x.type THEN
@@ -2987,7 +2976,6 @@ END TypeTransferConst;
 (* Compile time constant operations *)
 PROCEDURE FoldConst*(op: INTEGER;  x, y: B.Object): B.Object;
 VAR val, xval, yval, i, k: INTEGER;  type: B.Type;  r1, r2: REAL;
-    xstr16, ystr16: B.Str16;  ch1, ch2: CHAR16;
     xstr8,  ystr8:  B.Str8;   cb1, cb2: BYTE;
 BEGIN
   IF (op >= S.eql) & (op <= S.in) THEN
@@ -3018,20 +3006,6 @@ BEGIN
         IF (op = S.eql) & (cb1 = cb2) OR (op = S.neq) & (cb1 # cb2)
         OR (op = S.gtr) & (cb1 > cb2) OR (op = S.geq) & (cb1 >= cb2)
         OR (op = S.lss) & (cb1 < cb2) OR (op = S.leq) & (cb1 <= cb2)
-        THEN val := 1 ELSE val := 0
-        END
-      END
-    ELSIF (x IS B.Str16) & (y IS B.Str16) THEN
-      xstr16 := x(B.Str16);  ystr16 := y(B.Str16);
-      IF (xstr16.bufpos >= 0) & (ystr16.bufpos >= 0) THEN
-        i := xstr16.bufpos;  k := ystr16.bufpos;
-        ch1 := B.str16buf[i];  ch2 := B.str16buf[k];
-        WHILE (ch1 = ch2) & (ch1 # 0X) DO
-          INC(i);  INC(k);  ch1 := B.str16buf[i];  ch2 := B.str16buf[k]
-        END;
-        IF (op = S.eql) & (ch1 = ch2) OR (op = S.neq) & (ch1 # ch2)
-        OR (op = S.gtr) & (ch1 > ch2) OR (op = S.geq) & (ch1 >= ch2)
-        OR (op = S.lss) & (ch1 < ch2) OR (op = S.leq) & (ch1 <= ch2)
         THEN val := 1 ELSE val := 0
         END
       END
@@ -3119,7 +3093,7 @@ BEGIN
   LoadLibraryW                := 8;
   GetProcAddress              := 0;
 
-  debug := Files.New('.DebugInfo');  Files.Set(rider, debug, 0)
+  debug := Files.New8(`.DebugInfo`);  Files.Set(rider, debug, 0)
 END Init;
 
 PROCEDURE Generate*(VAR modinit: B.Node);

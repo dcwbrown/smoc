@@ -1,4 +1,4 @@
-MODULE Write8;  (* Character output convenience functions *)
+MODULE Writer;  (* Character output convenience functions *)
 
 IMPORT SYSTEM, Rtl;
 
@@ -35,7 +35,7 @@ PROCEDURE l*();                   BEGIN write(crlf) END l;
 PROCEDURE c*(c: CHAR8);           BEGIN write(c)    END c;
 PROCEDURE s*(s: ARRAY OF CHAR8);  BEGIN writesz(s)  END s;
 PROCEDURE sl*(t: ARRAY OF CHAR8); BEGIN s(t); l     END sl;
-PROCEDURE b*(n: INTEGER);         BEGIN WHILE n > 0 DO writebyte(ORD(' ')); DEC(n) END END b;
+PROCEDURE b*(n: INTEGER);         BEGIN WHILE n > 0 DO writebyte(ORD(` `)); DEC(n) END END b;
 
 PROCEDURE h1*(i: INTEGER);  BEGIN IF i<10 THEN writebyte(i + 48) ELSE writebyte(i + 87) END END h1;
 
@@ -47,18 +47,18 @@ BEGIN
   h1(i MOD 16);
 END h;
 
-PROCEDURE hs*(i: INTEGER); BEGIN IF i < 0 THEN writebyte(ORD('-'));  i := -i END;  h(i) END hs;
+PROCEDURE hs*(i: INTEGER); BEGIN IF i < 0 THEN writebyte(ORD(`-`));  i := -i END;  h(i) END hs;
 
 PROCEDURE i*(j: INTEGER);
 BEGIN
-  IF j < 0 THEN writebyte(ORD('-')); j := -j END;
+  IF j < 0 THEN writebyte(ORD(`-`)); j := -j END;
   IF j > 9 THEN i(j DIV 10) END;
   writebyte(j MOD 10 + 48)
 END i;
 
 PROCEDURE ini*(i, n: INTEGER);
 BEGIN
-  IF i < 0 THEN writebyte(ORD('-'));  i := -i;  DEC(n) END;
+  IF i < 0 THEN writebyte(ORD(`-`));  i := -i;  DEC(n) END;
   IF n > 1 THEN ini(i DIV 10, n-1) END;
   IF (i = 0) THEN c(` `) ELSE writebyte(i MOD 10 + 48) END
 END ini;
@@ -67,7 +67,7 @@ PROCEDURE in*(i, n: INTEGER);
 BEGIN
   IF i = 0 THEN b(n-1); c(`0`)
   ELSE
-    IF i < 0 THEN writebyte(ORD('-'));  i := -i;  DEC(n) END;
+    IF i < 0 THEN writebyte(ORD(`-`));  i := -i;  DEC(n) END;
     ini(i, n)
   END
 END in;
@@ -88,4 +88,4 @@ BEGIN
 END init;
 
 BEGIN init
-END Write8.
+END Writer.

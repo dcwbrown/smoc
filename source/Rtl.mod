@@ -114,43 +114,43 @@ BEGIN
 END PutUtf8;
 
 
-PROCEDURE GetUtf16*(src: ARRAY OF CHAR; VAR i: INTEGER): INTEGER;
+PROCEDURE GetUtf16*(src: ARRAY OF SYSTEM.CARD16; VAR i: INTEGER): INTEGER;
 VAR result: INTEGER;
 BEGIN
   ASSERT(i < LEN(src));
-  result := ORD(src[i]);  INC(i);
+  result := src[i];  INC(i);
   IF result DIV 400H = 36H THEN    (* High surrogate *)
     result := LSL(result MOD 400H, 10) + 10000H;
-    IF (i < LEN(src)) & (ORD(src[i]) DIV 400H = 37H) THEN  (* Low surrogate *)
-      INC(result, ORD(src[i]) MOD 400H);  INC(i)
+    IF (i < LEN(src)) & (src[i] DIV 400H = 37H) THEN  (* Low surrogate *)
+      INC(result, src[i] MOD 400H);  INC(i)
     END
   END
 RETURN result END GetUtf16;
 
-PROCEDURE PutUtf16*(ch: INTEGER; VAR dst: ARRAY OF CHAR; VAR i: INTEGER);
+PROCEDURE PutUtf16*(ch: INTEGER; VAR dst: ARRAY OF SYSTEM.CARD16; VAR i: INTEGER);
 BEGIN
   ASSERT(i < LEN(dst));
   IF (ch < 10000H) & (i < LEN(dst)) THEN
-    dst[i] := CHR(ch);  INC(i)
+    dst[i] := ch;  INC(i)
   ELSIF i+1 < LEN(dst) THEN
     DEC(ch, 10000H);
-    dst[i] := CHR(0D800H + ch DIV 400H);  INC(i);
-    dst[i] := CHR(0DC00H + ch MOD 400H);  INC(i);
+    dst[i] := 0D800H + ch DIV 400H;  INC(i);
+    dst[i] := 0DC00H + ch MOD 400H;  INC(i);
   END
 END PutUtf16;
 
 
-PROCEDURE Utf8ToUtf16*(src: ARRAY OF BYTE;  VAR dst: ARRAY OF CHAR): INTEGER;
+PROCEDURE Utf8ToUtf16*(src: ARRAY OF BYTE;  VAR dst: ARRAY OF SYSTEM.CARD16): INTEGER;
 VAR i, j: INTEGER;
 BEGIN  i := 0;  j := 0;
   WHILE (i < LEN(src)) & (src[i] # 0) DO PutUtf16(GetUtf8(src, i), dst, j) END;
-  IF j < LEN(dst) THEN dst[j] := 0X;  INC(j) END
+  IF j < LEN(dst) THEN dst[j] := 0;  INC(j) END
 RETURN j END Utf8ToUtf16;
 
-PROCEDURE Utf16ToUtf8*(src: ARRAY OF CHAR;  VAR dst: ARRAY OF BYTE): INTEGER;
+PROCEDURE Utf16ToUtf8*(src: ARRAY OF SYSTEM.CARD16;  VAR dst: ARRAY OF BYTE): INTEGER;
 VAR i, j: INTEGER;
 BEGIN  i := 0;  j := 0;
-  WHILE (i < LEN(src)) & (src[i] # 0X) DO PutUtf8(GetUtf16(src, i), dst, j) END;
+  WHILE (i < LEN(src)) & (src[i] # 0) DO PutUtf8(GetUtf16(src, i), dst, j) END;
   IF j < LEN(dst) THEN dst[j] := 0;  INC(j) END
 RETURN j END Utf16ToUtf8;
 
@@ -165,15 +165,15 @@ BEGIN iRes := MessageBoxW(0, SYSTEM.ADR(msg), SYSTEM.ADR(title), 0)
 END MessageBox16;
 
 PROCEDURE GetArg*(VAR out: ARRAY OF CHAR8;  n: INTEGER);
-VAR i, arg: INTEGER;  str16: ARRAY 1024 OF CHAR16;
+VAR i, arg: INTEGER;  str16: ARRAY 1024 OF SYSTEM.CARD16;
 BEGIN (* GetArg *)
   ASSERT(argv # 0);
   IF (n < numArgs) & (n >= 0) THEN i := 0;
     SYSTEM.GET(argv+n*8, arg);  ASSERT(arg # 0);
 
     SYSTEM.GET(arg, str16[i]);
-    WHILE str16[i] # 0X DO INC(arg, 2);  INC(i);  SYSTEM.GET(arg, str16[i]) END
-  ELSE str16[0] := 0X
+    WHILE str16[i] # 0 DO INC(arg, 2);  INC(i);  SYSTEM.GET(arg, str16[i]) END
+  ELSE str16[0] := 0
   END;
   i := Utf16ToUtf8(str16, out);
 END GetArg;
@@ -196,7 +196,7 @@ PROCEDURE LowerCase*(VAR str: ARRAY OF CHAR8);
 VAR i: INTEGER;
 BEGIN
   WHILE (i < LEN(str)) & (str[i] # 0Y) DO
-    IF (ORD(str[i]) >= ORD('a'))  &  (ORD(str[i]) <= ORD('z')) THEN
+    IF (ORD(str[i]) >= ORD(`a`))  &  (ORD(str[i]) <= ORD(`z`)) THEN
       str[i] := CHR8(ORD(str[i]) - 20H)
     END;
     INC(i)

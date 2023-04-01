@@ -2,13 +2,13 @@ MODULE In;
 IMPORT SYSTEM, Rtl;
 VAR
   GetStdHandle: PROCEDURE(nStdHandle: SYSTEM.CARD32): INTEGER;
-  ReadConsoleW: PROCEDURE(
+  ReadConsoleA: PROCEDURE(
     hConsoleInput, lpBuffer: INTEGER;
     nNumberOfCharsToRead: SYSTEM.CARD32;
     lpNumberOfCharsRead, pInputControl: INTEGER
   ): SYSTEM.CARD32;
 
-  hIn: INTEGER; buf: CHAR; bufLen: INTEGER;
+  hIn: INTEGER; buf: CHAR8; bufLen: INTEGER;
   Done*: BOOLEAN;
 
 PROCEDURE Open*;
@@ -21,12 +21,12 @@ PROCEDURE GetCh;
 VAR nRead: SYSTEM.CARD32;
 BEGIN
   Done := Done
-        & (ReadConsoleW(hIn, SYSTEM.ADR(buf), 1, SYSTEM.ADR(nRead), 0) # 0)
+        & (ReadConsoleA(hIn, SYSTEM.ADR(buf), 1, SYSTEM.ADR(nRead), 0) # 0)
         & (nRead = 1);
   IF Done THEN bufLen := 1 ELSE bufLen := 0 END
 END GetCh;
 
-PROCEDURE Char*(VAR ch: CHAR);
+PROCEDURE Char*(VAR ch: CHAR8);
 BEGIN
   IF Done THEN
     IF bufLen = 0 THEN GetCh END;
@@ -38,22 +38,22 @@ PROCEDURE Ln*; (* skip until CRLF and consume them *)
 BEGIN
   IF Done THEN
     IF bufLen = 0 THEN GetCh END;
-    WHILE (bufLen = 1) & (buf # 0AX) DO GetCh END;
+    WHILE (bufLen = 1) & (buf # 0AY) DO GetCh END;
     IF bufLen = 1 THEN bufLen := 0 END
   END
 END Ln;
 
-PROCEDURE IsBlank(ch: CHAR): BOOLEAN;
-RETURN (ch = ' ') OR (ch = 9X) OR (ch = 0AX) OR (ch = 0DX)
+PROCEDURE IsBlank(ch: CHAR8): BOOLEAN;
+RETURN (ch = ` `) OR (ch = 9Y) OR (ch = 0AY) OR (ch = 0DY)
 END IsBlank;
 
-PROCEDURE IsDigit(ch: CHAR): BOOLEAN;
-RETURN (ch >= '0') & (ch <= '9')
+PROCEDURE IsDigit(ch: CHAR8): BOOLEAN;
+RETURN (ch >= `0`) & (ch <= `9`)
 END IsDigit;
 
-PROCEDURE IsHexDigit(ch: CHAR): BOOLEAN;
-  RETURN (ch >= 'A') & (ch <= 'F')
-  OR (ch >= 'a') & (ch <= 'f')
+PROCEDURE IsHexDigit(ch: CHAR8): BOOLEAN;
+  RETURN (ch >= `A`) & (ch <= `F`)
+  OR (ch >= `a`) & (ch <= `f`)
 END IsHexDigit;
 
 PROCEDURE SkipBlank;
@@ -71,13 +71,13 @@ BEGIN
     i := 0; neg := FALSE; isHex := FALSE; decOverflow := FALSE;
     finished := FALSE; hexOverflow := FALSE; digitCnt := 0;
     IF bufLen = 0 THEN GetCh END; SkipBlank;
-    IF (bufLen = 1) & (buf = '-') THEN neg := TRUE; GetCh END;
+    IF (bufLen = 1) & (buf = `-`) THEN neg := TRUE; GetCh END;
     IF (bufLen = 1) & IsDigit(buf) THEN
-      dec := ORD(buf) - ORD('0'); hex := dec; INC(digitCnt); GetCh
+      dec := ORD(buf) - ORD(`0`); hex := dec; INC(digitCnt); GetCh
     ELSE Done := FALSE
     END;
     WHILE Done & ~finished DO INC(digitCnt);
-      IF IsDigit(buf) THEN x := ORD(buf) - ORD('0');
+      IF IsDigit(buf) THEN x := ORD(buf) - ORD(`0`);
         hex := hex * 16 + x; dec0 := dec * 10 + x;
         hexOverflow := hexOverflow OR (digitCnt > 16);
         decOverflow := decOverflow OR (digitCnt > 19)
@@ -85,12 +85,12 @@ BEGIN
           OR (dec0 > 0) & ((dec0 - x) DIV 10 # dec);
         dec := dec0
       ELSIF IsHexDigit(buf) THEN isHex := TRUE; x := ORD(buf) + 10;
-        IF (buf >= 'a') & (buf <= 'f')
-        THEN DEC(x, ORD('a')) ELSE DEC(x, ORD('A'))
+        IF (buf >= `a`) & (buf <= `f`)
+        THEN DEC(x, ORD(`a`)) ELSE DEC(x, ORD(`A`))
         END;
         hexOverflow := hexOverflow OR (digitCnt > 16);
         hex := hex * 16 + x
-      ELSIF (buf = 'h') OR (buf = 'H') THEN
+      ELSIF (buf = `h`) OR (buf = `H`) THEN
         isHex := TRUE; finished := TRUE; GetCh;
         Done := Done & IsBlank(buf) & ~hexOverflow
       ELSE finished := TRUE;
@@ -108,7 +108,7 @@ END Int;
 PROCEDURE Init;
 BEGIN (* Init *)
   SYSTEM.GetProcAddress(GetStdHandle, Rtl.HKernel, SYSTEM.ADR(`GetStdHandle`)); ASSERT(GetStdHandle # NIL);
-  SYSTEM.GetProcAddress(ReadConsoleW, Rtl.HKernel, SYSTEM.ADR(`ReadConsoleW`)); ASSERT(ReadConsoleW # NIL);
+  SYSTEM.GetProcAddress(ReadConsoleA, Rtl.HKernel, SYSTEM.ADR(`ReadConsoleA`)); ASSERT(ReadConsoleA # NIL);
 END Init;
 
 BEGIN Init; Open

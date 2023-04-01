@@ -1,5 +1,5 @@
 MODULE Files;
-IMPORT SYSTEM, Rtl, Out;
+IMPORT SYSTEM, Rtl, w := Writer;
 
 CONST
   (* Win32 Const *)
@@ -27,6 +27,13 @@ CONST
   FILE_SHARE_READ   = {0};
   FILE_SHARE_WRITE  = {1};
 
+  (* File operations for CreateFile *)
+  FileOpenR    = 0;
+  FileOpenW    = 1;
+  FileNew      = 2;
+  FileRegister = 3;
+
+
 TYPE
   Handle       = INTEGER;
   Pointer      = INTEGER;
@@ -35,36 +42,38 @@ TYPE
   Bool         = SYSTEM.CARD32;
   Int          = SYSTEM.CARD32;
 
-  PathStr16 = ARRAY MAX_PATH+1 OF CHAR16;
-  PathStr8  = ARRAY MAX_PATH+1 OF CHAR8;
+  PathStr16 = ARRAY MAX_PATH+1 OF SYSTEM.CARD16;
+  PathStr   = ARRAY MAX_PATH+1 OF CHAR8;
 
   File*    = POINTER TO FileDesc;
   FileDesc = RECORD (Rtl.Finalised)
-               new, ronly:                    BOOLEAN;
-               hFile:                         Handle;
-               name, temp: PathStr16; pos, len: INTEGER
+               new, ronly: BOOLEAN;
+               hFile:      Handle;
+               name, temp: PathStr;
+               pos, len:   INTEGER
              END;
   Rider*   = RECORD
-               eof*:         BOOLEAN;
-               res*:         INTEGER;
-               f: File; pos: INTEGER
+               eof*: BOOLEAN;
+               res*: INTEGER;
+               f:    File;
+               pos:  INTEGER
              END;
 
 VAR
   tempId: INTEGER;
 
   (* Win32 Interface *)
-  GetFileAttributesW:      PROCEDURE(lpFileName: ARRAY [untagged] OF CHAR16): Dword;
-  DeleteFileW:             PROCEDURE(lpFilename: ARRAY [untagged] OF CHAR16): Bool;
+  GetFileAttributesW:      PROCEDURE(lpFileName: ARRAY [untagged] OF SYSTEM.CARD16): Dword;
+  DeleteFileW:             PROCEDURE(lpFilename: ARRAY [untagged] OF SYSTEM.CARD16): Bool;
   CloseHandle:             PROCEDURE(hObject: Handle): Bool;
   FlushFileBuffers:        PROCEDURE(hFile: Handle): Bool;
   SetEndOfFile:            PROCEDURE(hFile: Handle): Bool;
   GetFileSizeEx:           PROCEDURE(hFile: Handle; lpFileSize: Pointer): Bool;
   GetCurrentProcessId:     PROCEDURE(): Dword;
   MoveFileExW:             PROCEDURE(lpExistingFileName,
-                                     lpNewFileName:         ARRAY [untagged] OF CHAR16;
+                                     lpNewFileName:         ARRAY [untagged] OF SYSTEM.CARD16;
                                      dwFlags:               Dword): Bool;
-  CreateFileW:             PROCEDURE(lpFileName:            ARRAY [untagged] OF CHAR16;
+  CreateFileW:             PROCEDURE(lpFileName:            ARRAY [untagged] OF SYSTEM.CARD16;
                                      dwDesiredAccess,
                                      dwShareMode:           Dword;
                                      lpSecurityAttributes:  Pointer;
@@ -85,10 +94,10 @@ VAR
                                      liDistanceToMove:      LargeInteger;
                                      lpNewFilePointer:      Pointer;
                                      dwMoveMethod:          Dword): Bool;
-  wsprintfW:               PROCEDURE(VAR lpOut:             ARRAY [untagged] OF CHAR16;
-                                     lpFmt:                 ARRAY [untagged] OF CHAR16;
+  wsprintfW:               PROCEDURE(VAR lpOut:             ARRAY [untagged] OF SYSTEM.CARD16;
+                                     lpFmt:                 ARRAY [untagged] OF SYSTEM.CARD16;
                                      par1, par2:            INTEGER): Int;
-  GetEnvironmentVariableW: PROCEDURE(lpName:                ARRAY [untagged] OF CHAR16;
+  GetEnvironmentVariableW: PROCEDURE(lpName:                ARRAY [untagged] OF SYSTEM.CARD16;
                                      lpBuffer:              Pointer;
                                      nSize:                 Dword): Dword;
 
@@ -100,34 +109,72 @@ BEGIN
   IF f.new THEN Out.String(f.temp) ELSE Out.String(f.name) END; Out.Ln*)
 END Finalise;
 
+(* Operations: FileOpenR, FileOpenW, FileNew, FileRegister. *)
+PROCEDURE CreateFile(name: ARRAY OF CHAR8; op: INTEGER): INTEGER;
+VAR hFile, len, access, mode, disposition, flags: INTEGER; name16: PathStr16;
+BEGIN
+  (*
+  w.s(`** Create file '`); w.s(name); w.s(`' operation `);
+  CASE op OF
+  | FileNew:      w.sl(`FileNew.`)
+  | FileRegister: w.sl(`FileRegister.`)
+  | FileOpenR:    w.sl(`FileOpenR.`)
+  | FileOpenW:    w.sl(`FileOpenW.`)
+  END;
+  *)
+
+  IF op = FileNew THEN
+    disposition := CREATE_NEW;
+    flags       := ORD(FILE_ATTRIBUTE_TEMPORARY+FILE_FLAG_DELETE_ON_CLOSE);
+  ELSIF op = FileRegister THEN
+    disposition := CREATE_ALWAYS;
+    flags := 0;
+  ELSE
+    disposition := OPEN_EXISTING;
+    flags       := 0;
+  END;
+  IF op = FileOpenR THEN
+    access      := ORD(GENERIC_READ);
+    mode        := ORD(FILE_SHARE_READ);
+  ELSE
+    access      := ORD(GENERIC_READ+GENERIC_WRITE);
+    mode        := ORD(FILE_SHARE_READ+FILE_SHARE_WRITE+FILE_SHARE_DELETE);
+  END;
+  len := Rtl.Utf8ToUtf16(name, name16);
+  hFile := CreateFileW(name16, access, mode, 0, disposition, flags, 0);
+RETURN hFile END CreateFile;
+
+PROCEDURE GetFileAttributes(name: ARRAY OF CHAR8): INTEGER;
+VAR name16: PathStr16;  len, attr: INTEGER;
+BEGIN
+  len  := Rtl.Utf8ToUtf16(name, name16);
+  attr := GetFileAttributesW(name16);
+RETURN attr END GetFileAttributes;
+
 PROCEDURE NewFile(VAR file: File; hFile: Handle);
 BEGIN
   NEW(file); file.hFile := hFile;
   Rtl.RegisterFinalised(file, Finalise)
 END NewFile;
 
-PROCEDURE Old*(name: ARRAY OF CHAR16): File;
+PROCEDURE Old*(name: ARRAY OF CHAR8): File;
 VAR file: File; hFile: Handle;
     attr: Dword; ronly: BOOLEAN; bRes: Bool;
 BEGIN
-  attr := GetFileAttributesW(name);
+  attr := GetFileAttributes(name);
   IF attr # INVALID_FILE_ATTRIBUTES THEN
-    IF FILE_ATTRIBUTE_READONLY * SYSTEM.VAL(SET, attr) # {} THEN
-      hFile := CreateFileW(
-        name, ORD(GENERIC_READ), ORD(FILE_SHARE_READ),
-        0, OPEN_EXISTING, 0, 0
-      );
-      ronly := TRUE
-    ELSE hFile := CreateFileW(
-        name, ORD(GENERIC_READ+GENERIC_WRITE),
-        ORD(FILE_SHARE_READ+FILE_SHARE_WRITE+FILE_SHARE_DELETE),
-        0, OPEN_EXISTING, 0, 0
-      );
-      ronly := FALSE
+    ronly := FILE_ATTRIBUTE_READONLY * SYSTEM.VAL(SET, attr) # {};
+    IF ronly THEN
+      hFile := CreateFile(name, FileOpenR)
+    ELSE
+      hFile := CreateFile(name, FileOpenW)
     END;
     IF hFile # -1 THEN
-      NewFile(file, hFile); file.new := FALSE;
-      file.ronly := ronly; file.name := name; file.pos := 0;
+      NewFile(file, hFile);
+      file.new   := FALSE;
+      file.ronly := ronly;
+      file.name  := name;
+      file.pos   := 0;
       bRes := GetFileSizeEx(hFile, SYSTEM.ADR(file.len))
     ELSE ASSERT(FALSE)
     END
@@ -135,83 +182,91 @@ BEGIN
   RETURN file
 END Old;
 
-PROCEDURE Old8*(name: ARRAY OF CHAR8): File;
-VAR name16: PathStr16;  len: INTEGER;
-BEGIN
-  len := Rtl.Utf8ToUtf16(name, name16);  RETURN Old(name16)
-END Old8;
+PROCEDURE SetWString(s: ARRAY OF CHAR8; VAR d: ARRAY OF SYSTEM.CARD16);
+VAR len: INTEGER;
+BEGIN len := Rtl.Utf8ToUtf16(s, d) END SetWString;
 
-PROCEDURE New*(name: ARRAY OF CHAR16): File;
-VAR str, temp: PathStr16; pathLen, pid: Dword;
-    hFile: Handle; file: File; iRes: Int; time: INTEGER;
+PROCEDURE GetUserProfile(VAR dir: ARRAY OF CHAR8; VAR len: INTEGER);
+VAR s, userprofile: PathStr16;
 BEGIN
-  pathLen := GetEnvironmentVariableW(
-    'USERPROFILE', SYSTEM.ADR(str), LEN(str)
-  );
-  pid := GetCurrentProcessId(); time := Rtl.Time();
-  IF pathLen < MAX_PATH-60 THEN
-    iRes := wsprintfW(temp, '%s\.pocTemp_%x', SYSTEM.ADR(str), pid);
-    iRes := wsprintfW(str, '%s_%lx', SYSTEM.ADR(temp), time);
-    iRes := wsprintfW(temp, '%s_%lx', SYSTEM.ADR(str), tempId)
-  ELSE iRes := wsprintfW(temp, '.temp%lu_%lu', time, tempId)
+  SetWString(`USERPROFILE`, s);
+  len := GetEnvironmentVariableW(s, SYSTEM.ADR(userprofile), LEN(userprofile));
+  len := Rtl.Utf16ToUtf8(userprofile, dir);
+(*w.s(`Got user profile as '`); w.s(dir); w.sl(`'.`);*)
+END GetUserProfile;
+
+PROCEDURE ToHex(h: INTEGER): CHAR8;
+VAR  ch: CHAR8;
+BEGIN h := h MOD 16;
+  IF h < 10 THEN ch := CHR8(h +      ORD(`0`))
+  ELSE           ch := CHR8(h - 10 + ORD(`a`)) END
+RETURN ch END ToHex;
+
+PROCEDURE Append* (src: ARRAY OF CHAR8;  VAR dst: ARRAY OF CHAR8);
+VAR i, j: INTEGER;
+BEGIN
+  i := 0;  WHILE dst[i] # 0Y DO INC(i) END;  j := 0;
+  WHILE src[j] # 0Y DO  dst[i] := src[j];  INC(i);  INC(j)  END;
+  dst[i] := 0Y
+END Append;
+
+PROCEDURE AppendHex(h: INTEGER; VAR dst: ARRAY OF CHAR8);
+VAR hex: ARRAY 20 OF CHAR8; i, j: INTEGER;
+BEGIN
+  i := LEN(hex)-1;
+  WHILE (i >= 0) & (h # 0) DO
+    hex[i] := ToHex(h);  DEC(i);  h := h DIV 16
+  END;
+  IF i = 19 THEN hex[i] := `0`; DEC(i) END;
+  INC(i);
+  j := 0;  WHILE dst[j] # 0Y DO INC(j) END;
+  WHILE i < LEN(hex) DO  dst[j] := hex[i];  INC(i);  INC(j)  END;
+  dst[j] := 0Y
+END AppendHex;
+
+PROCEDURE MakeTempName(VAR name: ARRAY OF CHAR8);
+VAR
+pid, time, len: INTEGER;
+BEGIN
+  pid  := GetCurrentProcessId();
+  time := Rtl.Time();
+  GetUserProfile(name, len);
+  IF len < MAX_PATH-60 THEN
+    Append(`\.smoctmp`, name); AppendHex(pid, name);
+    Append(`-`, name);         AppendHex(time, name);
+    Append(`-`, name);         AppendHex(tempId, name);
+  ELSE
+    name := `.tmp`;    AppendHex(time, name);
+    Append(`-`, name); AppendHex(tempId, name);
   END;
   INC(tempId);
-  hFile := CreateFileW(
-    temp, ORD(GENERIC_READ+GENERIC_WRITE),
-    ORD(FILE_SHARE_READ+FILE_SHARE_WRITE+FILE_SHARE_DELETE), 0,
-    CREATE_NEW, ORD(FILE_ATTRIBUTE_TEMPORARY+FILE_FLAG_DELETE_ON_CLOSE), 0
-  );
-  IF hFile # -1 THEN
-    NewFile(file, hFile); file.new := TRUE;
-    file.name := name; file.temp := temp;
-    file.pos := 0; file.len := 0
-  END;
-  RETURN file
-END New;
+END MakeTempName;
 
 PROCEDURE New8*(name: ARRAY OF CHAR8): File;
 VAR
-  str,     temp: PathStr16;
-  pathLen, pid:  Dword;
-  hFile:         Handle;
-  file:          File;
-  iRes:          Int;
-  time, len:     INTEGER;
+  hFile: Handle;
+  file:  File;
+  temp:  PathStr;
 BEGIN
-  pathLen := GetEnvironmentVariableW('USERPROFILE', SYSTEM.ADR(str), LEN(str));
-  pid  := GetCurrentProcessId();
-  time := Rtl.Time();
-  IF pathLen < MAX_PATH-60 THEN
-    iRes := wsprintfW(temp, '%s\.pocTemp_%x',  SYSTEM.ADR(str),  pid);
-    iRes := wsprintfW(str,  '%s_%lx',          SYSTEM.ADR(temp), time);
-    iRes := wsprintfW(temp, '%s_%lx',          SYSTEM.ADR(str),  tempId)
-  ELSE iRes := wsprintfW(temp, '.temp%lu_%lu', time,             tempId)
-  END;
-  INC(tempId);
-  hFile := CreateFileW(temp, ORD(GENERIC_READ+GENERIC_WRITE),
-                       ORD(FILE_SHARE_READ+FILE_SHARE_WRITE+FILE_SHARE_DELETE), 0,
-                       CREATE_NEW, ORD(FILE_ATTRIBUTE_TEMPORARY+FILE_FLAG_DELETE_ON_CLOSE), 0);
+  MakeTempName(temp);
+  hFile := CreateFile(temp, FileNew);
   IF hFile # -1 THEN
     NewFile(file, hFile);
     file.new  := TRUE;
-    len := Rtl.Utf8ToUtf16(name, file.name);
+    file.name := name;
     file.temp := temp;
-    file.pos  := 0;
-    file.len  := 0
+    file.pos := 0; file.len := 0
   END;
   RETURN file
 END New8;
+
 
 PROCEDURE Register*(f: File);
 VAR hFile2: Handle; buf: ARRAY 10000H OF BYTE;
     bRes: Bool; byteRead, byteWritten: Dword;
 BEGIN
   IF f.new THEN
-    hFile2 := CreateFileW(
-      f.name, ORD(GENERIC_READ+GENERIC_WRITE),
-      ORD(FILE_SHARE_READ+FILE_SHARE_WRITE+FILE_SHARE_DELETE),
-      0, CREATE_ALWAYS, 0, 0
-    );
+    hFile2 := CreateFile(f.name, FileRegister);
     ASSERT(hFile2 # -1); f.pos := 0;
     bRes := SetFilePointerEx(f.hFile, 0, 0, FILE_BEGIN);
     REPEAT
@@ -246,7 +301,7 @@ BEGIN
   ASSERT(bRes # 0); bRes := SetEndOfFile(f.hFile); ASSERT(bRes # 0)
 END Purge;
 
-PROCEDURE Delete*(name: ARRAY OF CHAR16; VAR res: INTEGER);
+PROCEDURE Delete*(name: ARRAY OF SYSTEM.CARD16; VAR res: INTEGER);
 VAR bRes: Bool;
 BEGIN
   bRes := DeleteFileW(name);
@@ -261,7 +316,7 @@ BEGIN
   IF bRes # 0 THEN res := 0 ELSE res := -1 END
 END Delete8;
 
-PROCEDURE Rename*(old, new: ARRAY OF CHAR16; VAR res: INTEGER);
+PROCEDURE Rename*(old, new: ARRAY OF SYSTEM.CARD16; VAR res: INTEGER);
 VAR bRes: Bool;
 BEGIN
   bRes := MoveFileExW(old, new, ORD(MOVEFILE_COPY_ALLOWED));
@@ -345,7 +400,7 @@ BEGIN
   x := n + LSL(b MOD 64 - b DIV 64 * 64, s)
 END ReadNum;
 
-PROCEDURE ReadChar16*(VAR r: Rider; VAR x: CHAR16);
+PROCEDURE ReadChar16*(VAR r: Rider; VAR x: SYSTEM.CARD16);
 VAR bRes: Bool; byteRead: Dword; f: File;
 BEGIN Read0(r, x)
 END ReadChar16;
@@ -360,13 +415,13 @@ BEGIN
   END
 END ReadString8;
 
-PROCEDURE ReadString16*(VAR r: Rider; VAR x: ARRAY OF CHAR16);
+PROCEDURE ReadString16*(VAR r: Rider; VAR x: ARRAY OF SYSTEM.CARD16);
 VAR i: INTEGER; done: BOOLEAN;
 BEGIN
   done := FALSE; i := 0;
   WHILE ~r.eof & ~done DO
     ReadChar16(r, x[i]);
-    IF r.eof THEN x[i] := 0X ELSE done := x[i] = 0X; INC(i) END
+    IF r.eof THEN x[i] := 0 ELSE done := x[i] = 0; INC(i) END
   END
 END ReadString16;
 
@@ -434,7 +489,7 @@ BEGIN
   Write(r, x MOD 128)
 END WriteNum;
 
-PROCEDURE WriteChar16*(VAR r: Rider; x: CHAR16);
+PROCEDURE WriteChar16*(VAR r: Rider; x: SYSTEM.CARD16);
 BEGIN Write0(r, x)
 END WriteChar16;
 
@@ -445,11 +500,11 @@ BEGIN i := 0;
   Write(r, 0)
 END WriteString8;
 
-PROCEDURE WriteString16*(VAR r: Rider; x: ARRAY OF CHAR16);
+PROCEDURE WriteString16*(VAR r: Rider; x: ARRAY OF SYSTEM.CARD16);
 VAR i: INTEGER;
 BEGIN i := 0;
-  WHILE (i < LEN(x)) & (x[i] # 0X) DO WriteChar16(r, x[i]); INC(i) END;
-  WriteChar16(r, 0X)
+  WHILE (i < LEN(x)) & (x[i] # 0) DO WriteChar16(r, x[i]); INC(i) END;
+  WriteChar16(r, 0)
 END WriteString16;
 
 PROCEDURE WriteSet*(VAR r: Rider; x: SET);

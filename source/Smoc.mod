@@ -2,7 +2,7 @@ MODULE Smoc;
 (*$CONSOLE*)
 
 IMPORT
-  SYSTEM, Rtl, Files, S := Scanner, B := Base, G := Generator, P := Parser, w := Write8;
+  SYSTEM, Rtl, Files, S := Scanner, B := Base, G := Generator, P := Parser, w := Writer;
 
 VAR
   arg, fname: ARRAY 1024 OF CHAR8;
@@ -41,7 +41,7 @@ VAR srcfile: Files.File;  modinit: B.Node;
     i, sym, startTime, endTime: INTEGER;
 BEGIN
   outFname(fname);
-  B.SetSrcPath(fname);  srcfile := Files.Old8(fname);
+  B.SetSrcPath(fname);  srcfile := Files.Old(fname);
   S.Init(srcfile);  S.Get(sym);
 
   startTime := Rtl.Time();
@@ -57,10 +57,7 @@ END Compile;
 
 
 PROCEDURE ErrorNotFound(fname: ARRAY OF CHAR8);
-BEGIN
-  w.s(`File `);  w.s(fname);
-  w.s(` not found`);  w.l
-END ErrorNotFound;
+BEGIN w.s(`File `);  w.s(fname);  w.sl(` not found`) END ErrorNotFound;
 
 
 PROCEDURE Build(fname: ARRAY OF CHAR8);
@@ -75,7 +72,7 @@ VAR
   varsize:    INTEGER;
 BEGIN
   w.sl(`File name                 code      data    global   time`);
-  start := Rtl.Time();  buildfile := Files.Old8(fname);
+  start := Rtl.Time();  buildfile := Files.Old(fname);
   codesize := 0;  staticsize := 0;  varsize := 0;
   Files.Set(r, buildfile, 0);  i := 0;
   Files.Read(r, x);
@@ -86,7 +83,7 @@ BEGIN
     END;
     IF i > 0 THEN
       srcfname[i] := 0Y;
-      IF Files.Old8(srcfname) # NIL THEN
+      IF Files.Old(srcfname) # NIL THEN
         Compile(srcfname);
         INC(codesize,   G.pc);
         INC(staticsize, G.staticSize);
@@ -150,7 +147,7 @@ END NotifyError8;
 BEGIN
   S.InstallNotifyError(NotifyError8);  Get;  Arguments;
   IF fname[0] # 0Y THEN
-    IF Files.Old8(fname) # NIL THEN
+    IF Files.Old(fname) # NIL THEN
       IF ~buildMode THEN Compile(fname) ELSE Build(fname) END
     ELSE ErrorNotFound(fname)
     END

@@ -2,15 +2,13 @@ Rtl.mod
 BigNums.mod
 Out.mod
 In.mod
+Writer.mod
 Files.mod
 Crypt.mod
 Scanner.mod
 Base.mod
 Linker.mod
 Generator.mod
-Write8.mod
 Parser.mod
-HeapTrace.mod
 Dumper.mod
-Write16.mod
 Smoc.mod

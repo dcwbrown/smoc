@@ -1,6 +1,6 @@
 MODULE test;  (*$CONSOLE*)
 
-IMPORT Dumper, w := Write8;
+IMPORT Dumper, w := Writer;
 
 CONST
   cs8 = `8 bit string`;
@@ -13,6 +13,11 @@ VAR
   u: ARRAY 10 OF CHAR16;
   v: ARRAY 10 OF CHAR16;
   b: BOOLEAN;
+
+PROCEDURE assignvarstring(VAR s: ARRAY OF CHAR);
+BEGIN
+  s := `splurgle`
+END assignvarstring;
 
 BEGIN
   w.sl(`Hello teapots.`);
@@ -36,19 +41,19 @@ BEGIN
 
   c := `Q`;
   w.s(`c: '`);  w.c(c);  w.sl(`'.`);
-  Dumper.DumpVar("c", c);
+  Dumper.DumpVar(`c`, c);
 
   s := `Hello`;
   w.s(`s: '`);  w.s(s);  w.sl(`'.`);
-  Dumper.DumpVar("s", s);
+  Dumper.DumpVar(`s`, s);
 
   s[1] := `a`;
   w.s(`s: '`);  w.s(s);  w.sl(`'.`);
-  Dumper.DumpVar("s", s);
+  Dumper.DumpVar(`s`, s);
 
   t := `Hello`;
   w.s(`t: '`);  w.s(t);  w.sl(`'.`);
-  Dumper.DumpVar("t", t);
+  Dumper.DumpVar(`t`, t);
 
   IF s = t THEN w.sl(`s=t.`) ELSE w.sl(`s#t.`) END;
   IF s < t THEN w.sl(`s<t.`) ELSE w.sl(`s¬<t.`) END;
@@ -67,6 +72,10 @@ BEGIN
 
   ASSERT(s[2] # 1Y);
 
+  assignvarstring(s);
+  w.s(`s: '`);  w.s(s);  w.sl(`'.`);
+
   IF FALSE THEN i := 50;  s[i] := ` ` END;
   IF FALSE THEN ASSERT(FALSE)         END;
 END test.
+8
