@@ -137,9 +137,9 @@ VAR
 
   (* Static data address*)
   (* Win32 specifics *)
-  GetModuleHandleExW, GetModuleHandleExA,
+  GetModuleHandleExW,
   ExitProcess,
-  LoadLibraryW, LoadLibraryA,
+  LoadLibraryA,
   GetProcAddress,
   AddVectoredExceptionHandler,
   MessageBoxA,
@@ -3008,12 +3008,10 @@ BEGIN
   (* Windows module base.                                                     *)
 
 
-  GetModuleHandleExA          := 48;
-  LoadLibraryA                := 40;
   AddVectoredExceptionHandler := 32;
   GetModuleHandleExW          := 24;
   ExitProcess                 := 16;
-  LoadLibraryW                := 8;
+  LoadLibraryA                := 8;
   GetProcAddress              := 0;
 
   debug := Files.New8(`.DebugInfo`);  Files.Set(rider, debug, 0)

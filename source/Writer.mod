@@ -58,7 +58,6 @@ END i;
 
 PROCEDURE ini*(i, n: INTEGER);
 BEGIN
-  IF i < 0 THEN writebyte(ORD(`-`));  i := -i;  DEC(n) END;
   IF n > 1 THEN ini(i DIV 10, n-1) END;
   IF (i = 0) THEN c(` `) ELSE writebyte(i MOD 10 + 48) END
 END ini;

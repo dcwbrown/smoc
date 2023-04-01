@@ -16,7 +16,7 @@ CONST
 
   (* Import section - Kernel32 import table constants *)
   K32TableOffset = 40;  (* Relative to start of .idata (imports) section *)
-  K32TableLen    = 8;   (* 7 imports and a zero entry *)
+  K32TableLen    = 6;   (* 5 imports and a zero entry *)
   K32TableSize   = K32TableLen * 8;
   K32NameOffset  = K32TableOffset + K32TableSize;
   K32HintOffset  = K32NameOffset + 16;
@@ -304,12 +304,10 @@ BEGIN (* WriteImports *)
 
   (* Write hint table of imported entry point names *)
   Files.Set(Rider, Out, metrics.fadr + K32HintOffset + 2);   Files.WriteString8(Rider, `GetProcAddress`);
-  Files.Set(Rider, Out, metrics.fadr + K32HintOffset + 34);  Files.WriteString8(Rider, `LoadLibraryW`);
+  Files.Set(Rider, Out, metrics.fadr + K32HintOffset + 34);  Files.WriteString8(Rider, `LoadLibraryA`);
   Files.Set(Rider, Out, metrics.fadr + K32HintOffset + 66);  Files.WriteString8(Rider, `ExitProcess`);
   Files.Set(Rider, Out, metrics.fadr + K32HintOffset + 98);  Files.WriteString8(Rider, `GetModuleHandleExW`);
   Files.Set(Rider, Out, metrics.fadr + K32HintOffset + 130); Files.WriteString8(Rider, `AddVectoredExceptionHandler`);
-  Files.Set(Rider, Out, metrics.fadr + K32HintOffset + 162); Files.WriteString8(Rider, `LoadLibraryA`);
-  Files.Set(Rider, Out, metrics.fadr + K32HintOffset + 194); Files.WriteString8(Rider, `GetModuleHandleExA`);
 
   metrics.size := K32HintOffset + 160;
 
