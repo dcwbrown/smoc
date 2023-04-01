@@ -79,7 +79,7 @@ TYPE
   Str*   = ARRAY MaxStrLen+1 OF CHAR;
 
   SetCompilerFlagProc* = PROCEDURE(pragma: ARRAY OF CHAR);
-  NotifyError8Proc*    = PROCEDURE(line, column: INTEGER;  msg: ARRAY OF CHAR);
+  NotifyErrorProc*     = PROCEDURE(line, column: INTEGER;  msg: ARRAY OF CHAR);
 
 VAR
   ival*, slen*: INTEGER;
@@ -95,20 +95,20 @@ VAR
   KWX:    ARRAY 11 OF INTEGER;
   keyTab: ARRAY NKW OF RECORD sym: INTEGER;  id: IdStr END;
 
-  buffer: ARRAY 80000H OF BYTE;
-  bufPos,  bufSize:   INTEGER;
+  buffer:          ARRAY 80000H OF BYTE;
+  bufPos, bufSize: INTEGER;
 
   errPos:                 INTEGER;
   lineNumber, linePos:    INTEGER;
   lastLine,   lastColumn: INTEGER;
 
   SetCompilerFlag: SetCompilerFlagProc;
-  NotifyError8:    NotifyError8Proc;
+  NotifyError:     NotifyErrorProc;
 
 PROCEDURE Mark*(msg: ARRAY OF CHAR);
 BEGIN
-  IF (bufPos > errPos) & (errCnt < 25) & (NotifyError8 # NIL) THEN
-    NotifyError8(lastLine, lastColumn, msg)
+  IF (bufPos > errPos) & (errCnt < 25) & (NotifyError # NIL) THEN
+    NotifyError(lastLine, lastColumn, msg)
   END;
   INC(errCnt);  errPos := bufPos + 1
 END Mark;
@@ -416,8 +416,8 @@ PROCEDURE InstallSetCompilerFlag*(proc: SetCompilerFlagProc);
 BEGIN SetCompilerFlag := proc
 END InstallSetCompilerFlag;
 
-PROCEDURE InstallNotifyError*(proc8: NotifyError8Proc);
-BEGIN NotifyError8 := proc8
+PROCEDURE InstallNotifyError*(proc: NotifyErrorProc);
+BEGIN NotifyError := proc
 END InstallNotifyError;
 
 PROCEDURE EnterKW(sym: INTEGER;  name: IdStr);
