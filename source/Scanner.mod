@@ -84,8 +84,8 @@ TYPE
 VAR
   ival*, slen*: INTEGER;
   rval*:        REAL;
-  id8*:         IdStr;
-  str8*:        Str;
+  id*:          IdStr;
+  str*:         Str;
   ansiStr*:     BOOLEAN;
   errCnt*:      INTEGER;
 
@@ -133,15 +133,15 @@ BEGIN i := 0;  sym := ident;
                           OR (ch >= ORD("A")) & (ch <= ORD("Z"))
                           OR (ch >= ORD("a")) & (ch <= ORD("z"))
                           OR (ch =  ORD("_"))) DO
-    Rtl.PutUtf8 (ch, id8, i);
+    Rtl.PutUtf8 (ch, id, i);
     Read
   END;
-  id8[i] := 0Y;
+  id[i] := 0Y;
   IF i >= MaxIdLen THEN Mark("identifier too long") END;
   (* search for keyword *)
   IF i < LEN(KWX) THEN
     j := KWX[i-1];  k := KWX[i];
-    WHILE (keyTab[j].id # id8) & (j < k) DO INC(j) END;
+    WHILE (keyTab[j].id # id) & (j < k) DO INC(j) END;
     IF j < k THEN sym := keyTab[j].sym END
   END
 END Identifier;
@@ -150,9 +150,9 @@ PROCEDURE String8(quoteCh: INTEGER);  (* Prototyping CHAR support *)
 BEGIN
   slen := 0;  Read;
   WHILE ~eof & (slen < MaxStrLen) & (ch # quoteCh) DO
-    Rtl.PutUtf8(ch, str8, slen); Read
+    Rtl.PutUtf8(ch, str, slen); Read
   END;
-  Read;  str8[slen] := 0Y;  INC(slen);
+  Read;  str[slen] := 0Y;  INC(slen);
   IF slen >= MaxStrLen THEN Mark("String too long") END;
 END String8;
 
@@ -177,7 +177,7 @@ BEGIN
     IF ~eof & (ch # ORD("$")) THEN
       m := hexdigit(); Read;  IF m >= 0 THEN n := hexdigit(); Read END;
       IF (m >= 0) & (n >= 0) THEN
-        IF slen < MaxStrLen THEN str8[slen] := CHR(m * 10H + n); INC(slen) END
+        IF slen < MaxStrLen THEN str[slen] := CHR(m * 10H + n); INC(slen) END
       ELSE
         Mark("Hex digit expected")
       END
@@ -185,7 +185,7 @@ BEGIN
   END;
   IF slen > MaxStrLen THEN Mark("Hex string too long") END;
   Read;
-  str8[slen] := 0Y;  (* Guaranteed terminator, not included in string length *)
+  str[slen] := 0Y;  (* Guaranteed terminator, not included in string length *)
   RETURN string8
 END HexString;
 
@@ -285,8 +285,8 @@ BEGIN
     UNTIL i = n;
     IF ch = ORD("Y") THEN sym := string8;
       IF k2 < 100H THEN ival := k2 ELSE Mark("Illegal value");  ival := 0  END;
-      IF k2 = 0 THEN str8[0] := 0Y;  slen := 1
-      ELSE str8[0] := CHR(k2);  str8[1] := 0Y;  slen := 2
+      IF k2 = 0 THEN str[0] := 0Y;  slen := 1
+      ELSE str[0] := CHR(k2);  str[1] := 0Y;  slen := 2
       END
     ELSIF ch = ORD("R") THEN sym := real;  rval := SYSTEM.VAL(REAL, k2)
     ELSE sym := int;  ival := k2

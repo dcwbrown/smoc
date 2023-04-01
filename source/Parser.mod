@@ -256,7 +256,7 @@ VAR found: BOOLEAN;  xlev: INTEGER;
     x: B.Object;  ident: B.Ident;  scope: B.Scope;
 BEGIN scope := B.topScope;  found := FALSE;
   WHILE (scope # NIL) & ~found DO ident := scope.first;
-    WHILE (ident # NIL) & (ident.name # S.id8) DO ident := ident.next END;
+    WHILE (ident # NIL) & (ident.name # S.id) DO ident := ident.next END;
     IF ident # NIL THEN x := ident.obj;  found := TRUE;
       IF x = NIL THEN Mark("identifier undefined")
       ELSIF x IS B.Var THEN xlev := x(B.Var).lev;
@@ -295,7 +295,7 @@ BEGIN x := FindIdent();  GetSym;
   IF (x # NIL) & (x IS B.Module) & (sym = S.period) THEN GetSym;
     IF sym = S.ident THEN
       mod := x(B.Module);  ident := mod.first;
-      WHILE (ident # NIL) & (ident.name # S.id8) DO
+      WHILE (ident # NIL) & (ident.name # S.id) DO
         ident := ident.next
       END;
       IF ident # NIL THEN
@@ -357,7 +357,7 @@ BEGIN x := qualident();
   WHILE sym = S.period DO
     Check1(x, {B.tPtr, B.tRec});  GetSym;
     IF sym # S.ident THEN Mark("no field?")
-    ELSE fid := S.id8;  recType := x.type;
+    ELSE fid := S.id;  recType := x.type;
       IF (recType.form = B.tPtr) & (recType.base # NIL) THEN
         x := NewNode(S.arrow, x, NIL);
         x(B.Node).ronly := FALSE;  ronly := FALSE;
@@ -564,7 +564,7 @@ VAR x: B.Object;
 BEGIN
   IF    sym = S.int     THEN x := B.NewConst(B.intType, S.ival);   GetSym
   ELSIF sym = S.real    THEN x := B.NewConst(B.realType, S.ival);  GetSym
-  ELSIF sym = S.string8 THEN x := B.NewStr (S.str8, S.slen);      GetSym
+  ELSIF sym = S.string8 THEN x := B.NewStr (S.str, S.slen);      GetSym
   ELSIF sym = S.nil     THEN x := B.NewConst(B.nilType, 0);        GetSym
   ELSIF sym = S.true    THEN x := B.NewConst(B.boolType, 1);       GetSym
   ELSIF sym = S.false   THEN x := B.NewConst(B.boolType, 0);       GetSym
@@ -857,7 +857,7 @@ VAR x, y: B.Object;  xform: INTEGER;
     ELSIF sym = S.string8 THEN
       IF xform # B.tChar THEN Mark("Invalid value") END;
       IF S.slen > 2 THEN Mark("not char") END;
-      y := B.NewConst(B.charType, ORD(S.str8[0]));  GetSym
+      y := B.NewConst(B.charType, ORD(S.str[0]));  GetSym
     ELSIF sym = S.ident THEN y := qualident();
       IF y = NIL THEN Mark("Invalid value")
       ELSIF y IS B.Const THEN
@@ -868,7 +868,7 @@ VAR x, y: B.Object;  xform: INTEGER;
       ELSIF y IS B.Str THEN
         IF xform # B.tChar THEN Mark("Invalid value") END;
         IF y(B.Str).len > 2 THEN Mark("not char") END;
-        y := B.NewConst(B.charType, ORD(S.str8[0]));  GetSym
+        y := B.NewConst(B.charType, ORD(S.str[0]));  GetSym
       ELSE Mark("Invalid value");  y := NIL
       END
     ELSE Mark("Integer or char required")
@@ -998,7 +998,7 @@ BEGIN tp := B.intType;
   ELSIF sym = S.array THEN
     tp := B.NewArray(-1);  GetSym;
     IF sym = S.lbrak THEN GetSym;
-      IF (sym = S.ident) & (S.id8 = "untagged") THEN
+      IF (sym = S.ident) & (S.id = "untagged") THEN
         IF B.system THEN tp.notag := TRUE
         ELSE Mark("untagged not allowed")
         END;  GetSym
@@ -1017,10 +1017,10 @@ VAR ronly, varpar: BOOLEAN;
 BEGIN
   IF sym = S.var THEN varpar := TRUE;  GetSym ELSE varpar := FALSE END;
   IF sym = S.ident THEN
-    first := NewIdent(S.id8);  GetSym;
+    first := NewIdent(S.id);  GetSym;
     WHILE sym = S.comma DO GetSym;
       IF sym = S.ident THEN
-        ident := NewIdent(S.id8);  GetSym;
+        ident := NewIdent(S.id);  GetSym;
         IF first = NIL THEN first := ident END
       ELSE Mark("remove ,")
       END
@@ -1064,7 +1064,7 @@ VAR ptrType: B.Type;  ident: B.Ident;  x: B.Object;
 BEGIN
   ptrType := B.NewPointer();  GetSym;
   IF sym = S.lbrak THEN GetSym;
-    IF (sym = S.ident) & (S.id8 = "untraced") THEN
+    IF (sym = S.ident) & (S.id = "untraced") THEN
       IF B.system THEN ptrType.nTraced := 0
       ELSE Mark("untraced not allowed")
       END;  GetSym
@@ -1072,14 +1072,14 @@ BEGIN
   END;
   CheckSym(S.to);  IF defobj # NIL THEN defobj.type := ptrType END;
   IF sym = S.ident THEN ident := B.universe.first;
-    WHILE (ident # NIL) & (ident.name # S.id8) DO ident := ident.next END;
+    WHILE (ident # NIL) & (ident.name # S.id) DO ident := ident.next END;
     IF ident # NIL THEN x := ident.obj;
       IF x = NIL THEN Mark("Type not defined yet")
       ELSIF (x.class = B.cType) & (x.type.form = B.tRec) THEN
         ptrType.base := x.type
       ELSE Mark("not record type")
       END
-    ELSE NEW(undef);  undef.tp := ptrType;  undef.name := S.id8;
+    ELSE NEW(undef);  undef.tp := ptrType;  undef.name := S.id;
       undef.next := undefList;  undefList := undef
     END;
     GetSym
@@ -1093,10 +1093,10 @@ END PointerType;
 PROCEDURE FieldList(rec: B.Type);
 VAR first, field: B.Ident;  ft: B.Type;
 BEGIN
-  first := NewIdent(S.id8);  GetSym;  CheckExport(first);
+  first := NewIdent(S.id);  GetSym;  CheckExport(first);
   WHILE sym = S.comma DO GetSym;
     IF sym = S.ident THEN
-      field := NewIdent(S.id8);  GetSym;  CheckExport(field);
+      field := NewIdent(S.id);  GetSym;  CheckExport(field);
       IF first = NIL THEN first := field END
     ELSIF sym < S.ident THEN Missing(S.ident)
     ELSE Mark("remove ,")
@@ -1161,7 +1161,7 @@ BEGIN tp := B.intType;
   ELSIF sym = S.record THEN
     tp := B.NewRecord();  GetSym;
     IF sym = S.lbrak THEN GetSym;
-      IF (sym = S.ident) & (S.id8 = "union") THEN
+      IF (sym = S.ident) & (S.id = "union") THEN
         IF B.system THEN tp.union := TRUE
         ELSE Mark("union not allowed")
         END;  GetSym
@@ -1199,7 +1199,7 @@ VAR first, ident, par, procid: B.Ident;  x: B.Object;  tp: B.Type;
 BEGIN
   IF sym = S.const THEN GetSym;
     WHILE sym = S.ident DO
-      ident := NewIdent(S.id8);  GetSym;  CheckExport(ident);
+      ident := NewIdent(S.id);  GetSym;  CheckExport(ident);
       CheckSym(S.eql);  x := ConstExpression();
       IF ident # NIL THEN ident.obj := x;  x.ident := ident END;
       CheckSym(S.semicolon)
@@ -1207,7 +1207,7 @@ BEGIN
   END;
   IF sym = S.type THEN GetSym;  undefList := NIL;
     WHILE sym = S.ident DO
-      ident := NewIdent(S.id8);  GetSym;  CheckExport(ident);  CheckSym(S.eql);
+      ident := NewIdent(S.id);  GetSym;  CheckExport(ident);  CheckSym(S.eql);
       IF sym # S.pointer THEN
         tp := type();  x := B.NewTypeObj(tp);
         IF ident # NIL THEN ident.obj := x;  x.ident := ident END
@@ -1235,10 +1235,10 @@ BEGIN
   END;
   IF sym = S.var THEN GetSym;
     WHILE sym = S.ident DO
-      first := NewIdent(S.id8);  GetSym;  CheckExport(first);
+      first := NewIdent(S.id);  GetSym;  CheckExport(first);
       WHILE sym = S.comma DO GetSym;
         IF sym = S.ident THEN
-          ident := NewIdent(S.id8);  GetSym;  CheckExport(ident);
+          ident := NewIdent(S.id);  GetSym;  CheckExport(ident);
           IF first = NIL THEN first := ident END
         ELSE Missing(S.ident);  ident := NIL
         END
@@ -1258,7 +1258,7 @@ BEGIN
   END;
   WHILE sym = S.procedure DO GetSym;
     IF sym # S.ident THEN procid := NIL;  Mark("Expected procedure name")
-    ELSE procid := NewIdent(S.id8);  GetSym;  CheckExport(procid)
+    ELSE procid := NewIdent(S.id);  GetSym;  CheckExport(procid)
     END;
     proc := B.NewProc();  tp := B.NewProcType();  proc.type := tp;
     IF sym = S.lparen THEN FormalParameters(tp) END;  CheckSym(S.semicolon);
@@ -1284,7 +1284,7 @@ BEGIN
     END;
     B.CloseScope;  B.IncLev(-1);  CheckSym(S.end);
     IF sym = S.ident THEN
-      IF (procid # NIL) & (procid.name # S.id8) THEN
+      IF (procid # NIL) & (procid.name # S.id) THEN
         Mark("Wrong procedure name")
       END;
       GetSym
@@ -1297,9 +1297,9 @@ END DeclarationSequence;
 PROCEDURE import;
 VAR ident: B.Ident;  name: S.IdStr;
 BEGIN
-  ident := NewIdent(S.id8);  name := S.id8;  GetSym;
+  ident := NewIdent(S.id);  name := S.id;  GetSym;
   IF sym = S.becomes THEN GetSym;
-    IF sym = S.ident THEN name := S.id8;  GetSym ELSE Missing(S.ident) END
+    IF sym = S.ident THEN name := S.id;  GetSym ELSE Missing(S.ident) END
   END;
   IF S.errCnt = 0 THEN
     IF name = "SYSTEM" THEN B.NewSystemModule(ident)
@@ -1320,7 +1320,7 @@ PROCEDURE Module*(): B.Node;
 VAR modid: S.IdStr;  modinit: B.Node;
 BEGIN
   GetSym;  IF sym # S.ident THEN Missing(S.ident)
-  ELSE modid := S.id8;  GetSym END;
+  ELSE modid := S.id;  GetSym END;
   IF S.errCnt = 0 THEN
     B.Init(modid);  G.Init;  CheckSym(S.semicolon);
     IF sym = S.import THEN ImportList END
@@ -1330,7 +1330,7 @@ BEGIN
     IF sym = S.begin THEN GetSym;  modinit := StatementSequence() END;
     CheckSym(S.end);
     IF sym = S.ident THEN
-      IF S.id8 # modid THEN Mark("Module name mismatch") END;  GetSym
+      IF S.id # modid THEN Mark("Module name mismatch") END;  GetSym
     ELSE Missing(S.ident)
     END;
     CheckSym(S.period)
