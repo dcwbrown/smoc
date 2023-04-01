@@ -1,7 +1,9 @@
 *.sym
-*.exe
 *.dll
-build/*
+*.exe
+build/*/*
+!build/boot0/*.dll
+!build/boot0/*.exe
 backup/*
 dualcharhardlystarted/*
 utf8protonotworking/*
