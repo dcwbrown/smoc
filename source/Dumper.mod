@@ -11,12 +11,12 @@ VAR memstart, memlimit: INTEGER;
 (* Character output convenience functions                                     *)
 
 PROCEDURE wl();                   BEGIN Out.Ln        END wl;
-PROCEDURE wc(c: CHAR8);           BEGIN Out.Char(c)   END wc;
-PROCEDURE ws(s: ARRAY OF CHAR8);  BEGIN Out.String(s) END ws;
-PROCEDURE wsl(s: ARRAY OF CHAR8); BEGIN ws(s); wl     END wsl;
+PROCEDURE wc(c: CHAR);           BEGIN Out.Char(c)   END wc;
+PROCEDURE ws(s: ARRAY OF CHAR);  BEGIN Out.String(s) END ws;
+PROCEDURE wsl(s: ARRAY OF CHAR); BEGIN ws(s); wl     END wsl;
 PROCEDURE wb(i: INTEGER);         BEGIN WHILE i > 0 DO wc(` `);  DEC(i) END END wb;
 
-PROCEDURE wh1 (n: INTEGER); BEGIN IF n<10 THEN wc(CHR8(n + 48)) ELSE wc(CHR8(n + 87)) END END wh1;
+PROCEDURE wh1 (n: INTEGER); BEGIN IF n<10 THEN wc(CHR(n + 48)) ELSE wc(CHR(n + 87)) END END wh1;
 PROCEDURE wh2 (n: INTEGER); BEGIN wh1(ASR(n,4)  MOD        10H);  wh1(n MOD        10H) END wh2;
 PROCEDURE wh4 (n: INTEGER); BEGIN wh2(ASR(n,8)  MOD       100H);  wh2(n MOD       100H) END wh4;
 PROCEDURE wh8 (n: INTEGER); BEGIN wh4(ASR(n,16) MOD     10000H);  wh4(n MOD     10000H) END wh8;
@@ -35,7 +35,7 @@ PROCEDURE wi(n: INTEGER);
 BEGIN
   IF n < 0 THEN wc(`-`); n := -n END;
   IF n > 9 THEN wi(n DIV 10) END;
-  wc(CHR8(n MOD 10 + 48))
+  wc(CHR(n MOD 10 + 48))
 END wi;
 
 (* -------------------------------------------------------------------------- *)
@@ -85,7 +85,7 @@ VAR ch: INTEGER;
 BEGIN
   ch := getbyte(adr);
   WHILE ch # 0 DO
-    wc(CHR8(ch));
+    wc(CHR(ch));
     INC(adr);
     ch := getbyte(adr)
   END
@@ -125,7 +125,7 @@ BEGIN
         IF (bytes[i] < 32) OR (bytes[i] >= 127) THEN
           wc(`.`)
         ELSE
-          wc(CHR8(bytes[i]))
+          wc(CHR(bytes[i]))
         END
       ELSE
         wc(` `)
@@ -137,7 +137,7 @@ BEGIN
   END
 END Dump;
 
-PROCEDURE DumpVar*(title: ARRAY OF CHAR8; VAR var: ARRAY OF BYTE);
+PROCEDURE DumpVar*(title: ARRAY OF CHAR; VAR var: ARRAY OF BYTE);
 BEGIN
   ws(`Variable `);  ws(title);  ws(` at $`);  wh(SYSTEM.ADR(var));  wsl(`:`);
   Dump(2, SYSTEM.ADR(var), LEN(var))
@@ -148,7 +148,7 @@ END DumpVar;
 (* NOTE: Dumper is called during (at the start of) collection so           *)
 (*       MUST NOT cause any heap allocation.                                  *)
 
-PROCEDURE DumpPointerTable(title: ARRAY OF CHAR8; indent, base, table: INTEGER);
+PROCEDURE DumpPointerTable(title: ARRAY OF CHAR; indent, base, table: INTEGER);
 VAR offset, ptr, descriptor, size: INTEGER;
 BEGIN
   offset := getint(table);

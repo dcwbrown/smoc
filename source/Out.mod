@@ -23,7 +23,7 @@ BEGIN
   IF HOut = 0 THEN ASSERT(AllocConsole() # 0) END
 END Open;
 
-PROCEDURE Length(str: ARRAY OF CHAR8): INTEGER;
+PROCEDURE Length(str: ARRAY OF CHAR): INTEGER;
 VAR len: INTEGER;
 BEGIN len := 0;
   WHILE (len < LEN(str)) & (str[len] # 0Y) DO INC(len) END;
@@ -49,13 +49,13 @@ BEGIN
 END String;
 *)
 
-PROCEDURE Char*(ch: CHAR8);
+PROCEDURE Char*(ch: CHAR);
 VAR bRes, dwByteWritten: INTEGER;
 BEGIN
   bRes := WriteFile(HOut, SYSTEM.ADR(ch), 1, SYSTEM.ADR(dwByteWritten), 0)
 END Char;
 
-PROCEDURE String*(str: ARRAY OF CHAR8);
+PROCEDURE String*(str: ARRAY OF CHAR);
 VAR bRes, dwByteWritten: INTEGER;
 BEGIN
   bRes := WriteFile(HOut, SYSTEM.ADR(str), Length(str),
@@ -63,25 +63,25 @@ BEGIN
 END String;
 
 
-PROCEDURE IntToDecStr(i: INTEGER; VAR str: ARRAY OF CHAR8);
-VAR s: ARRAY 19 OF CHAR8; j, k: INTEGER;
+PROCEDURE IntToDecStr(i: INTEGER; VAR str: ARRAY OF CHAR);
+VAR s: ARRAY 19 OF CHAR; j, k: INTEGER;
 BEGIN
   IF i # 8000000000000000H THEN j := 0; k := 0;
     IF i < 0 THEN i := -i; str[k] := `-`; INC(k) END;
-    REPEAT s[j] := CHR8(ORD(`0`) + i MOD 10); i := i DIV 10; INC(j)
+    REPEAT s[j] := CHR(ORD(`0`) + i MOD 10); i := i DIV 10; INC(j)
     UNTIL i = 0;
     WHILE j > 0 DO DEC(j); str[k] := s[j]; INC(k) END; str[k] := 0Y
   ELSE
     str := `-9223372036854775808`  END
 END IntToDecStr;
 
-PROCEDURE IntToHexStr(i: INTEGER; VAR str: ARRAY OF CHAR8);
-VAR s: ARRAY 16 OF CHAR8; j, k: INTEGER;
+PROCEDURE IntToHexStr(i: INTEGER; VAR str: ARRAY OF CHAR);
+VAR s: ARRAY 16 OF CHAR; j, k: INTEGER;
 BEGIN
   j := 0; k := 0;
   REPEAT
-    IF i MOD 16 < 10 THEN s[j] := CHR8(ORD(`0`) + i MOD 16)
-    ELSE s[j] := CHR8(ORD(`a`) - 10 + i MOD 16)
+    IF i MOD 16 < 10 THEN s[j] := CHR(ORD(`0`) + i MOD 16)
+    ELSE s[j] := CHR(ORD(`a`) - 10 + i MOD 16)
     END;
     INC(j); i := i DIV 16
   UNTIL (i = 0) OR (i < 0) & (j = 16);
@@ -89,7 +89,7 @@ BEGIN
 END IntToHexStr;
 
 PROCEDURE Int*(i, n: INTEGER);
-VAR str: ARRAY 64 OF CHAR8;
+VAR str: ARRAY 64 OF CHAR;
 BEGIN
   ASSERT((n < LEN(str)) & (n >= 0)); IntToDecStr(i, str);
   i := 0; WHILE str[i] # 0Y DO INC(i) END;
@@ -101,7 +101,7 @@ BEGIN
 END Int;
 
 PROCEDURE Hex*(i, n: INTEGER);
-VAR str: ARRAY 64 OF CHAR8;
+VAR str: ARRAY 64 OF CHAR;
 BEGIN
   ASSERT((n < LEN(str)) & (n >= 0)); IntToHexStr(i, str);
   i := 0; WHILE str[i] # 0Y DO INC(i) END;
@@ -117,12 +117,12 @@ VAR i, k: INTEGER; str: ARRAY BigNums.MaxDecimalDigits OF CHAR;
 BEGIN
   i := BigNums.MaxDecimalDigits-1; k := 0;
   WHILE (i > 0) & (BigNums.DecimalDigit(x, i) = 0) DO DEC(i) END;
-  REPEAT str[k] := CHR8(BigNums.DecimalDigit(x, i)+30H); INC(k); DEC(i)
+  REPEAT str[k] := CHR(BigNums.DecimalDigit(x, i)+30H); INC(k); DEC(i)
   UNTIL i < 0;
   str[k] := 0Y; String(str)
 END BigNum;*)
 
-PROCEDURE RealToStr(x: REAL; VAR str: ARRAY OF CHAR8);
+PROCEDURE RealToStr(x: REAL; VAR str: ARRAY OF CHAR);
 VAR
     x0, f, m0, m1, c, half, ten: BigNums.BigNum; i, e, u: INTEGER;
     quit: BOOLEAN; s: ARRAY 8 OF BYTE;
@@ -182,7 +182,7 @@ BEGIN
     BigNums.MultiplyByTen(f, f); BigNums.MultiplyByTen(m1, m1); DEC(e)
   END;
 
-  str[0] := CHR8(BigNums.ModuloTen(x0)+30H);
+  str[0] := CHR(BigNums.ModuloTen(x0)+30H);
   str[1] := `.`; i := 2; quit := FALSE;
   REPEAT
     u := BigNums.DecimalDigit(f, BigNums.MaxDecimalDigits-1);
@@ -191,29 +191,29 @@ BEGIN
     IF BigNums.DecimalDigit(m1, BigNums.MaxDecimalDigits-1) = 0 THEN
       BigNums.MultiplyByTen(m1, m1); BigNums.Complement(c, m1);
       IF (BigNums.Compare(f, m1) >= 0) & (BigNums.Compare(f, c) <= 0)
-      THEN str[i] := CHR8(u+30H); INC(i)
+      THEN str[i] := CHR(u+30H); INC(i)
       ELSE quit := TRUE
       END
     ELSE quit := TRUE
     END
   UNTIL quit;
   IF (BigNums.Compare(f, half) > 0)
-  OR (BigNums.Compare(f, half) = 0) & ODD(u) THEN str[i] := CHR8(u+1+30H)
-  ELSE str[i] := CHR8(u+30H)
+  OR (BigNums.Compare(f, half) = 0) & ODD(u) THEN str[i] := CHR(u+1+30H)
+  ELSE str[i] := CHR(u+30H)
   END; INC(i);
 
   IF e # 0 THEN
     str[i] := `e`; INC(i);
     IF e > 0 THEN str[i] := `+` ELSE str[i] := `-`; e := -e END; INC(i);
     u := 0; REPEAT s[u] := e MOD 10; e := e DIV 10; INC(u) UNTIL e = 0;
-    REPEAT DEC(u); str[i] := CHR8(s[u]+30H); INC(i) UNTIL u = 0;
+    REPEAT DEC(u); str[i] := CHR(s[u]+30H); INC(i) UNTIL u = 0;
   END;
   str[i] := 0Y
 END RealToStr;
 
 PROCEDURE Real*(x: REAL; n: INTEGER);
 CONST p = 52;
-VAR str, s: ARRAY 64 OF CHAR8; ten: REAL;
+VAR str, s: ARRAY 64 OF CHAR; ten: REAL;
     i, k, exp10, exp2, d, f, m: INTEGER; quit: BOOLEAN;
 BEGIN
   ASSERT((n < LEN(str)) & (n >= 0));

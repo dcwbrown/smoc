@@ -11,12 +11,12 @@ CONST
   cField* = 6;   cSProc*  = 7;  cSFunc* = 8;
 
   (* Type form *)
-  tInt*   = 0;  tBool* = 1;  tSet*   = 2;  tChar8* = 3;  tReal*  = 4;
-  tPtr*   = 5;  tProc* = 6;  tArray* = 7;  tRec*   = 8;  tStr8*  = 9;  tNil* = 10;
+  tInt*   = 0;  tBool* = 1;  tSet*   = 2;  tChar* = 3;  tReal*  = 4;
+  tPtr*   = 5;  tProc* = 6;  tArray* = 7;  tRec*  = 8;  tStr*  = 9;  tNil* = 10;
 
-  typScalar* = {tInt,  tBool, tSet,   tChar8,  tReal, tPtr, tProc, tNil};
+  typScalar* = {tInt,  tBool, tSet,   tChar,  tReal, tPtr, tProc, tNil};
   typEql*    = {tBool, tSet,  tPtr,   tProc,   tNil};
-  typCmp*    = {tInt,  tReal, tChar8, tStr8};
+  typCmp*    = {tInt,  tReal, tChar, tStr};
 
 TYPE
   ModuleKey* = ARRAY 2 OF INTEGER;
@@ -37,7 +37,7 @@ TYPE
                ronly*:             BOOLEAN
              END;
   Par*     = POINTER TO RECORD (Var)  varpar*: BOOLEAN END;
-  Str8*    = POINTER TO RECORD (Var)  bufpos*, len*: INTEGER END;
+  Str*    = POINTER TO RECORD (Var)  bufpos*, len*: INTEGER END;
   TempVar* = POINTER TO RECORD (Var)  inited*: BOOLEAN END;
 
   Proc* = POINTER TO RECORD (ObjDesc)
@@ -59,7 +59,7 @@ TYPE
   ObjList*   = POINTER TO RECORD obj*:  Object;  next*: ObjList   END;
   TypeList*  = POINTER TO RECORD type*: Type;    next*: TypeList  END;
   ProcList*  = POINTER TO RECORD obj*:  Proc;    next*: ProcList  END;
-  Str8List*  = POINTER TO RECORD obj*:  Str8;    next*: Str8List  END;
+  Str8List*  = POINTER TO RECORD obj*:  Str;    next*: Str8List  END;
 
   Module* = POINTER TO RECORD (ObjDesc)
     export*, import*: BOOLEAN;
@@ -138,14 +138,14 @@ VAR
   refno, preTypeNo, expno*, modno*: INTEGER;
 
   str8bufSize*:  INTEGER;
-  str8buf*:      ARRAY 1000H OF BYTE;  (* TODO change to CHAR8 *)
+  str8buf*:      ARRAY 1000H OF BYTE;  (* TODO change to CHAR *)
 
   (*
   str16bufSize*: INTEGER;
   str16buf*:     ARRAY 1000H OF SYSTEM.CARD16;
   *)
 
-  symPath, srcPath, sym: ARRAY 1024 OF CHAR8;
+  symPath, srcPath, sym: ARRAY 1024 OF CHAR;
 
   ExportType0: PROCEDURE(typ: Type);
   ImportType0: PROCEDURE(VAR typ: Type;  mod: Module);
@@ -154,8 +154,8 @@ VAR
 (* -------------------------------------------------------------------------- *)
 (* Utility *)
 
-PROCEDURE Insert*(    src: ARRAY OF CHAR8;
-                  VAR dst: ARRAY OF CHAR8;
+PROCEDURE Insert*(    src: ARRAY OF CHAR;
+                  VAR dst: ARRAY OF CHAR;
                   VAR pos: INTEGER);
 VAR i, j: INTEGER;
 BEGIN i := pos;  j := 0;
@@ -163,7 +163,7 @@ BEGIN i := pos;  j := 0;
   dst[i] := 0Y;  pos := i
 END Insert;
 
-PROCEDURE Append* (src: ARRAY OF CHAR8;  VAR dst: ARRAY OF CHAR8);
+PROCEDURE Append* (src: ARRAY OF CHAR;  VAR dst: ARRAY OF CHAR);
 VAR i, j: INTEGER;
 BEGIN
   i := 0;  WHILE dst[i] # 0Y DO INC(i) END;  j := 0;
@@ -171,7 +171,7 @@ BEGIN
   dst[i] := 0Y
 END Append;
 
-PROCEDURE Str8Len* (str: ARRAY OF CHAR8): INTEGER;
+PROCEDURE Str8Len* (str: ARRAY OF CHAR): INTEGER;
 VAR len: INTEGER;
 BEGIN
   len := 0;  WHILE (len < LEN(str)) & (str[len] # 0Y) DO INC(len) END;
@@ -197,7 +197,7 @@ PROCEDURE IsNormalArray*(tp: Type): BOOLEAN;
 END IsNormalArray;
 
 PROCEDURE IsStr8*(t: Type): BOOLEAN;
-  RETURN (t = str8Type) OR (t.form = tArray) & (t.base.form = tChar8)
+  RETURN (t = str8Type) OR (t.form = tArray) & (t.base.form = tChar)
 END IsStr8;
 
 (* -------------------------------------------------------------------------- *)
@@ -240,8 +240,8 @@ BEGIN
   RETURN fld
 END NewField;
 
-PROCEDURE NewStr8*(str: ARRAY OF BYTE;  slen: INTEGER): Str8;
-VAR x: Str8;  i: INTEGER;  p: Str8List;
+PROCEDURE NewStr8*(str: ARRAY OF BYTE;  slen: INTEGER): Str;
+VAR x: Str;  i: INTEGER;  p: Str8List;
 BEGIN
   NEW(x);  x.class := cVar;  x.ronly := TRUE;
   x.type := str8Type;  x.lev := curLev;  x.len := slen;
@@ -257,7 +257,7 @@ BEGIN
   RETURN x
 END NewStr8;
 
-PROCEDURE NewStr8Z*(str: ARRAY OF BYTE): Str8;
+PROCEDURE NewStr8Z*(str: ARRAY OF BYTE): Str;
 VAR slen: INTEGER;
 BEGIN
   slen := 0;  WHILE str[slen] # 0 DO INC(slen) END;  INC(slen);
@@ -506,7 +506,7 @@ VAR
   i, k, n, size: INTEGER;
   hash:          Crypt.MD5Hash;
   chunk:         ARRAY 64 OF BYTE;
-  symfname:      ARRAY 512 OF CHAR8;
+  symfname:      ARRAY 512 OF CHAR;
 BEGIN
   symfname := 0Y;  refno := 0;  expno := 0;
   i := 0;  Insert(srcPath, symfname, i);
@@ -536,12 +536,12 @@ BEGIN
         Files.WriteString8(rider, ident.name);
         DetectType(x.type)
       ELSIF x.class = cVar THEN
-        IF x IS Str8 THEN
+        IF x IS Str THEN
           Files.WriteNum(rider, cConst);
           Files.WriteString8(rider, ident.name);
           NewExport(exp);  exp.obj := x;
           Files.WriteNum(rider, expno);  DetectType(x.type);
-          Files.WriteNum(rider, x(Str8).len)
+          Files.WriteNum(rider, x(Str).len)
         ELSE
           Files.WriteNum(rider, cVar);
           Files.WriteString8(rider, ident.name);
@@ -755,7 +755,7 @@ VAR dep:       Module;
     tp:        Type;
     depid:     S.IdStr8;
     name:      S.IdStr8;
-    msg:       ARRAY 512 OF CHAR8;
+    msg:       ARRAY 512 OF CHAR;
 BEGIN
   Files.Set(rider, symfile, 0);
   imod := FindMod(imodid);
@@ -797,7 +797,7 @@ BEGIN
       IF S.errCnt = 0 THEN
         IF tp = str8Type THEN
           Files.ReadNum(rider, slen);  x := NewStr8(``, slen);
-          x(Str8).adr := 0;  x(Str8).expno := val
+          x(Str).adr := 0;  x(Str).expno := val
         ELSE
           x := NewConst(tp, val)
         END;
@@ -846,12 +846,12 @@ END NewSystemModule;
 
 PROCEDURE NewModule*(ident: Ident;  id: S.IdStr8);
 VAR
-  path, symfname: ARRAY 512 OF CHAR8;
+  path, symfname: ARRAY 512 OF CHAR;
   x, i:           INTEGER;
   found:          BOOLEAN;
   mod:            Module;
 
-  PROCEDURE GetPath(VAR path: ARRAY OF CHAR8;  VAR i: INTEGER);
+  PROCEDURE GetPath(VAR path: ARRAY OF CHAR;  VAR i: INTEGER);
   VAR j: INTEGER;
   BEGIN i := 0;  j := 0;
     WHILE (symPath[i] # 0Y) & (symPath[i] # `;`) DO
@@ -888,7 +888,7 @@ END NewModule;
 (* -------------------------------------------------------------------------- *)
 (* Compiler Flag *)
 
-PROCEDURE SetCompilerFlag(pragma: ARRAY OF CHAR8);
+PROCEDURE SetCompilerFlag(pragma: ARRAY OF CHAR);
 VAR i: INTEGER;
 BEGIN
   IF    pragma = `MAIN`    THEN Flag.main  := TRUE
@@ -902,12 +902,12 @@ BEGIN
   Flag.main := FALSE;  Flag.console := FALSE;  Flag.rtl := TRUE;
 END InitCompilerFlag;
 
-PROCEDURE SetSymPath*(path: ARRAY OF CHAR8);
+PROCEDURE SetSymPath*(path: ARRAY OF CHAR);
 BEGIN
   symPath := path
 END SetSymPath;
 
-PROCEDURE SetSrcPath*(path: ARRAY OF CHAR8);
+PROCEDURE SetSrcPath*(path: ARRAY OF CHAR);
 VAR i: INTEGER;
 BEGIN
   srcPath := path;  i := 0;  WHILE srcPath[i] # 0Y DO INC(i) END;
@@ -918,7 +918,7 @@ END SetSrcPath;
 (* -------------------------------------------------------------------------- *)
 
 PROCEDURE Init*(modid0: S.IdStr8);
-VAR symfname: ARRAY 512 OF CHAR8;  i, res: INTEGER;
+VAR symfname: ARRAY 512 OF CHAR;  i, res: INTEGER;
 BEGIN
   modid := modid0;  i := 0;    Insert(srcPath, symfname, i);
   Insert(modid, symfname, i);  Insert(`.sym`, symfname, i);
@@ -935,7 +935,6 @@ BEGIN
   Enter(NewTypeObj(realType),   `REAL`);
   Enter(NewTypeObj(setType),    `SET`);
   Enter(NewTypeObj(boolType),   `BOOLEAN`);
-  Enter(NewTypeObj(char8Type),  `CHAR8`);
   Enter(NewTypeObj(char8Type),  `CHAR`);
 
   Enter(NewSProc(S.spINC,    cSProc), `INC`);
@@ -957,7 +956,6 @@ BEGIN
   Enter(NewSProc(S.sfFLT,   cSFunc), `FLT`);
   Enter(NewSProc(S.sfORD,   cSFunc), `ORD`);
   Enter(NewSProc(S.sfCHR8,  cSFunc), `CHR`);
-  Enter(NewSProc(S.sfCHR8,  cSFunc), `CHR8`);
 
   OpenScope;
   Enter(NewSProc(S.spGET,            cSProc), `GET`);
@@ -1002,10 +1000,10 @@ BEGIN
   NewPredefinedType(byteType,   tInt);
   NewPredefinedType(boolType,   tBool);
   NewPredefinedType(setType,    tSet);
-  NewPredefinedType(char8Type,  tChar8);
+  NewPredefinedType(char8Type,  tChar);
   NewPredefinedType(nilType,    tNil);
   NewPredefinedType(realType,   tReal);
-  NewPredefinedType(str8Type,   tStr8);
+  NewPredefinedType(str8Type,   tStr);
   NewPredefinedType(noType,     tPtr);    noType.base := intType;
   NewPredefinedType(card16Type, tInt);
   NewPredefinedType(card32Type, tInt);

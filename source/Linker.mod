@@ -29,7 +29,7 @@ TYPE
   END;
 
 VAR
-  FileName:           ARRAY 512 OF CHAR8;
+  FileName:           ARRAY 512 OF CHAR;
   Out:                Files.File;
   Rider:              Files.Rider;
   ImageBase:          INTEGER;
@@ -140,7 +140,7 @@ VAR x: B.Proc;
     Files.Set(Rider, Out, Section[SecInitGlobals].fadr + x.descAdr);
     ident := x.decl;
     WHILE ident # NIL DO y := ident.obj;
-      IF (y IS B.Var) & ~(y IS B.Str8) & ~(y IS B.Par)
+      IF (y IS B.Var) & ~(y IS B.Str) & ~(y IS B.Par)
       OR (y IS B.Par) & ~y(B.Par).varpar & (y.type.size = 8) THEN
         IF y.type.nTraced > 0 THEN adr := y(B.Var).adr;
           IF y.type.form = B.tPtr THEN Files.WriteInt(Rider, adr)
@@ -172,8 +172,8 @@ VAR
   ident:   B.Ident;
   t:       B.TypeList;
   obj:     B.Object;
-  str:     ARRAY 512 OF CHAR8;
-  slist8:  B.Str8List;   y: B.Str8;
+  str:     ARRAY 512 OF CHAR;
+  slist8:  B.Str8List;   y: B.Str;
 BEGIN
   ASSERT(Rva MOD SectionAlignment = 0);
   ASSERT(Rva = RvaInitGlobals);
@@ -229,7 +229,7 @@ BEGIN
   Files.Set(Rider, Out, metrics.fadr + ModulePointerTable);
   ident := B.universe.first;
   WHILE ident # NIL DO obj := ident.obj;
-    IF (obj IS B.Var) & ~(obj IS B.Str8) THEN
+    IF (obj IS B.Var) & ~(obj IS B.Str) THEN
       IF obj.type.nTraced > 0 THEN adr := obj(B.Var).adr;
         IF obj.type.form = B.tPtr THEN Files.WriteInt(Rider, adr)
         ELSE Write_pointer_offset(adr, obj.type)
@@ -468,7 +468,7 @@ END WriteExports;
 (* -------------------------------------------------------------------------- *)
 (* PE Header *)
 
-PROCEDURE WriteSectionHeader(sec: INTEGER; name: ARRAY OF CHAR8; flags: INTEGER);
+PROCEDURE WriteSectionHeader(sec: INTEGER; name: ARRAY OF CHAR; flags: INTEGER);
 VAR i, l, filesize, virtualsize: INTEGER;
 BEGIN
   l := LEN(name);  i := 0;  IF l > 8 THEN l := 8 END;
@@ -505,7 +505,7 @@ TYPE
             eMagic:     U16;  (* 5AD4 *)
             zeroes1:    ARRAY 3AH OF BYTE;
             eLfanew:    U32;
-            dosProgram: ARRAY 40H OF CHAR8;
+            dosProgram: ARRAY 40H OF CHAR;
             signature:  U32;
 
             (* COFF file header*)

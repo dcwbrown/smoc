@@ -19,8 +19,8 @@ VAR
 (* -------------------------------------------------------------------------- *)
 (* -------------------------------------------------------------------------- *)
 
-PROCEDURE GetSym;                      BEGIN S.Get(sym)   END GetSym;
-PROCEDURE Mark8(msg: ARRAY OF CHAR8);  BEGIN S.Mark8(msg) END Mark8;
+PROCEDURE GetSym;                     BEGIN S.Get(sym)   END GetSym;
+PROCEDURE Mark8(msg: ARRAY OF CHAR);  BEGIN S.Mark8(msg) END Mark8;
 
 PROCEDURE Missing(s: INTEGER);
 BEGIN
@@ -70,7 +70,7 @@ END IsVarPar;
 
 PROCEDURE IsConst(x: B.Object): BOOLEAN;
   RETURN (x IS B.Const)
-  OR     (x IS B.Str8)  & (x(B.Str8) .bufpos >= 0)
+  OR     (x IS B.Str)  & (x(B.Str) .bufpos >= 0)
 END IsConst;
 
 PROCEDURE IsOpenArray(tp: B.Type): BOOLEAN;
@@ -120,7 +120,7 @@ PROCEDURE CompTypes2(t1, t2: B.Type): BOOLEAN;
 END CompTypes2;
 
 PROCEDURE IsChar8Str(x: B.Object): BOOLEAN;
-  RETURN (x IS B.Str8) & (x(B.Str8).len <= 2)
+  RETURN (x IS B.Str) & (x(B.Str).len <= 2)
 END IsChar8Str;
 
 PROCEDURE CheckInt(x: B.Object);
@@ -170,7 +170,7 @@ END CheckVar;
 
 PROCEDURE CheckStrLen(xtype: B.Type;  y: B.Object);
 BEGIN
-  IF (xtype.len >= 0) & (y IS B.Str8)  & (y(B.Str8).len >  xtype.len) THEN
+  IF (xtype.len >= 0) & (y IS B.Str)  & (y(B.Str).len >  xtype.len) THEN
     Mark8(`string longer than dest`)
   END
 END CheckStrLen;
@@ -187,7 +187,7 @@ BEGIN xtype := x.type;  ftype := fpar.type;
     END
   ELSIF ~fpar.varpar THEN
     IF ~CompTypes(ftype, xtype) THEN
-      IF ((ftype = B.char8Type)  & (x IS B.Str8)  & (x(B.Str8).len  <= 2))
+      IF ((ftype = B.char8Type)  & (x IS B.Str)  & (x(B.Str).len  <= 2))
       THEN (*valid*) ELSE Mark8(`invalid par type`)
       END
     ELSIF B.IsStr8(ftype) THEN CheckStrLen(ftype, x)
@@ -220,7 +220,7 @@ BEGIN
 END Check1;
 
 PROCEDURE Str8ToChar8(x: B.Object): B.Object;
-  RETURN B.NewConst(B.char8Type, B.str8buf[x(B.Str8).bufpos])
+  RETURN B.NewConst(B.char8Type, B.str8buf[x(B.Str).bufpos])
 END Str8ToChar8;
 
 (* -------------------------------------------------------------------------- *)
@@ -448,11 +448,11 @@ BEGIN GetSym;
     IF y IS B.Const THEN x := G.OddConst(y)
     ELSE x := NewNode(S.sfODD, y, NIL);  x.type := B.boolType
     END
-  ELSIF f.id = S.sfLEN THEN y := designator();  Check1(y, {B.tArray, B.tStr8});
+  ELSIF f.id = S.sfLEN THEN y := designator();  Check1(y, {B.tArray, B.tStr});
     IF (y.type.form = B.tArray) & (y.type.len >= 0) THEN
       x := B.NewConst(B.intType, y.type.len)
-    ELSIF y.type.form = B.tStr8 THEN
-      x := B.NewConst(B.intType, y(B.Str8).len)
+    ELSIF y.type.form = B.tStr THEN
+      x := B.NewConst(B.intType, y(B.Str).len)
     ELSIF ~y.type.notag THEN
       x := NewNode(S.sfLEN, y, NIL);  x.type := B.intType
     ELSE Mark8(`open array without length tag`)
@@ -472,9 +472,9 @@ BEGIN GetSym;
     ELSE x := NewNode(S.sfFLT, y, NIL);  x.type := B.realType
     END
   ELSIF f.id = S.sfORD THEN y := expression0();
-    IF (y.type = B.str8Type)  & (y(B.Str8).len  <= 2) THEN (* ORD ok *)
+    IF (y.type = B.str8Type)  & (y(B.Str).len  <= 2) THEN (* ORD ok *)
     ELSE
-      Check1(y, {B.tSet, B.tBool, B.tChar8})
+      Check1(y, {B.tSet, B.tBool, B.tChar})
     END;
     IF IsConst(y) THEN x := G.TypeTransferConst(B.intType, y)
     ELSE x := NewNode(S.sfORD, y, NIL);  x.type := B.intType
@@ -499,7 +499,7 @@ BEGIN GetSym;
     END;
     CheckSym(S.comma);  z := expression0();
     IF z.type.form IN {B.tArray, B.tRec} THEN Mark8(`not scalar`)
-    ELSIF (z IS B.Str8)  & (z(B.Str8).len  > 2) THEN Mark8(`not scalar`)
+    ELSIF (z IS B.Str)  & (z(B.Str).len  > 2) THEN Mark8(`not scalar`)
     END;
     IF IsConst(z) THEN x := G.TypeTransferConst(y.type, z)
     ELSE x := NewNode(S.sfVAL, z, NIL);  x.type := y.type
@@ -855,19 +855,19 @@ VAR x, y: B.Object;  xform: INTEGER;
     IF sym = S.int THEN y := factor();
       IF xform # B.tInt THEN Mark8(`Invalid value`) END
     ELSIF sym = S.string8 THEN
-      IF xform # B.tChar8 THEN Mark8(`Invalid value`) END;
+      IF xform # B.tChar THEN Mark8(`Invalid value`) END;
       IF S.slen > 2 THEN Mark8(`not char`) END;
       y := B.NewConst(B.char8Type, ORD(S.str8[0]));  GetSym
     ELSIF sym = S.ident THEN y := qualident();
       IF y = NIL THEN Mark8(`Invalid value`)
       ELSIF y IS B.Const THEN
         IF xform = B.tInt THEN CheckInt(y)
-        ELSIF xform = B.tChar8 THEN
-          IF y.type.form # B.tChar8 THEN Mark8(`not char`) END
+        ELSIF xform = B.tChar THEN
+          IF y.type.form # B.tChar THEN Mark8(`not char`) END
         END
-      ELSIF y IS B.Str8 THEN
-        IF xform # B.tChar8 THEN Mark8(`Invalid value`) END;
-        IF y(B.Str8).len > 2 THEN Mark8(`not char`) END;
+      ELSIF y IS B.Str THEN
+        IF xform # B.tChar THEN Mark8(`Invalid value`) END;
+        IF y(B.Str).len > 2 THEN Mark8(`not char`) END;
         y := B.NewConst(B.char8Type, ORD(S.str8[0]));  GetSym
       ELSE Mark8(`Invalid value`);  y := NIL
       END
@@ -908,7 +908,7 @@ BEGIN (* Case *)
   isTypeCase := (x.class = B.cVar) & TypeTestable(x);
   IF xform = B.tInt THEN
     y := B.NewTempVar(B.intType);  case.left := NewNode(S.becomes, y, x)
-  ELSIF (xform = B.tChar8) OR IsChar8Str(x) THEN
+  ELSIF (xform = B.tChar) OR IsChar8Str(x) THEN
     y := B.NewTempVar(B.char8Type);  case.left := NewNode(S.becomes, y, x)
   ELSIF isTypeCase THEN (*valid*)
   ELSE Mark8(`invalid case expression`)

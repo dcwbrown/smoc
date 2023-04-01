@@ -43,7 +43,7 @@ TYPE
   Int          = SYSTEM.CARD32;
 
   PathStr16 = ARRAY MAX_PATH+1 OF SYSTEM.CARD16;
-  PathStr   = ARRAY MAX_PATH+1 OF CHAR8;
+  PathStr   = ARRAY MAX_PATH+1 OF CHAR;
 
   File*    = POINTER TO FileDesc;
   FileDesc = RECORD (Rtl.Finalised)
@@ -110,7 +110,7 @@ BEGIN
 END Finalise;
 
 (* Operations: FileOpenR, FileOpenW, FileNew, FileRegister. *)
-PROCEDURE CreateFile(name: ARRAY OF CHAR8; op: INTEGER): INTEGER;
+PROCEDURE CreateFile(name: ARRAY OF CHAR; op: INTEGER): INTEGER;
 VAR hFile, len, access, mode, disposition, flags: INTEGER; name16: PathStr16;
 BEGIN
   IF op = FileNew THEN
@@ -134,7 +134,7 @@ BEGIN
   hFile := CreateFileW(name16, access, mode, 0, disposition, flags, 0);
 RETURN hFile END CreateFile;
 
-PROCEDURE GetFileAttributes(name: ARRAY OF CHAR8): INTEGER;
+PROCEDURE GetFileAttributes(name: ARRAY OF CHAR): INTEGER;
 VAR name16: PathStr16;  len, attr: INTEGER;
 BEGIN
   len  := Rtl.Utf8ToUtf16(name, name16);
@@ -147,7 +147,7 @@ BEGIN
   Rtl.RegisterFinalised(file, Finalise)
 END NewFile;
 
-PROCEDURE Old*(name: ARRAY OF CHAR8): File;
+PROCEDURE Old*(name: ARRAY OF CHAR): File;
 VAR file: File; hFile: Handle;
     attr: Dword; ronly: BOOLEAN; bRes: Bool;
 BEGIN
@@ -172,11 +172,11 @@ BEGIN
   RETURN file
 END Old;
 
-PROCEDURE SetWString(s: ARRAY OF CHAR8; VAR d: ARRAY OF SYSTEM.CARD16);
+PROCEDURE SetWString(s: ARRAY OF CHAR; VAR d: ARRAY OF SYSTEM.CARD16);
 VAR len: INTEGER;
 BEGIN len := Rtl.Utf8ToUtf16(s, d) END SetWString;
 
-PROCEDURE GetUserProfile(VAR dir: ARRAY OF CHAR8; VAR len: INTEGER);
+PROCEDURE GetUserProfile(VAR dir: ARRAY OF CHAR; VAR len: INTEGER);
 VAR s, userprofile: PathStr16;
 BEGIN
   SetWString(`USERPROFILE`, s);
@@ -185,14 +185,14 @@ BEGIN
 (*w.s(`Got user profile as '`); w.s(dir); w.sl(`'.`);*)
 END GetUserProfile;
 
-PROCEDURE ToHex(h: INTEGER): CHAR8;
-VAR  ch: CHAR8;
+PROCEDURE ToHex(h: INTEGER): CHAR;
+VAR  ch: CHAR;
 BEGIN h := h MOD 16;
-  IF h < 10 THEN ch := CHR8(h +      ORD(`0`))
-  ELSE           ch := CHR8(h - 10 + ORD(`a`)) END
+  IF h < 10 THEN ch := CHR(h +      ORD(`0`))
+  ELSE           ch := CHR(h - 10 + ORD(`a`)) END
 RETURN ch END ToHex;
 
-PROCEDURE Append* (src: ARRAY OF CHAR8;  VAR dst: ARRAY OF CHAR8);
+PROCEDURE Append* (src: ARRAY OF CHAR;  VAR dst: ARRAY OF CHAR);
 VAR i, j: INTEGER;
 BEGIN
   i := 0;  WHILE dst[i] # 0Y DO INC(i) END;  j := 0;
@@ -200,8 +200,8 @@ BEGIN
   dst[i] := 0Y
 END Append;
 
-PROCEDURE AppendHex(h: INTEGER; VAR dst: ARRAY OF CHAR8);
-VAR hex: ARRAY 20 OF CHAR8; i, j: INTEGER;
+PROCEDURE AppendHex(h: INTEGER; VAR dst: ARRAY OF CHAR);
+VAR hex: ARRAY 20 OF CHAR; i, j: INTEGER;
 BEGIN
   i := LEN(hex)-1;
   WHILE (i >= 0) & (h # 0) DO
@@ -214,7 +214,7 @@ BEGIN
   dst[j] := 0Y
 END AppendHex;
 
-PROCEDURE MakeTempName(VAR name: ARRAY OF CHAR8);
+PROCEDURE MakeTempName(VAR name: ARRAY OF CHAR);
 VAR
 pid, time, len: INTEGER;
 BEGIN
@@ -232,7 +232,7 @@ BEGIN
   INC(tempId);
 END MakeTempName;
 
-PROCEDURE New8*(name: ARRAY OF CHAR8): File;
+PROCEDURE New8*(name: ARRAY OF CHAR): File;
 VAR
   hFile: Handle;
   file:  File;
@@ -298,7 +298,7 @@ BEGIN
   IF bRes # 0 THEN res := 0 ELSE res := -1 END
 END Delete;
 
-PROCEDURE Delete8*(name: ARRAY OF CHAR8; VAR res: INTEGER);
+PROCEDURE Delete8*(name: ARRAY OF CHAR; VAR res: INTEGER);
 VAR bRes: Bool;  name16: PathStr16;  len: INTEGER;
 BEGIN
   len := Rtl.Utf8ToUtf16(name, name16);
@@ -395,12 +395,12 @@ VAR bRes: Bool; byteRead: Dword; f: File;
 BEGIN Read0(r, x)
 END ReadChar16;
 
-PROCEDURE ReadString8*(VAR r: Rider; VAR x: ARRAY OF CHAR8);
+PROCEDURE ReadString8*(VAR r: Rider; VAR x: ARRAY OF CHAR);
 VAR i: INTEGER;  done: BOOLEAN;  b: BYTE;
 BEGIN
   done := FALSE; i := 0;
   WHILE ~r.eof & ~done DO
-    Read(r, b);  x[i] := CHR8(b);
+    Read(r, b);  x[i] := CHR(b);
     IF r.eof THEN x[i] := 0Y ELSE done := x[i] = 0Y; INC(i) END
   END
 END ReadString8;

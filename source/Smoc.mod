@@ -5,7 +5,7 @@ IMPORT
   SYSTEM, Rtl, Files, S := Scanner, B := Base, G := Generator, P := Parser, w := Writer;
 
 VAR
-  arg, fname: ARRAY 1024 OF CHAR8;
+  arg, fname: ARRAY 1024 OF CHAR;
   argIdx:     INTEGER;
   buildfile:  Files.File;
   buildMode,
@@ -18,14 +18,14 @@ BEGIN
    ELSE
       outSep(i DIV 1000, n-4);  w.c(`,`);
       i := i MOD 1000;
-      w.c(CHR8(ORD(`0`) + i DIV 100));  i := i MOD 100;
-      w.c(CHR8(ORD(`0`) + i DIV 10));   i := i MOD 10;
-      w.c(CHR8(ORD(`0`) + i));
+      w.c(CHR(ORD(`0`) + i DIV 100));  i := i MOD 100;
+      w.c(CHR(ORD(`0`) + i DIV 10));   i := i MOD 10;
+      w.c(CHR(ORD(`0`) + i));
    END
 END outSep;
 
 (* Write filename part of path in a fixed 20 column field *)
-PROCEDURE outFname(fname: ARRAY OF CHAR8);
+PROCEDURE outFname(fname: ARRAY OF CHAR);
 VAR i, j: INTEGER;
 BEGIN
   i := 0;
@@ -36,7 +36,7 @@ BEGIN
 END outFname;
 
 
-PROCEDURE Compile(fname: ARRAY OF CHAR8);
+PROCEDURE Compile(fname: ARRAY OF CHAR);
 VAR srcfile: Files.File;  modinit: B.Node;
     i, sym, startTime, endTime: INTEGER;
 BEGIN
@@ -56,17 +56,17 @@ BEGIN
 END Compile;
 
 
-PROCEDURE ErrorNotFound(fname: ARRAY OF CHAR8);
+PROCEDURE ErrorNotFound(fname: ARRAY OF CHAR);
 BEGIN w.s(`File `);  w.s(fname);  w.sl(` not found`) END ErrorNotFound;
 
 
-PROCEDURE Build(fname: ARRAY OF CHAR8);
+PROCEDURE Build(fname: ARRAY OF CHAR);
 VAR
   r:          Files.Rider;
   i:          INTEGER;
   x:          BYTE;
   start, end: INTEGER;
-  srcfname:   ARRAY 1024 OF CHAR8;
+  srcfname:   ARRAY 1024 OF CHAR;
   codesize:   INTEGER;
   staticsize: INTEGER;
   varsize:    INTEGER;
@@ -79,7 +79,7 @@ BEGIN
   WHILE ~r.eof DO
     WHILE (x <= 32) & ~r.eof DO Files.Read(r, x) END;
     WHILE (x > 32) & ~r.eof DO
-      srcfname[i] := CHR8(x);  Files.Read(r, x);  INC(i)
+      srcfname[i] := CHR(x);  Files.Read(r, x);  INC(i)
     END;
     IF i > 0 THEN
       srcfname[i] := 0Y;
@@ -108,7 +108,7 @@ PROCEDURE Get;
 BEGIN INC(argIdx);  Rtl.GetArg(arg, argIdx)
 END Get;
 
-PROCEDURE Mark8(msg: ARRAY OF CHAR8);
+PROCEDURE Mark8(msg: ARRAY OF CHAR);
 BEGIN
   w.s(`arg `);  w.i(argIdx);  w.s(`: `);
   w.s(msg);  w.l;  errFlag := TRUE
@@ -136,7 +136,7 @@ BEGIN (* Arguments *)
   END
 END Arguments;
 
-PROCEDURE NotifyError8(line, column: INTEGER;  msg: ARRAY OF CHAR8);
+PROCEDURE NotifyError8(line, column: INTEGER;  msg: ARRAY OF CHAR);
 BEGIN
   IF S.errCnt = 0 THEN w.l END;
   w.s(`  [`);  w.i(line);

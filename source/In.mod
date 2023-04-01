@@ -8,7 +8,7 @@ VAR
     lpNumberOfCharsRead, pInputControl: INTEGER
   ): SYSTEM.CARD32;
 
-  hIn: INTEGER; buf: CHAR8; bufLen: INTEGER;
+  hIn: INTEGER; buf: CHAR; bufLen: INTEGER;
   Done*: BOOLEAN;
 
 PROCEDURE Open*;
@@ -26,7 +26,7 @@ BEGIN
   IF Done THEN bufLen := 1 ELSE bufLen := 0 END
 END GetCh;
 
-PROCEDURE Char*(VAR ch: CHAR8);
+PROCEDURE Char*(VAR ch: CHAR);
 BEGIN
   IF Done THEN
     IF bufLen = 0 THEN GetCh END;
@@ -43,15 +43,15 @@ BEGIN
   END
 END Ln;
 
-PROCEDURE IsBlank(ch: CHAR8): BOOLEAN;
+PROCEDURE IsBlank(ch: CHAR): BOOLEAN;
 RETURN (ch = ` `) OR (ch = 9Y) OR (ch = 0AY) OR (ch = 0DY)
 END IsBlank;
 
-PROCEDURE IsDigit(ch: CHAR8): BOOLEAN;
+PROCEDURE IsDigit(ch: CHAR): BOOLEAN;
 RETURN (ch >= `0`) & (ch <= `9`)
 END IsDigit;
 
-PROCEDURE IsHexDigit(ch: CHAR8): BOOLEAN;
+PROCEDURE IsHexDigit(ch: CHAR): BOOLEAN;
   RETURN (ch >= `A`) & (ch <= `F`)
   OR (ch >= `a`) & (ch <= `f`)
 END IsHexDigit;

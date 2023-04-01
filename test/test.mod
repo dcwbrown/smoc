@@ -6,10 +6,10 @@ CONST
   cs8 = `8 bit string`;
 
 VAR
-  c: CHAR8;
+  c: CHAR;
   i: INTEGER;
-  s: ARRAY 10 OF CHAR8;
-  t: ARRAY 10 OF CHAR8;
+  s: ARRAY 10 OF CHAR;
+  t: ARRAY 10 OF CHAR;
   b: BOOLEAN;
 
 PROCEDURE assignvarstring(VAR s: ARRAY OF CHAR);
@@ -28,7 +28,7 @@ BEGIN
 
   w.s(`cs8:            '`); w.s(cs8);  w.sl(`'.`);
 
-  c := CHR8(113);
+  c := CHR(113);
   w.s(`c: '`);  w.c(c);  w.sl(`'.`);
 
   c := `Q`;

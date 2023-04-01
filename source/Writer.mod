@@ -32,9 +32,9 @@ BEGIN
 END writesz;
 
 PROCEDURE l*();                   BEGIN write(crlf) END l;
-PROCEDURE c*(c: CHAR8);           BEGIN write(c)    END c;
-PROCEDURE s*(s: ARRAY OF CHAR8);  BEGIN writesz(s)  END s;
-PROCEDURE sl*(t: ARRAY OF CHAR8); BEGIN s(t); l     END sl;
+PROCEDURE c*(c: CHAR);           BEGIN write(c)    END c;
+PROCEDURE s*(s: ARRAY OF CHAR);  BEGIN writesz(s)  END s;
+PROCEDURE sl*(t: ARRAY OF CHAR); BEGIN s(t); l     END sl;
 PROCEDURE b*(n: INTEGER);         BEGIN WHILE n > 0 DO writebyte(ORD(` `)); DEC(n) END END b;
 
 PROCEDURE h1*(i: INTEGER);  BEGIN IF i<10 THEN writebyte(i + 48) ELSE writebyte(i + 87) END END h1;

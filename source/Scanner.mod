@@ -75,17 +75,17 @@ CONST
   endSp*          = 159;
 
 TYPE
-  IdStr8* = ARRAY MaxIdLen+1  OF CHAR8;
-  Str8*   = ARRAY MaxStrLen+1 OF CHAR8;
+  IdStr8* = ARRAY MaxIdLen+1  OF CHAR;
+  Str*   = ARRAY MaxStrLen+1 OF CHAR;
 
-  SetCompilerFlagProc* = PROCEDURE(pragma: ARRAY OF CHAR8);
-  NotifyError8Proc*    = PROCEDURE(line, column: INTEGER;  msg: ARRAY OF CHAR8);
+  SetCompilerFlagProc* = PROCEDURE(pragma: ARRAY OF CHAR);
+  NotifyError8Proc*    = PROCEDURE(line, column: INTEGER;  msg: ARRAY OF CHAR);
 
 VAR
   ival*, slen*: INTEGER;
   rval*:        REAL;
   id8*:         IdStr8;
-  str8*:        Str8;
+  str8*:        Str;
   ansiStr*:     BOOLEAN;
   errCnt*:      INTEGER;
 
@@ -105,7 +105,7 @@ VAR
   SetCompilerFlag: SetCompilerFlagProc;
   NotifyError8:    NotifyError8Proc;
 
-PROCEDURE Mark8*(msg: ARRAY OF CHAR8);
+PROCEDURE Mark8*(msg: ARRAY OF CHAR);
 BEGIN
   IF (bufPos > errPos) & (errCnt < 25) & (NotifyError8 # NIL) THEN
     NotifyError8(lastLine, lastColumn, msg)
@@ -146,7 +146,7 @@ BEGIN i := 0;  sym := ident;
   END
 END Identifier;
 
-PROCEDURE String8(quoteCh: INTEGER);  (* Prototyping CHAR8 support *)
+PROCEDURE String8(quoteCh: INTEGER);  (* Prototyping CHAR support *)
 BEGIN
   slen := 0;  Read;
   WHILE ~eof & (slen < MaxStrLen) & (ch # quoteCh) DO
@@ -174,7 +174,7 @@ BEGIN
   WHILE ~eof & (slen < MaxStrLen) & (ch # ORD(`$`)) DO
     WHILE (ch = SP) OR (ch = TAB) OR (ch = CR)  OR (ch = LF) DO Read END;
     m := hexdigit();  n := hexdigit();
-    str8[slen] := CHR8(m * 10H + n);
+    str8[slen] := CHR(m * 10H + n);
     INC(slen)
   END;
   IF slen > MaxStrLen THEN Mark8(`Hex string too long`) END;
@@ -280,7 +280,7 @@ BEGIN
     IF ch = ORD(`Y`) THEN sym := string8;
       IF k2 < 100H THEN ival := k2 ELSE Mark8(`Illegal value`);  ival := 0  END;
       IF k2 = 0 THEN str8[0] := 0Y;  slen := 1
-      ELSE str8[0] := CHR8(k2);  str8[1] := 0Y;  slen := 2
+      ELSE str8[0] := CHR(k2);  str8[1] := 0Y;  slen := 2
       END
     ELSIF ch = ORD(`R`) THEN sym := real;  rval := SYSTEM.VAL(REAL, k2)
     ELSE sym := int;  ival := k2
@@ -319,7 +319,7 @@ PROCEDURE SkipComment(lev: INTEGER);
 VAR exit: BOOLEAN;
 
   PROCEDURE SetPragma;
-  VAR pragma: Str8;  i: INTEGER;
+  VAR pragma: Str;  i: INTEGER;
   BEGIN Read;  i := 0;
     WHILE (i < LEN(pragma) - 1) & (ch # ORD(`*`)) & ~eof DO
       Rtl.PutUtf8(ch, pragma, i);  Read
@@ -382,7 +382,7 @@ BEGIN
     ELSIF ch < ORD(`[`) THEN Identifier(sym)
     ELSIF ch = ORD(`_`) THEN Identifier(sym)
     ELSIF ch < ORD(`a`) THEN
-      IF ch = 96 THEN String8(ch);  sym := string8  (* Temp for CHAR8 prototyping *)
+      IF ch = 96 THEN String8(ch);  sym := string8  (* Temp for CHAR prototyping *)
       ELSE
         IF    ch = ORD(`[`) THEN sym := lbrak
         ELSIF ch = ORD(`]`) THEN sym := rbrak

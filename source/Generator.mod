@@ -126,7 +126,7 @@ VAR
   errFmtStr,  err2FmtStr,
   err3FmtStr, err4FmtStr,
   err5FmtStr, err6FmtStr,
-  rtlName,    user32name:  B.Str8;
+  rtlName,    user32name:  B.Str;
 
   mem: RECORD
          mod, rm, bas, idx, scl, disp: INTEGER
@@ -583,7 +583,7 @@ END AllocImportModules;
 
 PROCEDURE AllocStaticData;
 VAR o: B.Str8List;  q: B.TypeList;
-    x: B.Object;    z: B.Str8;
+    x: B.Object;    z: B.Str;
     strSize, tdSize, align: INTEGER;
 BEGIN
   (* Allocate 8 bit literal strings *)
@@ -727,7 +727,7 @@ BEGIN ident := decl;
   WHILE ident # NIL DO obj := ident.obj;
     IF obj IS B.Proc THEN
       ScanDeclaration(obj(B.Proc).decl, lev+1);  ScanProc(obj(B.Proc))
-    ELSIF (lev = 0) & (obj IS B.Var) & ~(obj IS B.Str8) THEN
+    ELSIF (lev = 0) & (obj IS B.Var) & ~(obj IS B.Str) THEN
       IF obj.type.nTraced > 0 THEN
         INC(ptrTableSize, obj.type.nTraced*8)
       END
@@ -752,7 +752,7 @@ BEGIN
 END NewProc;
 
 
-PROCEDURE Append(s: ARRAY OF CHAR8; VAR d: ARRAY OF CHAR8);
+PROCEDURE Append(s: ARRAY OF CHAR; VAR d: ARRAY OF CHAR);
 VAR si, di: INTEGER;
 BEGIN  si:= 0;  di := 0;
   WHILE (di < LEN(d))  &  (d[di] # 0Y) DO INC(di) END;
@@ -764,7 +764,7 @@ END Append;
 
 
 PROCEDURE Pass1(VAR modinit: B.Node);
-VAR str: ARRAY 512 OF CHAR8;
+VAR str: ARRAY 512 OF CHAR;
 BEGIN
   modidStr    := B.NewStr8Z(B.modid);
   errFmtStr   := B.NewStr8Z(`[%d:%d]: %16.16s`);
@@ -1205,7 +1205,7 @@ END LoadAdr;
 
 PROCEDURE ArrayLen(VAR x: Item;  obj: B.Object);
 BEGIN
-  IF    obj IS B.Str8  THEN x.mode := mImm;  x.a := obj(B.Str8).len
+  IF    obj IS B.Str  THEN x.mode := mImm;  x.a := obj(B.Str).len
   ELSIF B.IsOpenArray(obj.type) THEN MakeItem0(x, obj);  INC(x.a, 8)
   ELSIF B.IsNormalArray(obj.type) THEN x.mode := mImm;  x.a := obj.type.len
   ELSE ASSERT(FALSE)
@@ -1216,7 +1216,7 @@ END ArrayLen;
 PROCEDURE SizeOf(VAR x: Item;  obj: B.Object);
 VAR size, e: INTEGER;
 BEGIN
-  IF    obj IS B.Str8  THEN x.mode := mImm;  x.a := obj(B.Str8).len
+  IF    obj IS B.Str  THEN x.mode := mImm;  x.a := obj(B.Str).len
   ELSIF B.IsOpenArray(obj.type) THEN size := obj.type.base.size;
     IF size = 0 THEN x.mode := mImm;  x.a := 0
     ELSE ArrayLen(x, obj);  Load(x);  e := log2(size);
@@ -1902,7 +1902,7 @@ BEGIN
         ArrayLen(z, node.left);  SetRmOperand(z);
         EmitRmImm(CMPi, 4, cx);  Trap(ccB, stringTrap)
       END;
-      SetAlloc(reg_C);  LoadImm(reg_C, 4, cx);  EmitRep(MOVSrep, 1, 1) (* Size 2 -> 1 for CHAR8 *)
+      SetAlloc(reg_C);  LoadImm(reg_C, 4, cx);  EmitRep(MOVSrep, 1, 1) (* Size 2 -> 1 for CHAR *)
     ELSIF B.IsStr8(x.type) THEN       (* Changed to LODSB/STOSB otherwise test thoroughly *)
       SetAlloc(reg_A);  SetAlloc(reg_C);
       ClearReg(reg_C);  ClearReg(reg_A);
@@ -2189,7 +2189,7 @@ BEGIN
     objv := obj(B.Var);  x.a := objv.adr;  form := objv.type.form;
     IF objv.lev <= 0 THEN x.mode := mBX ELSE x.mode := mBP END;
     IF objv.lev < 0 THEN x.ref := TRUE END;
-    IF    objv IS B.Str8  THEN x.mode := mBX;  x.strlen := objv(B.Str8).len
+    IF    objv IS B.Str  THEN x.mode := mBX;  x.strlen := objv(B.Str).len
     ELSIF objv IS B.Par THEN
       size := objv.type.size;
       x.ref := objv(B.Par).varpar OR (form = B.tArray)
@@ -2879,7 +2879,7 @@ END FltConst;
 PROCEDURE TypeTransferConst*(type: B.Type;  x: B.Object): B.Object;
 VAR val: INTEGER;
 BEGIN
-  IF    x IS B.Str8  THEN val := B.str8buf[x(B.Str8).bufpos]
+  IF    x IS B.Str  THEN val := B.str8buf[x(B.Str).bufpos]
   ELSE val := x(B.Const).val
   END;
   IF type # x.type THEN
@@ -2900,7 +2900,7 @@ END TypeTransferConst;
 (* Compile time constant operations *)
 PROCEDURE FoldConst*(op: INTEGER;  x, y: B.Object): B.Object;
 VAR val, xval, yval, i, k: INTEGER;  type: B.Type;  r1, r2: REAL;
-    xstr8,  ystr8:  B.Str8;   cb1, cb2: BYTE;
+    xstr8,  ystr8:  B.Str;   cb1, cb2: BYTE;
 BEGIN
   IF (op >= S.eql) & (op <= S.in) THEN
     IF (x IS B.Const) & (y IS B.Const) & (x.type # B.realType) THEN
@@ -2919,8 +2919,8 @@ BEGIN
       OR (op = S.lss) & (r1 < r2) OR (op = S.leq) & (r1 <= r2)
       THEN val := 1 ELSE val := 0
       END
-    ELSIF (x IS B.Str8) & (y IS B.Str8) THEN
-      xstr8 := x(B.Str8);  ystr8 := y(B.Str8);
+    ELSIF (x IS B.Str) & (y IS B.Str) THEN
+      xstr8 := x(B.Str);  ystr8 := y(B.Str);
       IF (xstr8.bufpos >= 0) & (ystr8.bufpos >= 0) THEN
         i := xstr8.bufpos;  k := ystr8.bufpos;
         cb1 := B.str8buf[i];  cb2 := B.str8buf[k];

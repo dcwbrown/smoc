@@ -164,7 +164,7 @@ VAR iRes: Int;
 BEGIN iRes := MessageBoxW(0, SYSTEM.ADR(msg), SYSTEM.ADR(title), 0)
 END MessageBox16;
 
-PROCEDURE GetArg*(VAR out: ARRAY OF CHAR8;  n: INTEGER);
+PROCEDURE GetArg*(VAR out: ARRAY OF CHAR;  n: INTEGER);
 VAR i, arg: INTEGER;  str16: ARRAY 1024 OF SYSTEM.CARD16;
 BEGIN (* GetArg *)
   ASSERT(argv # 0);
@@ -192,12 +192,12 @@ END TimeToMSecs;
 
 (* -------------------------------------------------------------------------- *)
 
-PROCEDURE LowerCase*(VAR str: ARRAY OF CHAR8);
+PROCEDURE LowerCase*(VAR str: ARRAY OF CHAR);
 VAR i: INTEGER;
 BEGIN
   WHILE (i < LEN(str)) & (str[i] # 0Y) DO
     IF (ORD(str[i]) >= ORD(`a`))  &  (ORD(str[i]) <= ORD(`z`)) THEN
-      str[i] := CHR8(ORD(str[i]) - 20H)
+      str[i] := CHR(ORD(str[i]) - 20H)
     END;
     INC(i)
   END
