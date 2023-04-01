@@ -56,8 +56,8 @@ BEGIN
   IF s < t THEN w.sl("s<t.") ELSE w.sl("s¬<t.") END;
   IF s > t THEN w.sl("s>t.") ELSE w.sl("s¬>t.") END;
 
-  s := $$40 41
-         42 43 00$;
+  s := $ 40 41
+         42 43 00 $;
   w.s("s: '");  w.s(s);  w.sl("'.");
   s[2] := 50Y;
   w.s("s: '");  w.s(s);  w.sl("'.");

@@ -562,14 +562,14 @@ END set;
 PROCEDURE factor(): B.Object;
 VAR x: B.Object;
 BEGIN
-  IF    sym = S.int     THEN x := B.NewConst(B.intType, S.ival);   GetSym
-  ELSIF sym = S.real    THEN x := B.NewConst(B.realType, S.ival);  GetSym
-  ELSIF sym = S.string8 THEN x := B.NewStr (S.str, S.slen);      GetSym
-  ELSIF sym = S.nil     THEN x := B.NewConst(B.nilType, 0);        GetSym
-  ELSIF sym = S.true    THEN x := B.NewConst(B.boolType, 1);       GetSym
-  ELSIF sym = S.false   THEN x := B.NewConst(B.boolType, 0);       GetSym
-  ELSIF sym = S.lbrace  THEN x := set()
-  ELSIF sym = S.ident   THEN x := designator();
+  IF    sym = S.int    THEN x := B.NewConst(B.intType,  S.ival);  GetSym
+  ELSIF sym = S.real   THEN x := B.NewConst(B.realType, S.ival);  GetSym
+  ELSIF sym = S.string THEN x := B.NewStr  (S.str,      S.slen);  GetSym
+  ELSIF sym = S.nil    THEN x := B.NewConst(B.nilType,  0);       GetSym
+  ELSIF sym = S.true   THEN x := B.NewConst(B.boolType, 1);       GetSym
+  ELSIF sym = S.false  THEN x := B.NewConst(B.boolType, 0);       GetSym
+  ELSIF sym = S.lbrace THEN x := set()
+  ELSIF sym = S.ident  THEN x := designator();
     IF x.class = B.cSProc THEN Mark("not function");
       x := B.NewConst(B.intType, 0)
     ELSIF x.class = B.cSFunc THEN
@@ -854,7 +854,7 @@ VAR x, y: B.Object;  xform: INTEGER;
   BEGIN xform := x.type.form;
     IF sym = S.int THEN y := factor();
       IF xform # B.tInt THEN Mark("Invalid value") END
-    ELSIF sym = S.string8 THEN
+    ELSIF sym = S.string THEN
       IF xform # B.tChar THEN Mark("Invalid value") END;
       IF S.slen > 2 THEN Mark("not char") END;
       y := B.NewConst(B.charType, ORD(S.str[0]));  GetSym
@@ -889,7 +889,7 @@ VAR x, y: B.Object;  xform: INTEGER;
   PROCEDURE NumericCase(x: B.Object): B.Node;
   VAR bar, colon: B.Node;  y: B.Node;
   BEGIN
-    IF (sym = S.int) OR (sym = S.string8) OR (sym = S.ident) THEN
+    IF (sym = S.int) OR (sym = S.string) OR (sym = S.ident) THEN
       y := LabelRange(x);
       WHILE sym = S.comma DO
         GetSym;  y := NewNode(S.or, y, LabelRange(x))
