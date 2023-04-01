@@ -15,9 +15,9 @@ CONST
   tPtr*   = 5;  tProc* = 6;  tArray* = 7;  tRec*    = 8;  tStr16*  = 9;  tNil* = 10;
   tChar8* = 11; tStr8* = 12;
 
-  typScalar* = {tInt,  tBool, tSet,   tChar8,  tChar16, tReal, tPtr, tProc, tNil};
+  typScalar* = {tInt,  tBool, tSet,   tChar8,  tReal, tPtr, tProc, tNil};
   typEql*    = {tBool, tSet,  tPtr,   tProc,   tNil};
-  typCmp*    = {tInt,  tReal, tChar8, tChar16, tStr8,   tStr16};
+  typCmp*    = {tInt,  tReal, tChar8, tChar16, tStr8};
 
 TYPE
   ModuleKey* = ARRAY 2 OF INTEGER;
@@ -118,11 +118,13 @@ VAR
   recList*:                          TypeList;
 
   (* Predefined Types *)
-  nilType*,   noType*,
-  boolType*,  setType*,    realType*,
-  byteType*,  card16Type*, card32Type*,
-  intType*,   int8Type*,   int16Type*,  int32Type*,
-  char8Type*, str8Type*,   char16Type*, str16Type*: Type;
+  nilType*,    noType*,
+  boolType*,   setType*,
+  realType*,   byteType*,
+  card16Type*, card32Type*,
+  intType*,    int8Type*,
+  int16Type*,  int32Type*,
+  char8Type*,  str8Type*:    Type;
 
   predefTypes: TypeList;
 
@@ -139,8 +141,10 @@ VAR
   str8bufSize*:  INTEGER;
   str8buf*:      ARRAY 1000H OF BYTE;  (* TODO change to CHAR8 *)
 
+  (*
   str16bufSize*: INTEGER;
   str16buf*:     ARRAY 1000H OF SYSTEM.CARD16;
+  *)
 
   symPath, srcPath, sym: ARRAY 1024 OF CHAR8;
 
@@ -196,10 +200,6 @@ END IsNormalArray;
 PROCEDURE IsStr8*(t: Type): BOOLEAN;
   RETURN (t = str8Type) OR (t.form = tArray) & (t.base.form = tChar8)
 END IsStr8;
-
-PROCEDURE IsStr16*(t: Type): BOOLEAN;
-  RETURN (t = str16Type) OR (t.form = tArray) & (t.base.form = tChar16)
-END IsStr16;
 
 (* -------------------------------------------------------------------------- *)
 (* -------------------------------------------------------------------------- *)
@@ -926,7 +926,8 @@ BEGIN
   Files.Delete8(symfname, res);
 
   NEW(universe);  topScope := universe;  curLev := -1;
-  system := FALSE;  modno := -2;  str8bufSize := 0;  str16bufSize := 0;
+  system := FALSE;  modno := -2;  str8bufSize := 0;
+  (*str16bufSize := 0;*)
   expList := NIL;  lastExp := NIL;  str8List := NIL;  recList := NIL;
   InitCompilerFlag;
 
@@ -937,7 +938,6 @@ BEGIN
   Enter(NewTypeObj(boolType),   `BOOLEAN`);
   Enter(NewTypeObj(char8Type),  `CHAR8`);
   Enter(NewTypeObj(char8Type),  `CHAR`);
-  Enter(NewTypeObj(char16Type), `CHAR16`);
 
   Enter(NewSProc(S.spINC,    cSProc), `INC`);
   Enter(NewSProc(S.spDEC,    cSProc), `DEC`);
@@ -965,7 +965,6 @@ BEGIN
   Enter(NewSProc(S.spGET,            cSProc), `GET`);
   Enter(NewSProc(S.spPUT,            cSProc), `PUT`);
   Enter(NewSProc(S.spCOPY,           cSProc), `COPY`);
-  Enter(NewSProc(S.spLoadLibraryW,   cSProc), `LoadLibraryW`);
   Enter(NewSProc(S.spLoadLibraryA,   cSProc), `LoadLibraryA`);
   Enter(NewSProc(S.spGetProcAddress, cSProc), `GetProcAddress`);
   Enter(NewSProc(S.spINT3,           cSProc), `INT3`);
@@ -1006,11 +1005,9 @@ BEGIN
   NewPredefinedType(boolType,   tBool);
   NewPredefinedType(setType,    tSet);
   NewPredefinedType(char8Type,  tChar8);
-  NewPredefinedType(char16Type, tChar16);
   NewPredefinedType(nilType,    tNil);
   NewPredefinedType(realType,   tReal);
   NewPredefinedType(str8Type,   tStr8);
-  NewPredefinedType(str16Type,  tStr16);
   NewPredefinedType(noType,     tPtr);    noType.base := intType;
   NewPredefinedType(card16Type, tInt);
   NewPredefinedType(card32Type, tInt);

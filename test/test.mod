@@ -1,6 +1,6 @@
 MODULE test;  (*$CONSOLE*)
 
-IMPORT Dumper, w := Writer;
+IMPORT SYSTEM, Dumper, w := Writer;
 
 CONST
   cs8 = `8 bit string`;
@@ -10,8 +10,6 @@ VAR
   i: INTEGER;
   s: ARRAY 10 OF CHAR8;
   t: ARRAY 10 OF CHAR8;
-  u: ARRAY 10 OF CHAR16;
-  v: ARRAY 10 OF CHAR16;
   b: BOOLEAN;
 
 PROCEDURE assignvarstring(VAR s: ARRAY OF CHAR);
@@ -21,12 +19,6 @@ END assignvarstring;
 
 BEGIN
   w.sl(`Hello teapots.`);
-
-  ASSERT(TRUE);
-  b := u # v;
-  ASSERT(TRUE);
-  b := s # t;
-  ASSERT(TRUE);
 
   w.s(`w.i(12345):      `); w.i(12345);      w.l;
   w.s(`w.h(12345):      `); w.h(12345);      w.l;

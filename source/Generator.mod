@@ -677,7 +677,7 @@ BEGIN (* ScanNode *)
     ELSIF (node.op >= S.sfLSL) & (node.op <= S.sfROR) THEN
       IF ~(right IS B.Const) THEN INCL(node.regUsed, reg_C) END
     ELSIF (node.op >= S.eql) & (node.op <= S.geq) THEN
-      IF B.IsStr8(left.type) OR B.IsStr16(left.type) THEN
+      IF B.IsStr8(left.type) THEN
         node.regUsed := node.regUsed + {reg_SI, reg_DI}
       END
     ELSIF node.op = S.upto THEN INCL(node.regUsed, reg_C)
@@ -1141,9 +1141,8 @@ BEGIN
       ELSE ASSERT(FALSE)
       END
     ELSIF type.size = 2 THEN
-      IF (type = B.char16Type)
-      OR (type = B.card16Type) THEN EmitMOVZX(r, 2)
-      ELSIF type = B.int16Type THEN EmitMOVSX(r, 2)
+      IF    type = B.card16Type THEN EmitMOVZX(r, 2)
+      ELSIF type = B.int16Type  THEN EmitMOVSX(r, 2)
       ELSE ASSERT(FALSE)
       END
     ELSIF type.size = 1 THEN
@@ -1168,8 +1167,6 @@ BEGIN RefToRegI(x);
       ELSIF x.mode IN {mRegI, mBP, mBX} THEN
         IF x.type = B.str8Type THEN
           ASSERT(x.strlen <= 2);  LoadToReg0(r, x, B.char8Type)
-        ELSIF x.type = B.str16Type THEN
-          ASSERT(x.strlen <= 2);  LoadToReg0(r, x, B.char16Type)
         ELSE LoadToReg0(r, x, x.type)
         END
       ELSIF x.mode = mProc THEN
@@ -1538,37 +1535,6 @@ BEGIN
     Fixup(L, pc);
     FreeReg(reg_DI);  FreeReg(reg_SI);
                                   SetCond(x, OpToCc(node.op))
-  ELSIF B.IsStr16(tp) THEN
-    SetBestReg(reg_SI);
-    AvoidUsedBy(node.right);
-    SetAvoid(reg_DI);
-    MakeItem0(x, node.left);      LoadAdr(x);
-    ResetMkItmStat;
-    SetBestReg(reg_DI);
-    MakeItem0(y, node.right);     LoadAdr(y);
-    IF y.r # reg_DI THEN RelocReg(y.r, reg_DI) END;
-    IF x.r # reg_SI THEN RelocReg(x.r, reg_SI) END;
-    cx := AllocReg2({});          ClearReg(cx);
-    first := pc;                  EmitR(INC_, cx, 4);
-    ArrayLen(len, node.left);
-    IF len.mode = mImm THEN       EmitRI(CMPi, cx, 4, len.a)
-    ELSE SetRmOperand(len);       EmitRegRm(CMPd, cx, 4);  FreeReg2(len)
-    END;
-                                  Trap(ccA, stringTrap);
-
-    ArrayLen(len, node.right);
-    IF len.mode = mImm THEN       EmitRI(CMPi, cx, 4, len.a)
-    ELSE SetRmOperand(len);       EmitRegRm(CMPd, cx, 4);  FreeReg2(len)
-    END;
-                                  Trap(ccA, stringTrap);
-
-                                  EmitBare(CMPSW);
-    L := pc;                      Jcc1(ccNZ, 0);
-    SetRm_regI(reg_SI, -2);       EmitRmImm(CMPi, 2, 0);
-                                  BJump(first, ccNZ);
-    Fixup(L, pc);
-    FreeReg(reg_DI);  FreeReg(reg_SI);
-                                  SetCond(x, OpToCc(node.op))
   ELSE ASSERT(FALSE)
   END;
   MkItmStat := oldStat
@@ -1723,7 +1689,6 @@ BEGIN
   IF ftype.form = B.tArray THEN LoadParam(x, par, n, TRUE);
     IF B.IsOpenArray(ftype) & ~ftype.notag THEN INC(i) END
   ELSIF ftype = B.str8Type  THEN LoadParam(x, par, n, TRUE)
-  ELSIF ftype = B.str16Type THEN LoadParam(x, par, n, TRUE)
   ELSIF ftype.form = B.tRec THEN
     IF varpar THEN LoadParam(x, par, n, TRUE);  INC(i)
     ELSIF (ftype.size < 9) & (ftype.size IN {0, 1, 2, 4, 8}) THEN
@@ -1859,19 +1824,11 @@ BEGIN
     EmitXmmRm(CVTSI2SD, r, 8);  FreeReg(x.r);
     x.mode := mXReg;  x.r := r;  MkItmStat := oldStat
   ELSIF id = S.sfORD THEN MakeItem0(x, obj1);  Load(x)
+
   ELSIF id = S.sfCHR8 THEN MakeItem0(x, obj1);  RefToRegI(x);
     IF x.mode IN {mRegI, mBP, mBX} THEN x.type := B.char8Type;  Load(x)
     ELSIF x.mode = mReg            THEN LoadToReg0(x.r, x, B.char8Type)
     ELSE ASSERT(FALSE) END
-  ELSIF id = S.sfCHR THEN MakeItem0(x, obj1);  RefToRegI(x);
-    IF x.mode IN {mRegI, mBP, mBX} THEN
-      IF    x.type = B.int8Type THEN x.type := B.byteType  (* load as unsigned *)
-      ELSIF x.type # B.byteType THEN x.type := B.char16Type
-      END;
-      Load(x)
-    ELSIF x.mode = mReg THEN LoadToReg0(x.r, x, B.char16Type)
-    ELSE ASSERT(FALSE)
-    END
   ELSIF id = S.sfADR THEN MakeItem0(x, obj1);  LoadAdr(x)
   ELSIF id = S.sfBIT THEN
     ResetMkItmStat2(oldStat);  AvoidUsedBy(obj2);
@@ -1946,12 +1903,6 @@ BEGIN
         EmitRmImm(CMPi, 4, cx);  Trap(ccB, stringTrap)
       END;
       SetAlloc(reg_C);  LoadImm(reg_C, 4, cx);  EmitRep(MOVSrep, 1, 1) (* Size 2 -> 1 for CHAR8 *)
-    ELSIF y.type = B.str16Type THEN cx := y.strlen;
-      IF B.IsOpenArray(x.type) THEN
-        ArrayLen(z, node.left);  SetRmOperand(z);
-        EmitRmImm(CMPi, 4, cx);  Trap(ccB, stringTrap)
-      END;
-      SetAlloc(reg_C);  LoadImm(reg_C, 4, cx);  EmitRep(MOVSrep, 2, 1)
     ELSIF B.IsStr8(x.type) THEN       (* Changed to LODSB/STOSB otherwise test thoroughly *)
       SetAlloc(reg_A);  SetAlloc(reg_C);
       ClearReg(reg_C);  ClearReg(reg_A);
@@ -1967,22 +1918,6 @@ BEGIN
       END;  Trap(ccA, stringTrap);
 
       EmitBare(LODSB);  EmitBare(STOSB);
-      EmitRR(TEST, reg_A, 4, reg_A);  BJump(first, ccNZ)
-    ELSIF B.IsStr16(x.type) THEN
-      SetAlloc(reg_A);  SetAlloc(reg_C);
-      ClearReg(reg_C);  ClearReg(reg_A);
-      first := pc;  EmitRI(ADDi, reg_C, 4, 1);
-
-      ArrayLen(z, node.left);
-      IF z.mode = mImm THEN EmitRI(CMPi, reg_C, 4, z.a)
-      ELSE SetRmOperand(z);  EmitRegRm(CMPd, reg_C, 4)
-      END;  Trap(ccA, stringTrap);
-      ArrayLen(z, node.right);
-      IF z.mode = mImm THEN EmitRI(CMPi, reg_C, 4, z.a)
-      ELSE SetRmOperand(z);  EmitRegRm(CMPd, reg_C, 4)
-      END;  Trap(ccA, stringTrap);
-
-      EmitBare(LODSW);  EmitBare(STOSW);
       EmitRR(TEST, reg_A, 4, reg_A);  BJump(first, ccNZ)
     ELSIF B.IsOpenArray(y.type) THEN
       SetBestReg(reg_C);  ArrayLen(z, node.right);  Load(z);
@@ -2218,17 +2153,6 @@ BEGIN
     IF y.r # reg_C THEN RelocReg(y.r, reg_C) END;
 
     SetRm_regI(reg_B, LoadLibraryA);   EmitRm(CALL, 4);
-    FreeReg(reg_C);  SetAlloc(reg_A);  SetAlloc(reg_B);
-
-    RefToRegI(x);  SetRmOperand(x);  EmitRegRm(MOV, reg_A, 8);
-    IF curProc.obj.homeSpace < 32 THEN curProc.obj.homeSpace := 32 END
-  ELSIF id = S.spLoadLibraryW THEN
-    MkItmStat.avoid := {0, 1, 2, 8 .. 11};
-    AvoidUsedBy(obj2);  MakeItem0(x, obj1);  ResetMkItmStat;
-    SetBestReg(reg_C);  MakeItem0(y, obj2);  LoadAdr(y);
-    IF y.r # reg_C THEN RelocReg(y.r, reg_C) END;
-
-    SetRm_regI(reg_B, LoadLibraryW);  EmitRm(CALL, 4);
     FreeReg(reg_C);  SetAlloc(reg_A);  SetAlloc(reg_B);
 
     RefToRegI(x);  SetRmOperand(x);  EmitRegRm(MOV, reg_A, 8);
@@ -3065,7 +2989,6 @@ BEGIN
   B.intType.size    := 8;  B.intType.align    := 8;
   B.byteType.size   := 1;  B.byteType.align   := 1;
   B.char8Type.size  := 1;  B.char8Type.align  := 1;
-  B.char16Type.size := 2;  B.char16Type.align := 2;
   B.boolType.size   := 1;  B.boolType.align   := 1;
   B.setType.size    := 8;  B.setType.align    := 8;
   B.realType.size   := 8;  B.realType.align   := 8;
