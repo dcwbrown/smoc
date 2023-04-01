@@ -488,7 +488,7 @@ END EmitRep;
 
 PROCEDURE CheckTypeSize(VAR sz: INTEGER);
 BEGIN
-  IF sz > MaxSize THEN S.Mark(`type too big`);  sz := 8 END
+  IF sz > MaxSize THEN S.Mark("type too big");  sz := 8 END
 END CheckTypeSize;
 
 PROCEDURE SetTypeSize*(tp: B.Type);
@@ -541,7 +541,7 @@ BEGIN
   Align(varSize, x.type.align);  INC(varSize, x.type.size);
   x(B.Var).adr := -varSize;
   IF varSize > MaxSize THEN varSize := 8;
-    S.Mark(`global var size limit reached`)
+    S.Mark("global var size limit reached")
   END
 END SetGlobalVarSize;
 
@@ -551,7 +551,7 @@ BEGIN size := proc.locblksize;
   Align(size, x.type.align);  INC(size, x.type.size);
   x(B.Var).adr := -size;  proc.locblksize := size;
   IF size > MaxLocBlkSize THEN proc.locblksize := 8;
-    S.Mark(`local var size limit reached`)
+    S.Mark("local var size limit reached")
   END
 END SetProcVarSize;
 
@@ -606,7 +606,7 @@ BEGIN
   AllocImportModules;
 
   IF staticSize + varSize > MaxSize THEN
-    S.Mark(`static variables size too big`);  ASSERT(FALSE)
+    S.Mark("static variables size too big");  ASSERT(FALSE)
   END
 END AllocStaticData;
 
@@ -767,15 +767,15 @@ PROCEDURE Pass1(VAR modinit: B.Node);
 VAR str: ARRAY 512 OF CHAR;
 BEGIN
   modidStr    := B.NewStrZ(B.modid);
-  errFmtStr   := B.NewStrZ(`[%d:%d]: %16.16s`);
-  err2FmtStr  := B.NewStrZ(`Module key of %s is mismatched`);
-  err3FmtStr  := B.NewStrZ(`Unknown exception;  PC: %x`);
-  err4FmtStr  := B.NewStrZ(`Cannot load module %s (not exist?)`);
-  rtlName     := B.NewStrZ(`Rtl.dll`);
-  user32name  := B.NewStrZ(`user32.dll`);
-  str         := `Error in module `;  Append(B.modid, str);
+  errFmtStr   := B.NewStrZ("[%d:%d]: %16.16s");
+  err2FmtStr  := B.NewStrZ("Module key of %s is mismatched");
+  err3FmtStr  := B.NewStrZ("Unknown exception;  PC: %x");
+  err4FmtStr  := B.NewStrZ("Cannot load module %s (not exist?)");
+  rtlName     := B.NewStrZ("Rtl.dll");
+  user32name  := B.NewStrZ("user32.dll");
+  str         := "Error in module ";  Append(B.modid, str);
   err5FmtStr  := B.NewStrZ(str);
-  trapDesc    := B.NewStrZ(`Module key      Array index     Type mismatch   String index    Nil dereference Nil proc call   Divide by zero  Assertion false Run time missing`);
+  trapDesc    := B.NewStrZ("Module key      Array index     Type mismatch   String index    Nil dereference Nil proc call   Divide by zero  Assertion false Run time missing");
 
   AllocStaticData;
   ScanDeclaration(B.universe.first, 0);
@@ -1015,7 +1015,7 @@ BEGIN
       WHILE (reg < 12) & (reg IN cantAlloc) DO INC(reg) END;
       IF reg >= 12 THEN reg := 6;
         WHILE (reg < 16) & (reg IN cantAlloc) DO INC(reg) END;
-        IF reg >= 16 THEN S.Mark(`Reg stack overflow`) END
+        IF reg >= 16 THEN S.Mark("Reg stack overflow") END
       END
     END
   ELSE reg := MkItmStat.bestReg
@@ -1032,7 +1032,7 @@ BEGIN cantAlloc := avoid + allocReg + {reg_SP, reg_BP, reg_B};
     WHILE (reg < 12) & (reg IN cantAlloc) DO INC(reg) END;
     IF reg >= 12 THEN reg := 6;
       WHILE (reg < 16) & (reg IN cantAlloc) DO INC(reg) END;
-      IF reg >= 16 THEN S.Mark(`Reg stack overflow`) END
+      IF reg >= 16 THEN S.Mark("Reg stack overflow") END
     END
   END;
   ASSERT(reg < 16);  SetAlloc(reg);
@@ -1053,7 +1053,7 @@ BEGIN
   cantAlloc := MkItmStat.xAvoid + allocXReg;
   IF (MkItmStat.bestXReg = 255) OR (MkItmStat.bestXReg IN cantAlloc) THEN
     reg := 0;  WHILE (reg < 16) & (reg IN cantAlloc) DO INC(reg) END;
-    IF reg >= 16 THEN S.Mark(`Reg stack overflow`);  ASSERT(FALSE) END
+    IF reg >= 16 THEN S.Mark("Reg stack overflow");  ASSERT(FALSE) END
   ELSE reg := MkItmStat.bestXReg
   END;
   SetAllocX(reg);
@@ -1064,7 +1064,7 @@ PROCEDURE AllocXReg2(avoid: SET): BYTE;
 VAR reg: BYTE;  cantAlloc: SET;
 BEGIN cantAlloc := avoid + allocXReg;
   reg := 0;  WHILE (reg < 16) & (reg IN cantAlloc) DO INC(reg) END;
-  IF reg >= 16 THEN S.Mark(`Reg stack overflow`);  ASSERT(FALSE) END;
+  IF reg >= 16 THEN S.Mark("Reg stack overflow");  ASSERT(FALSE) END;
   SetAllocX(reg);
   RETURN reg
 END AllocXReg2;
@@ -2766,7 +2766,7 @@ VAR val: INTEGER;
 BEGIN
   IF x IS B.Const THEN val := x(B.Const).val ELSE val := 0 END;
   IF (val < 0) OR (val > 63) THEN
-    S.Mark(`Set element must be >= 0 and <= 63`)
+    S.Mark("Set element must be >= 0 and <= 63")
   END
 END CheckSetElement;
 
@@ -2839,13 +2839,13 @@ BEGIN
     val := x(B.Const).val;  fraction := val MOD 10000000000000H;
     exp := val DIV 10000000000000H MOD 800H;  sign := val < 0;
     IF exp = 0 (* subnormal *) THEN val := 0
-    ELSIF exp = 7FFH (* Inf or NaN *) THEN S.Mark(`Float too large`)
+    ELSIF exp = 7FFH (* Inf or NaN *) THEN S.Mark("Float too large")
     ELSE DEC(exp, 1023);  INC(fraction, 10000000000000H);  p := 52;
       IF exp < 0 THEN val := 0 ELSIF exp = 0 THEN val := 1
       ELSE WHILE (p > 0) & (exp > 0) DO DEC(p);  DEC(exp) END;
         IF exp = 0 THEN val := ASR(fraction, p)
         ELSIF exp <= 11 THEN val := LSL(fraction, exp)
-        ELSE S.Mark(`Float too large`)
+        ELSE S.Mark("Float too large")
         END
       END;
       IF sign THEN val := -val END
@@ -2942,7 +2942,7 @@ BEGIN
       ELSIF op = S.minus THEN val := xval - yval
       ELSIF op = S.times THEN val := xval * yval
       ELSIF (op = S.div) OR (op = S.mod) THEN
-        IF yval <= 0 THEN S.Mark(`invalid divisor`)
+        IF yval <= 0 THEN S.Mark("invalid divisor")
         ELSIF op = S.div THEN val := xval DIV yval
         ELSE val := xval MOD yval
         END
@@ -3014,7 +3014,7 @@ BEGIN
   LoadLibraryA                := 8;
   GetProcAddress              := 0;
 
-  debug := Files.New(`.DebugInfo`);  Files.Set(rider, debug, 0)
+  debug := Files.New(".DebugInfo");  Files.Set(rider, debug, 0)
 END Init;
 
 PROCEDURE Generate*(VAR modinit: B.Node);

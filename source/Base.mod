@@ -243,7 +243,7 @@ BEGIN
   x.type := strType;  x.lev := curLev;  x.len := slen;
   IF x.lev >= -1 (* need to alloc buffer *) THEN
     IF strBufSize + slen >= LEN(strBuf) THEN
-      S.Mark(`too many strings`);  x.bufpos := -1
+      S.Mark("too many strings");  x.bufpos := -1
     ELSE x.bufpos  := strBufSize;  strBufSize := strBufSize + slen;
       FOR i := 0 TO slen-1 DO strBuf[x.bufpos+i] := str[i] END;
       NEW(p);  p.obj := x;  p.next := strList;  strList := p
@@ -456,7 +456,7 @@ BEGIN
   IF typ.mod = NIL THEN
     IF refno < MaxExpTypes THEN
       INC(refno);  typ.ref := refno
-    ELSE S.Mark(`Too many exported types`)
+    ELSE S.Mark("Too many exported types")
     END
   ELSE typ.ref := -typ.ref
   END;
@@ -507,7 +507,7 @@ BEGIN
   symfname := 0Y;  refno := 0;  expno := 0;
   i := 0;  Insert(srcPath, symfname, i);
   Insert(modid, symfname, i);
-  Insert(`.sym`, symfname, i);
+  Insert(".sym", symfname, i);
 
   symfile := Files.New(symfname);
   Files.Set(rider, symfile, 16);
@@ -622,7 +622,7 @@ BEGIN
     IF first THEN ReadModkey(key);
       IF mod # NIL THEN
         IF (mod.key[0] # key[0]) OR (mod.key[1] # key[1]) THEN
-          S.Mark(`Modkey mismatched`)
+          S.Mark("Modkey mismatched")
         END
       ELSE
         NEW(mod);  mod.id := id;  mod.key := key;
@@ -764,11 +764,11 @@ BEGIN
     DEC(modno);  imod.key := key;  imod.lev := lev;  imod.export := FALSE;
     IF lev >= modlev THEN
       modlev := lev + 1;
-      IF modlev > MaxModLev THEN S.Mark(`Module level too high`) END
+      IF modlev > MaxModLev THEN S.Mark("Module level too high") END
     END
   ELSIF (key[0] = imod.key[0]) & (key[1] = imod.key[1]) THEN
     imod.adr := 0;  imod.lev := lev;  imod.export := FALSE
-  ELSE S.Mark(`Was imported with a different key`)
+  ELSE S.Mark("Was imported with a different key")
   END;
 
   IF S.errCnt = 0 THEN
@@ -777,12 +777,12 @@ BEGIN
       Files.ReadString(rider, depid);
       ReadModkey(key);
       dep := FindMod(depid);
-      IF depid = modid THEN S.Mark(`Circular dependency`)
+      IF depid = modid THEN S.Mark("Circular dependency")
       ELSIF dep # NIL THEN
         IF (dep.key[0] # key[0]) OR (dep.key[1] # key[1]) THEN
-          msg := `Module `;                  Append(depid, msg);
-          Append(` was imported by `, msg);  Append(imodid, msg);
-          Append(` with a different key`, msg);  S.Mark(msg)
+          msg := "Module ";                  Append(depid, msg);
+          Append(" was imported by ", msg);  Append(imodid, msg);
+          Append(" with a different key", msg);  S.Mark(msg)
         END
       END;
       Files.ReadNum(rider, cls)
@@ -792,7 +792,7 @@ BEGIN
       Files.ReadNum(rider, val);  DetectTypeI(tp);
       IF S.errCnt = 0 THEN
         IF tp = strType THEN
-          Files.ReadNum(rider, slen);  x := NewStr(``, slen);
+          Files.ReadNum(rider, slen);  x := NewStr("", slen);
           x(Str).adr := 0;  x(Str).expno := val
         ELSE
           x := NewConst(tp, val)
@@ -850,19 +850,19 @@ VAR
   PROCEDURE GetPath(VAR path: ARRAY OF CHAR;  VAR i: INTEGER);
   VAR j: INTEGER;
   BEGIN i := 0;  j := 0;
-    WHILE (symPath[i] # 0Y) & (symPath[i] # `;`) DO
+    WHILE (symPath[i] # 0Y) & (symPath[i] # ";") DO
       path[j] := symPath[i];  INC(i);  INC(j)
     END;
-    IF symPath[i] = `;` THEN INC(i) END;
-    IF path[j-1] # `\` THEN path[j] := `\`;  INC(j) END;
+    IF symPath[i] = ";" THEN INC(i) END;
+    IF path[j-1] # "\" THEN path[j] := "\";  INC(j) END;
     path[j] := 0Y
   END GetPath;
 
 BEGIN (* NewModule *)
   mod := FindMod(id);  IF (mod # NIL) & ~mod.import THEN mod := NIL END;
-  IF id = modid THEN S.Mark(`Cannot import self`)
+  IF id = modid THEN S.Mark("Cannot import self")
   ELSIF mod = NIL THEN
-    i := 0;  Insert(id, symfname, i);  Insert(`.sym`, symfname, i);
+    i := 0;  Insert(id, symfname, i);  Insert(".sym", symfname, i);
     symfile := Files.Old(symfname);  found := symfile # NIL;  i := 0;
     WHILE (symPath[i] # 0Y) & ~found DO
       GetPath(path, i);
@@ -874,7 +874,7 @@ BEGIN (* NewModule *)
     END;
     IF found THEN ident.obj := Import(id)
     ELSE
-      path := `Symbol file not found: `;  Append(symfname, path);
+      path := "Symbol file not found: ";  Append(symfname, path);
       S.Mark(path)
     END
   END
@@ -887,9 +887,9 @@ END NewModule;
 PROCEDURE SetCompilerFlag(pragma: ARRAY OF CHAR);
 VAR i: INTEGER;
 BEGIN
-  IF    pragma = `MAIN`    THEN Flag.main  := TRUE
-  ELSIF pragma = `CONSOLE` THEN Flag.main  := TRUE;  Flag.console := TRUE
-  ELSIF pragma = `RTL-`    THEN Flag.rtl   := FALSE;
+  IF    pragma = "MAIN"    THEN Flag.main  := TRUE
+  ELSIF pragma = "CONSOLE" THEN Flag.main  := TRUE;  Flag.console := TRUE
+  ELSIF pragma = "RTL-"    THEN Flag.rtl   := FALSE;
   END
 END SetCompilerFlag;
 
@@ -907,7 +907,7 @@ PROCEDURE SetSrcPath*(path: ARRAY OF CHAR);
 VAR i: INTEGER;
 BEGIN
   srcPath := path;  i := 0;  WHILE srcPath[i] # 0Y DO INC(i) END;
-  WHILE (i >= 0) & (srcPath[i] # `\`) DO DEC(i) END;  srcPath[i+1] := 0Y
+  WHILE (i >= 0) & (srcPath[i] # "\") DO DEC(i) END;  srcPath[i+1] := 0Y
 END SetSrcPath;
 
 (* -------------------------------------------------------------------------- *)
@@ -917,7 +917,7 @@ PROCEDURE Init*(modid0: S.IdStr);
 VAR symfname: ARRAY 512 OF CHAR;  i, res: INTEGER;
 BEGIN
   modid := modid0;  i := 0;    Insert(srcPath, symfname, i);
-  Insert(modid, symfname, i);  Insert(`.sym`, symfname, i);
+  Insert(modid, symfname, i);  Insert(".sym", symfname, i);
   Files.Delete8(symfname, res);
 
   NEW(universe);  topScope := universe;  curLev := -1;
@@ -926,55 +926,55 @@ BEGIN
   expList := NIL;  lastExp := NIL;  strList := NIL;  recList := NIL;
   InitCompilerFlag;
 
-  Enter(NewTypeObj(intType),    `INTEGER`);
-  Enter(NewTypeObj(byteType),   `BYTE`);
-  Enter(NewTypeObj(realType),   `REAL`);
-  Enter(NewTypeObj(setType),    `SET`);
-  Enter(NewTypeObj(boolType),   `BOOLEAN`);
-  Enter(NewTypeObj(charType),  `CHAR`);
+  Enter(NewTypeObj(intType),    "INTEGER");
+  Enter(NewTypeObj(byteType),   "BYTE");
+  Enter(NewTypeObj(realType),   "REAL");
+  Enter(NewTypeObj(setType),    "SET");
+  Enter(NewTypeObj(boolType),   "BOOLEAN");
+  Enter(NewTypeObj(charType),  "CHAR");
 
-  Enter(NewSProc(S.spINC,    cSProc), `INC`);
-  Enter(NewSProc(S.spDEC,    cSProc), `DEC`);
-  Enter(NewSProc(S.spINCL,   cSProc), `INCL`);
-  Enter(NewSProc(S.spEXCL,   cSProc), `EXCL`);
-  Enter(NewSProc(S.spNEW,    cSProc), `NEW`);
-  Enter(NewSProc(S.spASSERT, cSProc), `ASSERT`);
-  Enter(NewSProc(S.spPACK,   cSProc), `PACK`);
-  Enter(NewSProc(S.spUNPK,   cSProc), `UNPK`);
+  Enter(NewSProc(S.spINC,    cSProc), "INC");
+  Enter(NewSProc(S.spDEC,    cSProc), "DEC");
+  Enter(NewSProc(S.spINCL,   cSProc), "INCL");
+  Enter(NewSProc(S.spEXCL,   cSProc), "EXCL");
+  Enter(NewSProc(S.spNEW,    cSProc), "NEW");
+  Enter(NewSProc(S.spASSERT, cSProc), "ASSERT");
+  Enter(NewSProc(S.spPACK,   cSProc), "PACK");
+  Enter(NewSProc(S.spUNPK,   cSProc), "UNPK");
 
-  Enter(NewSProc(S.sfABS,   cSFunc), `ABS`);
-  Enter(NewSProc(S.sfODD,   cSFunc), `ODD`);
-  Enter(NewSProc(S.sfLEN,   cSFunc), `LEN`);
-  Enter(NewSProc(S.sfLSL,   cSFunc), `LSL`);
-  Enter(NewSProc(S.sfASR,   cSFunc), `ASR`);
-  Enter(NewSProc(S.sfROR,   cSFunc), `ROR`);
-  Enter(NewSProc(S.sfFLOOR, cSFunc), `FLOOR`);
-  Enter(NewSProc(S.sfFLT,   cSFunc), `FLT`);
-  Enter(NewSProc(S.sfORD,   cSFunc), `ORD`);
-  Enter(NewSProc(S.sfCHR8,  cSFunc), `CHR`);
+  Enter(NewSProc(S.sfABS,   cSFunc), "ABS");
+  Enter(NewSProc(S.sfODD,   cSFunc), "ODD");
+  Enter(NewSProc(S.sfLEN,   cSFunc), "LEN");
+  Enter(NewSProc(S.sfLSL,   cSFunc), "LSL");
+  Enter(NewSProc(S.sfASR,   cSFunc), "ASR");
+  Enter(NewSProc(S.sfROR,   cSFunc), "ROR");
+  Enter(NewSProc(S.sfFLOOR, cSFunc), "FLOOR");
+  Enter(NewSProc(S.sfFLT,   cSFunc), "FLT");
+  Enter(NewSProc(S.sfORD,   cSFunc), "ORD");
+  Enter(NewSProc(S.sfCHR8,  cSFunc), "CHR");
 
   OpenScope;
-  Enter(NewSProc(S.spGET,            cSProc), `GET`);
-  Enter(NewSProc(S.spPUT,            cSProc), `PUT`);
-  Enter(NewSProc(S.spCOPY,           cSProc), `COPY`);
-  Enter(NewSProc(S.spLoadLibraryA,   cSProc), `LoadLibraryA`);
-  Enter(NewSProc(S.spGetProcAddress, cSProc), `GetProcAddress`);
-  Enter(NewSProc(S.spINT3,           cSProc), `INT3`);
-  Enter(NewSProc(S.spPAUSE,          cSProc), `PAUSE`);
+  Enter(NewSProc(S.spGET,            cSProc), "GET");
+  Enter(NewSProc(S.spPUT,            cSProc), "PUT");
+  Enter(NewSProc(S.spCOPY,           cSProc), "COPY");
+  Enter(NewSProc(S.spLoadLibraryA,   cSProc), "LoadLibraryA");
+  Enter(NewSProc(S.spGetProcAddress, cSProc), "GetProcAddress");
+  Enter(NewSProc(S.spINT3,           cSProc), "INT3");
+  Enter(NewSProc(S.spPAUSE,          cSProc), "PAUSE");
 
-  Enter(NewSProc(S.sfADR,            cSFunc), `ADR`);
-  Enter(NewSProc(S.sfSIZE,           cSFunc), `SIZE`);
-  Enter(NewSProc(S.sfBIT,            cSFunc), `BIT`);
-  Enter(NewSProc(S.sfVAL,            cSFunc), `VAL`);
-  Enter(NewSProc(S.sfNtCurrentTeb,   cSFunc), `NtCurrentTeb`);
-  Enter(NewSProc(S.sfCAS,            cSFunc), `CAS`);
+  Enter(NewSProc(S.sfADR,            cSFunc), "ADR");
+  Enter(NewSProc(S.sfSIZE,           cSFunc), "SIZE");
+  Enter(NewSProc(S.sfBIT,            cSFunc), "BIT");
+  Enter(NewSProc(S.sfVAL,            cSFunc), "VAL");
+  Enter(NewSProc(S.sfNtCurrentTeb,   cSFunc), "NtCurrentTeb");
+  Enter(NewSProc(S.sfCAS,            cSFunc), "CAS");
 
-  Enter(NewTypeObj(byteType),   `BYTE`);
-  Enter(NewTypeObj(card16Type), `CARD16`);
-  Enter(NewTypeObj(card32Type), `CARD32`);
-  Enter(NewTypeObj(int8Type),   `INT8`);
-  Enter(NewTypeObj(int16Type),  `INT16`);
-  Enter(NewTypeObj(int32Type),  `INT32`);
+  Enter(NewTypeObj(byteType),   "BYTE");
+  Enter(NewTypeObj(card16Type), "CARD16");
+  Enter(NewTypeObj(card32Type), "CARD32");
+  Enter(NewTypeObj(int8Type),   "INT8");
+  Enter(NewTypeObj(int16Type),  "INT16");
+  Enter(NewTypeObj(int32Type),  "INT32");
   systemScope := topScope;  CloseScope;
 
   curLev := 0

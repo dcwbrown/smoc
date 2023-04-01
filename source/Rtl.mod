@@ -196,7 +196,7 @@ PROCEDURE LowerCase*(VAR str: ARRAY OF CHAR);
 VAR i: INTEGER;
 BEGIN
   WHILE (i < LEN(str)) & (str[i] # 0Y) DO
-    IF (ORD(str[i]) >= ORD(`a`))  &  (ORD(str[i]) <= ORD(`z`)) THEN
+    IF (ORD(str[i]) >= ORD("a"))  &  (ORD(str[i]) <= ORD("z")) THEN
       str[i] := CHR(ORD(str[i]) - 20H)
     END;
     INC(i)
@@ -527,17 +527,17 @@ END GetArgv;
 
 PROCEDURE InitWin32;
 BEGIN
-  SYSTEM.LoadLibraryA(HKernel, `kernel32.dll`);
-  SYSTEM.LoadLibraryA(HUser,   `user32.dll`);
-  SYSTEM.LoadLibraryA(HShell,  `shell32.dll`);
+  SYSTEM.LoadLibraryA(HKernel, "kernel32.dll");
+  SYSTEM.LoadLibraryA(HUser,   "user32.dll");
+  SYSTEM.LoadLibraryA(HShell,  "shell32.dll");
 
-  SYSTEM.GetProcAddress(ExitProcess,                 HKernel, SYSTEM.ADR(`ExitProcess`));                 ASSERT(ExitProcess                 # NIL);
-  SYSTEM.GetProcAddress(AddVectoredExceptionHandler, HKernel, SYSTEM.ADR(`AddVectoredExceptionHandler`)); ASSERT(AddVectoredExceptionHandler # NIL);
-  SYSTEM.GetProcAddress(MessageBoxW,                 HUser,   SYSTEM.ADR(`MessageBoxW`));                 ASSERT(MessageBoxW                 # NIL);
-  SYSTEM.GetProcAddress(GetSystemTimeAsFileTime,     HKernel, SYSTEM.ADR(`GetSystemTimeAsFileTime`));     ASSERT(GetSystemTimeAsFileTime     # NIL);
-  SYSTEM.GetProcAddress(GetCommandLineW,             HKernel, SYSTEM.ADR(`GetCommandLineW`));             ASSERT(GetCommandLineW             # NIL);
-  SYSTEM.GetProcAddress(CommandLineToArgvW,          HShell,  SYSTEM.ADR(`CommandLineToArgvW`));          ASSERT(CommandLineToArgvW          # NIL);
-  SYSTEM.GetProcAddress(VirtualAlloc,                HKernel, SYSTEM.ADR(`VirtualAlloc`));                ASSERT(VirtualAlloc                # NIL);
+  SYSTEM.GetProcAddress(ExitProcess,                 HKernel, SYSTEM.ADR("ExitProcess"));                 ASSERT(ExitProcess                 # NIL);
+  SYSTEM.GetProcAddress(AddVectoredExceptionHandler, HKernel, SYSTEM.ADR("AddVectoredExceptionHandler")); ASSERT(AddVectoredExceptionHandler # NIL);
+  SYSTEM.GetProcAddress(MessageBoxW,                 HUser,   SYSTEM.ADR("MessageBoxW"));                 ASSERT(MessageBoxW                 # NIL);
+  SYSTEM.GetProcAddress(GetSystemTimeAsFileTime,     HKernel, SYSTEM.ADR("GetSystemTimeAsFileTime"));     ASSERT(GetSystemTimeAsFileTime     # NIL);
+  SYSTEM.GetProcAddress(GetCommandLineW,             HKernel, SYSTEM.ADR("GetCommandLineW"));             ASSERT(GetCommandLineW             # NIL);
+  SYSTEM.GetProcAddress(CommandLineToArgvW,          HShell,  SYSTEM.ADR("CommandLineToArgvW"));          ASSERT(CommandLineToArgvW          # NIL);
+  SYSTEM.GetProcAddress(VirtualAlloc,                HKernel, SYSTEM.ADR("VirtualAlloc"));                ASSERT(VirtualAlloc                # NIL);
 END InitWin32;
 
 BEGIN

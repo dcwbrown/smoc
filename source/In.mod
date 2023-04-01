@@ -44,16 +44,16 @@ BEGIN
 END Ln;
 
 PROCEDURE IsBlank(ch: CHAR): BOOLEAN;
-RETURN (ch = ` `) OR (ch = 9Y) OR (ch = 0AY) OR (ch = 0DY)
+RETURN (ch = " ") OR (ch = 9Y) OR (ch = 0AY) OR (ch = 0DY)
 END IsBlank;
 
 PROCEDURE IsDigit(ch: CHAR): BOOLEAN;
-RETURN (ch >= `0`) & (ch <= `9`)
+RETURN (ch >= "0") & (ch <= "9")
 END IsDigit;
 
 PROCEDURE IsHexDigit(ch: CHAR): BOOLEAN;
-  RETURN (ch >= `A`) & (ch <= `F`)
-  OR (ch >= `a`) & (ch <= `f`)
+  RETURN (ch >= "A") & (ch <= "F")
+  OR (ch >= "a") & (ch <= "f")
 END IsHexDigit;
 
 PROCEDURE SkipBlank;
@@ -71,13 +71,13 @@ BEGIN
     i := 0; neg := FALSE; isHex := FALSE; decOverflow := FALSE;
     finished := FALSE; hexOverflow := FALSE; digitCnt := 0;
     IF bufLen = 0 THEN GetCh END; SkipBlank;
-    IF (bufLen = 1) & (buf = `-`) THEN neg := TRUE; GetCh END;
+    IF (bufLen = 1) & (buf = "-") THEN neg := TRUE; GetCh END;
     IF (bufLen = 1) & IsDigit(buf) THEN
-      dec := ORD(buf) - ORD(`0`); hex := dec; INC(digitCnt); GetCh
+      dec := ORD(buf) - ORD("0"); hex := dec; INC(digitCnt); GetCh
     ELSE Done := FALSE
     END;
     WHILE Done & ~finished DO INC(digitCnt);
-      IF IsDigit(buf) THEN x := ORD(buf) - ORD(`0`);
+      IF IsDigit(buf) THEN x := ORD(buf) - ORD("0");
         hex := hex * 16 + x; dec0 := dec * 10 + x;
         hexOverflow := hexOverflow OR (digitCnt > 16);
         decOverflow := decOverflow OR (digitCnt > 19)
@@ -85,12 +85,12 @@ BEGIN
           OR (dec0 > 0) & ((dec0 - x) DIV 10 # dec);
         dec := dec0
       ELSIF IsHexDigit(buf) THEN isHex := TRUE; x := ORD(buf) + 10;
-        IF (buf >= `a`) & (buf <= `f`)
-        THEN DEC(x, ORD(`a`)) ELSE DEC(x, ORD(`A`))
+        IF (buf >= "a") & (buf <= "f")
+        THEN DEC(x, ORD("a")) ELSE DEC(x, ORD("A"))
         END;
         hexOverflow := hexOverflow OR (digitCnt > 16);
         hex := hex * 16 + x
-      ELSIF (buf = `h`) OR (buf = `H`) THEN
+      ELSIF (buf = "h") OR (buf = "H") THEN
         isHex := TRUE; finished := TRUE; GetCh;
         Done := Done & IsBlank(buf) & ~hexOverflow
       ELSE finished := TRUE;
@@ -107,8 +107,8 @@ END Int;
 
 PROCEDURE Init;
 BEGIN (* Init *)
-  SYSTEM.GetProcAddress(GetStdHandle, Rtl.HKernel, SYSTEM.ADR(`GetStdHandle`)); ASSERT(GetStdHandle # NIL);
-  SYSTEM.GetProcAddress(ReadConsoleA, Rtl.HKernel, SYSTEM.ADR(`ReadConsoleA`)); ASSERT(ReadConsoleA # NIL);
+  SYSTEM.GetProcAddress(GetStdHandle, Rtl.HKernel, SYSTEM.ADR("GetStdHandle")); ASSERT(GetStdHandle # NIL);
+  SYSTEM.GetProcAddress(ReadConsoleA, Rtl.HKernel, SYSTEM.ADR("ReadConsoleA")); ASSERT(ReadConsoleA # NIL);
 END Init;
 
 BEGIN Init; Open

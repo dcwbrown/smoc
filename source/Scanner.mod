@@ -129,15 +129,15 @@ RETURN LSL(lastLine, 10) + (lastColumn MOD 400H) END SourcePos;
 PROCEDURE Identifier(VAR sym: INTEGER);
 VAR i, j, k: INTEGER;
 BEGIN i := 0;  sym := ident;
-  WHILE (i < MaxIdLen) & (   (ch >= ORD(`0`)) & (ch <= ORD(`9`))
-                          OR (ch >= ORD(`A`)) & (ch <= ORD(`Z`))
-                          OR (ch >= ORD(`a`)) & (ch <= ORD(`z`))
-                          OR (ch =  ORD(`_`))) DO
+  WHILE (i < MaxIdLen) & (   (ch >= ORD("0")) & (ch <= ORD("9"))
+                          OR (ch >= ORD("A")) & (ch <= ORD("Z"))
+                          OR (ch >= ORD("a")) & (ch <= ORD("z"))
+                          OR (ch =  ORD("_"))) DO
     Rtl.PutUtf8 (ch, id8, i);
     Read
   END;
   id8[i] := 0Y;
-  IF i >= MaxIdLen THEN Mark(`identifier too long`) END;
+  IF i >= MaxIdLen THEN Mark("identifier too long") END;
   (* search for keyword *)
   IF i < LEN(KWX) THEN
     j := KWX[i-1];  k := KWX[i];
@@ -153,7 +153,7 @@ BEGIN
     Rtl.PutUtf8(ch, str8, slen); Read
   END;
   Read;  str8[slen] := 0Y;  INC(slen);
-  IF slen >= MaxStrLen THEN Mark(`String too long`) END;
+  IF slen >= MaxStrLen THEN Mark("String too long") END;
 END String8;
 
 PROCEDURE HexString(): INTEGER;
@@ -162,22 +162,26 @@ VAR i, m, n, o, p: INTEGER;
   PROCEDURE hexdigit(): INTEGER;
   VAR n: INTEGER;
   BEGIN
-    IF    (ORD(`0`) <= ch) & (ch <= ORD(`9`)) THEN n := ch - 30H; Read
-    ELSIF (ORD(`A`) <= ch) & (ch <= ORD(`F`)) THEN n := ch - 37H; Read
-    ELSE n := 0;  Mark(`Hex digit expected`)  END
+    IF    eof THEN n := -1
+    ELSIF (ch >= ORD("0")) & (ch <= ORD("9")) THEN n := ch - 30H
+    ELSIF (ch >= ORD("A")) & (ch <= ORD("F")) THEN n := ch - 37H
+    ELSE  n := -1 END
   RETURN n END hexdigit;
 BEGIN
   i := 0;  Read;
 
-  IF ch = ORD(`$`) THEN Read END;  (* Skip prototyping second `$` *)
+  IF ch = ORD("$") THEN Read END;  (* Skip prototyping second "$" *)
   slen := 0;
-  WHILE ~eof & (slen < MaxStrLen) & (ch # ORD(`$`)) DO
-    WHILE (ch = SP) OR (ch = TAB) OR (ch = CR)  OR (ch = LF) DO Read END;
-    m := hexdigit();  n := hexdigit();
-    str8[slen] := CHR(m * 10H + n);
-    INC(slen)
+  WHILE ~eof & (ch # ORD("$")) DO
+    WHILE ~eof & ((ch = SP) OR (ch = TAB) OR (ch = CR) OR (ch = LF)) DO Read END;
+    m := hexdigit(); Read;  IF m >= 0 THEN n := hexdigit(); Read END;
+    IF (m >= 0) & (n >= 0) THEN
+      IF slen < MaxStrLen THEN str8[slen] := CHR(m * 10H + n); INC(slen) END
+    ELSE
+      Mark("Hex digit expected")
+    END
   END;
-  IF slen > MaxStrLen THEN Mark(`Hex string too long`) END;
+  IF slen > MaxStrLen THEN Mark("Hex string too long") END;
   Read;
   str8[slen] := 0Y;  (* Guaranteed terminator, not included in string length *)
   RETURN string8
@@ -188,32 +192,32 @@ VAR x, f, max, min, half: BigNums.BigNum;
     i, k, e, float, last: INTEGER;  negE: BOOLEAN;
 BEGIN i := n-1;  k := 0;  x := BigNums.Zero;  f := BigNums.Zero;
   REPEAT
-    IF d[i] > 10 THEN Mark(`Bad number`)
+    IF d[i] > 10 THEN Mark("Bad number")
     ELSE BigNums.SetDecimalDigit(x, k, d[i])
     END;
     DEC(i);  INC(k)
   UNTIL i < 0;
   i := BigNums.MaxDecimalDigits-1;
-  WHILE (ch >= ORD(`0`)) & (ch <= ORD(`9`)) DO (* fraction *)
+  WHILE (ch >= ORD("0")) & (ch <= ORD("9")) DO (* fraction *)
     IF i > BigNums.MaxDecimalDigits-19 THEN
       BigNums.SetDecimalDigit(f, i, ch-30H)
-    ELSIF i = BigNums.MaxDecimalDigits-19 THEN Mark(`Fraction too long`)
+    ELSIF i = BigNums.MaxDecimalDigits-19 THEN Mark("Fraction too long")
     END;
     DEC(i);  Read
   END;
-  IF (ch = ORD(`E`)) OR (ch = ORD(`D`)) THEN (* scale factor *)
+  IF (ch = ORD("E")) OR (ch = ORD("D")) THEN (* scale factor *)
     Read;  e := 0;
-    IF ch = ORD(`-`) THEN negE := TRUE;  Read
-    ELSE negE := FALSE;  IF ch = ORD(`+`) THEN Read END
+    IF ch = ORD("-") THEN negE := TRUE;  Read
+    ELSE negE := FALSE;  IF ch = ORD("+") THEN Read END
     END;
-    IF (ch >= ORD(`0`)) & (ch <= ORD(`9`)) THEN
+    IF (ch >= ORD("0")) & (ch <= ORD("9")) THEN
       REPEAT e := e*10 + ch-30H;  Read
-      UNTIL (ch < ORD(`0`)) OR (ch > ORD(`9`)) OR (e > maxExp);
-      IF e > maxExp THEN Mark(`Exponent too large`);
-        WHILE (ch < ORD(`0`)) OR (ch > ORD(`9`)) DO Read END
+      UNTIL (ch < ORD("0")) OR (ch > ORD("9")) OR (e > maxExp);
+      IF e > maxExp THEN Mark("Exponent too large");
+        WHILE (ch < ORD("0")) OR (ch > ORD("9")) DO Read END
       END;
       IF negE THEN e := -e END
-    ELSE Mark(`Digit?`)
+    ELSE Mark("Digit?")
     END;
     i := BigNums.MaxDecimalDigits-1;
     WHILE e > 0 DO BigNums.MultiplyByTen(x, x);
@@ -268,32 +272,32 @@ BEGIN
   ival := 0;  i := 0;  n := 0;  k2 := 0;
   REPEAT
     IF n < LEN(d) THEN d[n] := ch - 30H;  INC(n)
-    ELSE Mark(`Too many digits`);  n := 0
+    ELSE Mark("Too many digits");  n := 0
     END;
     Read
-  UNTIL (ch < ORD(`0`)) OR (ch > ORD(`9`)) & (ch < ORD(`A`)) OR (ch > ORD(`F`));
-  IF (ch = ORD(`H`)) OR (ch = ORD(`R`)) OR (ch = ORD(`X`)) OR (ch = ORD(`Y`)) THEN  (* hex *)
+  UNTIL (ch < ORD("0")) OR (ch > ORD("9")) & (ch < ORD("A")) OR (ch > ORD("F"));
+  IF (ch = ORD("H")) OR (ch = ORD("R")) OR (ch = ORD("X")) OR (ch = ORD("Y")) THEN  (* hex *)
     REPEAT h := d[i];
       IF h >= 10 THEN h := h-7 END;
       k2 := k2*10H + h;  INC(i) (* no overflow check *)
     UNTIL i = n;
-    IF ch = ORD(`Y`) THEN sym := string8;
-      IF k2 < 100H THEN ival := k2 ELSE Mark(`Illegal value`);  ival := 0  END;
+    IF ch = ORD("Y") THEN sym := string8;
+      IF k2 < 100H THEN ival := k2 ELSE Mark("Illegal value");  ival := 0  END;
       IF k2 = 0 THEN str8[0] := 0Y;  slen := 1
       ELSE str8[0] := CHR(k2);  str8[1] := 0Y;  slen := 2
       END
-    ELSIF ch = ORD(`R`) THEN sym := real;  rval := SYSTEM.VAL(REAL, k2)
+    ELSIF ch = ORD("R") THEN sym := real;  rval := SYSTEM.VAL(REAL, k2)
     ELSE sym := int;  ival := k2
     END;
     Read
-  ELSIF ch = ORD(`.`) THEN Read;
-    IF ch = ORD(`.`) THEN (* double dot *) ch := 7FH;  (* decimal integer *)
+  ELSIF ch = ORD(".") THEN Read;
+    IF ch = ORD(".") THEN (* double dot *) ch := 7FH;  (* decimal integer *)
       REPEAT
         IF d[i] < 10 THEN
           IF k2 <= (max-d[i]) DIV 10 THEN k2 := k2 * 10 + d[i]
-          ELSE Mark(`Too large`);  k2 := 0
+          ELSE Mark("Too large");  k2 := 0
           END
-        ELSE Mark(`Bad integer`)
+        ELSE Mark("Bad integer")
         END;
         INC(i)
       UNTIL i = n;
@@ -305,9 +309,9 @@ BEGIN
     REPEAT
       IF d[i] < 10 THEN
         IF k2 <= (max-d[i]) DIV 10 THEN k2 := k2*10 + d[i]
-        ELSE Mark(`Too large`);  k2 := 0
+        ELSE Mark("Too large");  k2 := 0
         END
-      ELSE Mark(`Bad integer`)
+      ELSE Mark("Bad integer")
       END;
       INC(i)
     UNTIL i = n;
@@ -321,23 +325,23 @@ VAR exit: BOOLEAN;
   PROCEDURE SetPragma;
   VAR pragma: Str;  i: INTEGER;
   BEGIN Read;  i := 0;
-    WHILE (i < LEN(pragma) - 1) & (ch # ORD(`*`)) & ~eof DO
+    WHILE (i < LEN(pragma) - 1) & (ch # ORD("*")) & ~eof DO
       Rtl.PutUtf8(ch, pragma, i);  Read
     END;
     pragma[i] := 0Y;
-    IF ch = ORD(`*`) THEN SetCompilerFlag(pragma)
-    ELSE Mark(`Incorrect compiler directive`)
+    IF ch = ORD("*") THEN SetCompilerFlag(pragma)
+    ELSE Mark("Incorrect compiler directive")
     END
   END SetPragma;
 
 BEGIN
-  IF (ch = ORD(`$`)) & (lev = 0) THEN SetPragma END;
+  IF (ch = ORD("$")) & (lev = 0) THEN SetPragma END;
   exit := FALSE;
   WHILE ~eof & ~exit DO
-    IF ch = ORD(`(`) THEN Read;
-      IF ch = ORD(`*`) THEN Read;  SkipComment(lev + 1) END
-    ELSIF ch = ORD(`*`) THEN Read;
-      IF ch = ORD(`)`) THEN Read;  exit := TRUE END
+    IF ch = ORD("(") THEN Read;
+      IF ch = ORD("*") THEN Read;  SkipComment(lev + 1) END
+    ELSIF ch = ORD("*") THEN Read;
+      IF ch = ORD(")") THEN Read;  exit := TRUE END
     ELSE Read
     END
   END
@@ -346,56 +350,53 @@ END SkipComment;
 PROCEDURE Get*(VAR sym: INTEGER);
 BEGIN
   REPEAT
-    WHILE ~eof & (ch <= ORD(` `)) DO Read END;
+    WHILE ~eof & (ch <= ORD(" ")) DO Read END;
     (* Record potential error position *)
     lastLine   := lineNumber;
     lastColumn := bufPos - linePos;
 
-    IF ch < ORD(`A`) THEN
-      IF ch < ORD(`0`) THEN
+    IF ch < ORD("A") THEN
+      IF ch < ORD("0") THEN
         IF (ch = 22H) OR (ch = 27H) THEN String8(ch);  sym := string8
-        ELSIF ch = ORD(`#`) THEN Read;  sym := neq
-        ELSIF ch = ORD(`$`) THEN sym := HexString();
-        ELSIF ch = ORD(`&`) THEN Read;  sym := and
-        ELSIF ch = ORD(`(`) THEN Read;
-          IF ch = ORD(`*`) THEN sym := null;  Read;  SkipComment(0)
+        ELSIF ch = ORD("#") THEN Read;  sym := neq
+        ELSIF ch = ORD("$") THEN sym := HexString();
+        ELSIF ch = ORD("&") THEN Read;  sym := and
+        ELSIF ch = ORD("(") THEN Read;
+          IF ch = ORD("*") THEN sym := null;  Read;  SkipComment(0)
                            ELSE sym := lparen END
-        ELSIF ch = ORD(`)`) THEN Read; sym := rparen
-        ELSIF ch = ORD(`*`) THEN Read; sym := times
-        ELSIF ch = ORD(`+`) THEN Read; sym := plus
-        ELSIF ch = ORD(`,`) THEN Read; sym := comma
-        ELSIF ch = ORD(`-`) THEN Read; sym := minus
-        ELSIF ch = ORD(`.`) THEN Read; IF ch = ORD(`.`) THEN Read; sym := upto
+        ELSIF ch = ORD(")") THEN Read; sym := rparen
+        ELSIF ch = ORD("*") THEN Read; sym := times
+        ELSIF ch = ORD("+") THEN Read; sym := plus
+        ELSIF ch = ORD(",") THEN Read; sym := comma
+        ELSIF ch = ORD("-") THEN Read; sym := minus
+        ELSIF ch = ORD(".") THEN Read; IF ch = ORD(".") THEN Read; sym := upto
                                                         ELSE sym := period END
-        ELSIF ch = ORD(`/`) THEN Read; sym := rdiv
+        ELSIF ch = ORD("/") THEN Read; sym := rdiv
         ELSE (* ! % *)           Read; sym := null END
-      ELSIF ch < ORD(`:`) THEN Number(sym)
-      ELSIF ch = ORD(`:`) THEN Read; IF ch = ORD(`=`) THEN Read; sym := becomes
+      ELSIF ch < ORD(":") THEN Number(sym)
+      ELSIF ch = ORD(":") THEN Read; IF ch = ORD("=") THEN Read; sym := becomes
                                                       ELSE sym := colon END
-      ELSIF ch = ORD(`;`) THEN Read; sym := semicolon
-      ELSIF ch = ORD(`<`) THEN Read; IF ch = ORD(`=`) THEN Read; sym := leq
+      ELSIF ch = ORD(";") THEN Read; sym := semicolon
+      ELSIF ch = ORD("<") THEN Read; IF ch = ORD("=") THEN Read; sym := leq
                                                       ELSE sym := lss END
-      ELSIF ch = ORD(`=`) THEN Read; sym := eql
-      ELSIF ch = ORD(`>`) THEN Read; IF ch = ORD(`=`) THEN Read; sym := geq
+      ELSIF ch = ORD("=") THEN Read; sym := eql
+      ELSIF ch = ORD(">") THEN Read; IF ch = ORD("=") THEN Read; sym := geq
                                                       ELSE sym := gtr END
       ELSE (* ? @ *) Read; sym := null END
-    ELSIF ch < ORD(`[`) THEN Identifier(sym)
-    ELSIF ch = ORD(`_`) THEN Identifier(sym)
-    ELSIF ch < ORD(`a`) THEN
-      IF ch = 96 THEN String8(ch);  sym := string8  (* Temp for CHAR prototyping *)
-      ELSE
-        IF    ch = ORD(`[`) THEN sym := lbrak
-        ELSIF ch = ORD(`]`) THEN sym := rbrak
-        ELSIF ch = ORD(`^`) THEN sym := arrow
-        ELSE (* ` *)             sym := null END;
-        Read
-      END
-    ELSIF ch < ORD(`{`) THEN Identifier(sym)
+    ELSIF ch < ORD("[") THEN Identifier(sym)
+    ELSIF ch = ORD("_") THEN Identifier(sym)
+    ELSIF ch < ORD("a") THEN
+      IF    ch = ORD("[") THEN sym := lbrak
+      ELSIF ch = ORD("]") THEN sym := rbrak
+      ELSIF ch = ORD("^") THEN sym := arrow
+      ELSE (* ` *)             sym := null END;
+      Read
+    ELSIF ch < ORD("{") THEN Identifier(sym)
     ELSE
-      IF    ch = ORD(`{`) THEN sym := lbrace
-      ELSIF ch = ORD(`}`) THEN sym := rbrace
-      ELSIF ch = ORD(`|`) THEN sym := bar
-      ELSIF ch = ORD(`~`) THEN sym := not
+      IF    ch = ORD("{") THEN sym := lbrace
+      ELSIF ch = ORD("}") THEN sym := rbrace
+      ELSIF ch = ORD("|") THEN sym := bar
+      ELSIF ch = ORD("~") THEN sym := not
       ELSIF ch = 7FH      THEN sym := upto
       ELSE                     sym := null END;
       Read
@@ -430,47 +431,47 @@ END EnterKW;
 
 BEGIN
   k := 0;  KWX[0] := 0;  KWX[1] := 0;
-  EnterKW(if, `IF`);
-  EnterKW(do, `DO`);
-  EnterKW(of, `OF`);
-  EnterKW(or, `OR`);
-  EnterKW(to, `TO`);
-  EnterKW(in, `IN`);
-  EnterKW(is, `IS`);
-  EnterKW(by, `BY`);
+  EnterKW(if, "IF");
+  EnterKW(do, "DO");
+  EnterKW(of, "OF");
+  EnterKW(or, "OR");
+  EnterKW(to, "TO");
+  EnterKW(in, "IN");
+  EnterKW(is, "IS");
+  EnterKW(by, "BY");
   KWX[2] := k;
-  EnterKW(end, `END`);
-  EnterKW(nil, `NIL`);
-  EnterKW(var, `VAR`);
-  EnterKW(div, `DIV`);
-  EnterKW(mod, `MOD`);
-  EnterKW(for, `FOR`);
+  EnterKW(end, "END");
+  EnterKW(nil, "NIL");
+  EnterKW(var, "VAR");
+  EnterKW(div, "DIV");
+  EnterKW(mod, "MOD");
+  EnterKW(for, "FOR");
   KWX[3] := k;
-  EnterKW(else, `ELSE`);
-  EnterKW(then, `THEN`);
-  EnterKW(true, `TRUE`);
-  EnterKW(type, `TYPE`);
-  EnterKW(case, `CASE`);
+  EnterKW(else, "ELSE");
+  EnterKW(then, "THEN");
+  EnterKW(true, "TRUE");
+  EnterKW(type, "TYPE");
+  EnterKW(case, "CASE");
   KWX[4] := k;
-  EnterKW(elsif, `ELSIF`);
-  EnterKW(false, `FALSE`);
-  EnterKW(array, `ARRAY`);
-  EnterKW(begin, `BEGIN`);
-  EnterKW(const, `CONST`);
-  EnterKW(until, `UNTIL`);
-  EnterKW(while, `WHILE`);
+  EnterKW(elsif, "ELSIF");
+  EnterKW(false, "FALSE");
+  EnterKW(array, "ARRAY");
+  EnterKW(begin, "BEGIN");
+  EnterKW(const, "CONST");
+  EnterKW(until, "UNTIL");
+  EnterKW(while, "WHILE");
   KWX[5] := k;
-  EnterKW(record, `RECORD`);
-  EnterKW(repeat, `REPEAT`);
-  EnterKW(return, `RETURN`);
-  EnterKW(import, `IMPORT`);
-  EnterKW(module, `MODULE`);
+  EnterKW(record, "RECORD");
+  EnterKW(repeat, "REPEAT");
+  EnterKW(return, "RETURN");
+  EnterKW(import, "IMPORT");
+  EnterKW(module, "MODULE");
   KWX[6] := k;
-  EnterKW(pointer, `POINTER`);
+  EnterKW(pointer, "POINTER");
   KWX[7] := k;
   KWX[8] := k;
-  EnterKW(procedure, `PROCEDURE`);
+  EnterKW(procedure, "PROCEDURE");
   KWX[9] := k;
-  EnterKW(null, `EXTENSIBLE`);
+  EnterKW(null, "EXTENSIBLE");
   KWX[10] := k
 END Scanner.

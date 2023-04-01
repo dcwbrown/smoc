@@ -202,7 +202,7 @@ BEGIN
     IF imod.import OR (imod.impList # NIL) THEN
       Files.Set(Rider, Out, metrics.fadr + imod.adr);
       i := 0;  B.Insert(imod.id, str, i);
-      B.Insert(`.dll`, str, i);  Files.WriteString(Rider, str)
+      B.Insert(".dll", str, i);  Files.WriteString(Rider, str)
     END;
     imod := imod.next
   END;
@@ -300,14 +300,14 @@ BEGIN (* WriteImports *)
   FOR i := 0 TO K32TableLen - 1 DO Files.WriteInt(Rider, Kernel32Table[i]) END;
 
   (* Write DLL name being imported from *)
-  Files.Set(Rider, Out, metrics.fadr + K32NameOffset);  Files.WriteString(Rider, `KERNEL32.DLL`);
+  Files.Set(Rider, Out, metrics.fadr + K32NameOffset);  Files.WriteString(Rider, "KERNEL32.DLL");
 
   (* Write hint table of imported entry point names *)
-  Files.Set(Rider, Out, metrics.fadr + K32HintOffset + 2);   Files.WriteString(Rider, `GetProcAddress`);
-  Files.Set(Rider, Out, metrics.fadr + K32HintOffset + 34);  Files.WriteString(Rider, `LoadLibraryA`);
-  Files.Set(Rider, Out, metrics.fadr + K32HintOffset + 66);  Files.WriteString(Rider, `ExitProcess`);
-  Files.Set(Rider, Out, metrics.fadr + K32HintOffset + 98);  Files.WriteString(Rider, `GetModuleHandleExW`);
-  Files.Set(Rider, Out, metrics.fadr + K32HintOffset + 130); Files.WriteString(Rider, `AddVectoredExceptionHandler`);
+  Files.Set(Rider, Out, metrics.fadr + K32HintOffset + 2);   Files.WriteString(Rider, "GetProcAddress");
+  Files.Set(Rider, Out, metrics.fadr + K32HintOffset + 34);  Files.WriteString(Rider, "LoadLibraryA");
+  Files.Set(Rider, Out, metrics.fadr + K32HintOffset + 66);  Files.WriteString(Rider, "ExitProcess");
+  Files.Set(Rider, Out, metrics.fadr + K32HintOffset + 98);  Files.WriteString(Rider, "GetModuleHandleExW");
+  Files.Set(Rider, Out, metrics.fadr + K32HintOffset + 130); Files.WriteString(Rider, "AddVectoredExceptionHandler");
 
   metrics.size := K32HintOffset + 160;
 
@@ -674,12 +674,12 @@ BEGIN
   Files.WriteBytes(Rider, hdr, SYSTEM.SIZE(PEHDR));
 
   (* Write section headers *)
-  WriteSectionHeader(SecUninitGlobals, `.bss`,   SReadable + SWriteable  + SUninitialised);
-  WriteSectionHeader(SecInitGlobals,   `.data`,  SReadable + SWriteable  + SInitialised);
-  WriteSectionHeader(SecCode,          `.text`,  SReadable + SExecutable + SCode);
-  WriteSectionHeader(SecImports,       `.idata`, SReadable + SWriteable  + SInitialised);
-  WriteSectionHeader(SecTraps,         `.traps`, SReadable +               SInitialised);
-  WriteSectionHeader(SecExports,       `.edata`, SReadable +               SInitialised);
+  WriteSectionHeader(SecUninitGlobals, ".bss",   SReadable + SWriteable  + SUninitialised);
+  WriteSectionHeader(SecInitGlobals,   ".data",  SReadable + SWriteable  + SInitialised);
+  WriteSectionHeader(SecCode,          ".text",  SReadable + SExecutable + SCode);
+  WriteSectionHeader(SecImports,       ".idata", SReadable + SWriteable  + SInitialised);
+  WriteSectionHeader(SecTraps,         ".traps", SReadable +               SInitialised);
+  WriteSectionHeader(SecExports,       ".edata", SReadable +               SInitialised);
 
   (* Oberon compiler specific data *)
   Files.Set(Rider, Out, 400H - 40);  (* Insert before end of header *)
@@ -703,8 +703,8 @@ BEGIN
   EntryPoint         := entry;
   ModulePointerTable := modPtrTable;
 
-  IF B.Flag.main THEN ImageBase := 400000H;    B.Append(`.exe`, FileName)
-  ELSE                ImageBase := 10000000H;  B.Append(`.dll`, FileName)
+  IF B.Flag.main THEN ImageBase := 400000H;    B.Append(".exe", FileName)
+  ELSE                ImageBase := 10000000H;  B.Append(".dll", FileName)
   END;
 
   Out := Files.New(FileName);

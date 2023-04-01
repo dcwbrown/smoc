@@ -16,11 +16,11 @@ BEGIN
    IF n < 0 THEN n := 0 END;
    IF i < 1000 THEN w.in(i, n)
    ELSE
-      outSep(i DIV 1000, n-4);  w.c(`,`);
+      outSep(i DIV 1000, n-4);  w.c(",");
       i := i MOD 1000;
-      w.c(CHR(ORD(`0`) + i DIV 100));  i := i MOD 100;
-      w.c(CHR(ORD(`0`) + i DIV 10));   i := i MOD 10;
-      w.c(CHR(ORD(`0`) + i));
+      w.c(CHR(ORD("0") + i DIV 100));  i := i MOD 100;
+      w.c(CHR(ORD("0") + i DIV 10));   i := i MOD 10;
+      w.c(CHR(ORD("0") + i));
    END
 END outSep;
 
@@ -30,9 +30,9 @@ VAR i, j: INTEGER;
 BEGIN
   i := 0;
   WHILE fname[i] # 0Y DO INC(i) END;
-  WHILE (i > 0) & (fname[i-1] # `\`) DO DEC(i) END;
+  WHILE (i > 0) & (fname[i-1] # "\") DO DEC(i) END;
   j := i;  WHILE fname[i] # 0Y DO w.c(fname[i]); INC(i) END;
-  WHILE i-j < 20 DO w.c(` `); INC(i) END
+  WHILE i-j < 20 DO w.c(" "); INC(i) END
 END outFname;
 
 
@@ -45,19 +45,19 @@ BEGIN
   S.Init(srcfile);  S.Get(sym);
 
   startTime := Rtl.Time();
-  IF sym = S.module THEN modinit := P.Module() ELSE S.Mark(`Expected 'MODULE'`) END;
+  IF sym = S.module THEN modinit := P.Module() ELSE S.Mark("Expected 'MODULE'") END;
   IF S.errCnt = 0 THEN
     B.WriteSymfile;  G.Generate(modinit);
     B.Cleanup;  G.Cleanup;  endTime := Rtl.Time();
     outSep(G.pc,          10);   outSep(G.staticSize,  10);
     outSep(G.varSize,     10);   outSep(Rtl.TimeToMSecs(endTime - startTime), 5);
-    w.s(`ms`);  w.l
+    w.s("ms");  w.l
   END
 END Compile;
 
 
 PROCEDURE ErrorNotFound(fname: ARRAY OF CHAR);
-BEGIN w.s(`File `);  w.s(fname);  w.sl(` not found`) END ErrorNotFound;
+BEGIN w.s("File ");  w.s(fname);  w.sl(" not found") END ErrorNotFound;
 
 
 PROCEDURE Build(fname: ARRAY OF CHAR);
@@ -71,7 +71,7 @@ VAR
   staticsize: INTEGER;
   varsize:    INTEGER;
 BEGIN
-  w.sl(`File name                 code      data    global   time`);
+  w.sl("File name                 code      data    global   time");
   start := Rtl.Time();  buildfile := Files.Old(fname);
   codesize := 0;  staticsize := 0;  varsize := 0;
   Files.Set(r, buildfile, 0);  i := 0;
@@ -95,10 +95,10 @@ BEGIN
     END
   END;
   end := Rtl.Time();
-  w.s(`Total               `);
+  w.s("Total               ");
   outSep(codesize, 10);   outSep(staticsize,  10);
   outSep(varsize,  10);   outSep(Rtl.TimeToMSecs(end-start), 5);
-  w.s(`ms`);       w.l
+  w.s("ms");       w.l
 END Build;
 
 (* -------------------------------------------------------------------------- *)
@@ -110,16 +110,16 @@ END Get;
 
 PROCEDURE Mark(msg: ARRAY OF CHAR);
 BEGIN
-  w.s(`arg `);  w.i(argIdx);  w.s(`: `);
+  w.s("arg ");  w.i(argIdx);  w.s(": ");
   w.s(msg);  w.l;  errFlag := TRUE
 END Mark;
 
 PROCEDURE Arguments;
   PROCEDURE Option;
   BEGIN (*Rtl.LowerCase(arg);*)
-    IF arg = `/b` THEN buildMode := TRUE;  Get;  Arguments
-    ELSIF arg = `/sym` THEN Get;
-      IF arg[0] = `/` THEN Mark(`path to symbols?`);  Option
+    IF arg = "/b" THEN buildMode := TRUE;  Get;  Arguments
+    ELSIF arg = "/sym" THEN Get;
+      IF arg[0] = "/" THEN Mark("path to symbols?");  Option
       ELSE B.SetSymPath(arg);  Get;  Arguments
       END
     ELSE (* unhandled *) Get;  Arguments
@@ -127,21 +127,21 @@ PROCEDURE Arguments;
   END Option;
 BEGIN (* Arguments *)
   IF arg[0] = 0Y THEN (* end parsing *)
-  ELSIF arg[0] # `/` THEN
+  ELSIF arg[0] # "/" THEN
     IF fname[0] = 0Y THEN fname := arg
-    ELSE Mark(`expecting another filename`)
+    ELSE Mark("expecting another filename")
     END;
     Get;  Arguments
-  ELSIF arg[0] = `/` THEN Option
+  ELSIF arg[0] = "/" THEN Option
   END
 END Arguments;
 
 PROCEDURE NotifyError8(line, column: INTEGER;  msg: ARRAY OF CHAR);
 BEGIN
   IF S.errCnt = 0 THEN w.l END;
-  w.s(`  [`);  w.i(line);
-  w.c(`:`);    w.i(column);
-  w.s(`] `);   w.sl(msg);
+  w.s("  [");  w.i(line);
+  w.c(":");    w.i(column);
+  w.s("] ");   w.sl(msg);
 END NotifyError8;
 
 BEGIN
@@ -152,7 +152,7 @@ BEGIN
     ELSE ErrorNotFound(fname)
     END
   ELSE
-    w.sl(`Small Oberon-07 Compiler`);
-    w.sl(`Usage: Smoc <inputfile>`);
+    w.sl("Small Oberon-07 Compiler");
+    w.sl("Usage: Smoc <inputfile>");
   END
 END Smoc.

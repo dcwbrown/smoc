@@ -67,12 +67,12 @@ PROCEDURE IntToDecStr(i: INTEGER; VAR str: ARRAY OF CHAR);
 VAR s: ARRAY 19 OF CHAR; j, k: INTEGER;
 BEGIN
   IF i # 8000000000000000H THEN j := 0; k := 0;
-    IF i < 0 THEN i := -i; str[k] := `-`; INC(k) END;
-    REPEAT s[j] := CHR(ORD(`0`) + i MOD 10); i := i DIV 10; INC(j)
+    IF i < 0 THEN i := -i; str[k] := "-"; INC(k) END;
+    REPEAT s[j] := CHR(ORD("0") + i MOD 10); i := i DIV 10; INC(j)
     UNTIL i = 0;
     WHILE j > 0 DO DEC(j); str[k] := s[j]; INC(k) END; str[k] := 0Y
   ELSE
-    str := `-9223372036854775808`  END
+    str := "-9223372036854775808"  END
 END IntToDecStr;
 
 PROCEDURE IntToHexStr(i: INTEGER; VAR str: ARRAY OF CHAR);
@@ -80,8 +80,8 @@ VAR s: ARRAY 16 OF CHAR; j, k: INTEGER;
 BEGIN
   j := 0; k := 0;
   REPEAT
-    IF i MOD 16 < 10 THEN s[j] := CHR(ORD(`0`) + i MOD 16)
-    ELSE s[j] := CHR(ORD(`a`) - 10 + i MOD 16)
+    IF i MOD 16 < 10 THEN s[j] := CHR(ORD("0") + i MOD 16)
+    ELSE s[j] := CHR(ORD("a") - 10 + i MOD 16)
     END;
     INC(j); i := i DIV 16
   UNTIL (i = 0) OR (i < 0) & (j = 16);
@@ -95,7 +95,7 @@ BEGIN
   i := 0; WHILE str[i] # 0Y DO INC(i) END;
   IF i < n THEN str[n] := 0Y; DEC(i); DEC(n);
     WHILE i >= 0 DO str[n] := str[i]; DEC(i); DEC(n) END;
-    WHILE n >= 0 DO str[n] := ` `; DEC(n) END
+    WHILE n >= 0 DO str[n] := " "; DEC(n) END
   END;
   String(str)
 END Int;
@@ -107,7 +107,7 @@ BEGIN
   i := 0; WHILE str[i] # 0Y DO INC(i) END;
   IF i < n THEN str[n] := 0Y; DEC(i); DEC(n);
     WHILE i >= 0 DO str[n] := str[i]; DEC(i); DEC(n) END;
-    WHILE n >= 0 DO str[n] := ` `; DEC(n) END
+    WHILE n >= 0 DO str[n] := " "; DEC(n) END
   END;
   String(str)
 END Hex;
@@ -183,7 +183,7 @@ BEGIN
   END;
 
   str[0] := CHR(BigNums.ModuloTen(x0)+30H);
-  str[1] := `.`; i := 2; quit := FALSE;
+  str[1] := "."; i := 2; quit := FALSE;
   REPEAT
     u := BigNums.DecimalDigit(f, BigNums.MaxDecimalDigits-1);
     BigNums.SetDecimalDigit(f, BigNums.MaxDecimalDigits-1, 0);
@@ -203,8 +203,8 @@ BEGIN
   END; INC(i);
 
   IF e # 0 THEN
-    str[i] := `e`; INC(i);
-    IF e > 0 THEN str[i] := `+` ELSE str[i] := `-`; e := -e END; INC(i);
+    str[i] := "e"; INC(i);
+    IF e > 0 THEN str[i] := "+" ELSE str[i] := "-"; e := -e END; INC(i);
     u := 0; REPEAT s[u] := e MOD 10; e := e DIV 10; INC(u) UNTIL e = 0;
     REPEAT DEC(u); str[i] := CHR(s[u]+30H); INC(i) UNTIL u = 0;
   END;
@@ -217,13 +217,13 @@ VAR str, s: ARRAY 64 OF CHAR; ten: REAL;
     i, k, exp10, exp2, d, f, m: INTEGER; quit: BOOLEAN;
 BEGIN
   ASSERT((n < LEN(str)) & (n >= 0));
-  IF SYSTEM.VAL(INTEGER, x) = 0 THEN str := `0.0`; i := 3
-  ELSIF SYSTEM.VAL(INTEGER, x) = 8000000000000000H THEN str := `-0.0`; i := 4
+  IF SYSTEM.VAL(INTEGER, x) = 0 THEN str := "0.0"; i := 3
+  ELSIF SYSTEM.VAL(INTEGER, x) = 8000000000000000H THEN str := "-0.0"; i := 4
   ELSE RealToStr(x, str); i := 0; WHILE str[i] # 0Y DO INC(i) END
   END;
   IF i < n THEN str[n] := 0Y; DEC(i); DEC(n);
     WHILE i >= 0 DO str[n] := str[i]; DEC(i); DEC(n) END;
-    WHILE n >= 0 DO str[n] := ` `; DEC(n) END
+    WHILE n >= 0 DO str[n] := " "; DEC(n) END
   END;
   String(str)
 END Real;
@@ -239,9 +239,9 @@ END Ln;
 PROCEDURE InitWin32;
 VAR kernel, user: INTEGER;
 BEGIN
-  SYSTEM.GetProcAddress(GetStdHandle, Rtl.HKernel, SYSTEM.ADR(`GetStdHandle`)); ASSERT(GetStdHandle # NIL);
-  SYSTEM.GetProcAddress(AllocConsole, Rtl.HKernel, SYSTEM.ADR(`AllocConsole`)); ASSERT(AllocConsole # NIL);
-  SYSTEM.GetProcAddress(WriteFile,    Rtl.HKernel, SYSTEM.ADR(`WriteFile`));    ASSERT(WriteFile    # NIL);
+  SYSTEM.GetProcAddress(GetStdHandle, Rtl.HKernel, SYSTEM.ADR("GetStdHandle")); ASSERT(GetStdHandle # NIL);
+  SYSTEM.GetProcAddress(AllocConsole, Rtl.HKernel, SYSTEM.ADR("AllocConsole")); ASSERT(AllocConsole # NIL);
+  SYSTEM.GetProcAddress(WriteFile,    Rtl.HKernel, SYSTEM.ADR("WriteFile"));    ASSERT(WriteFile    # NIL);
 END InitWin32;
 
 BEGIN InitWin32;
