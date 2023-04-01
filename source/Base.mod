@@ -11,13 +11,12 @@ CONST
   cField* = 6;   cSProc*  = 7;  cSFunc* = 8;
 
   (* Type form *)
-  tInt*   = 0;  tBool* = 1;  tSet*   = 2;  tChar16* = 3;  tReal*   = 4;
-  tPtr*   = 5;  tProc* = 6;  tArray* = 7;  tRec*    = 8;  tStr16*  = 9;  tNil* = 10;
-  tChar8* = 11; tStr8* = 12;
+  tInt*   = 0;  tBool* = 1;  tSet*   = 2;  tChar8* = 3;  tReal*  = 4;
+  tPtr*   = 5;  tProc* = 6;  tArray* = 7;  tRec*   = 8;  tStr8*  = 9;  tNil* = 10;
 
   typScalar* = {tInt,  tBool, tSet,   tChar8,  tReal, tPtr, tProc, tNil};
   typEql*    = {tBool, tSet,  tPtr,   tProc,   tNil};
-  typCmp*    = {tInt,  tReal, tChar8, tChar16, tStr8};
+  typCmp*    = {tInt,  tReal, tChar8, tStr8};
 
 TYPE
   ModuleKey* = ARRAY 2 OF INTEGER;
@@ -958,7 +957,6 @@ BEGIN
   Enter(NewSProc(S.sfFLT,   cSFunc), `FLT`);
   Enter(NewSProc(S.sfORD,   cSFunc), `ORD`);
   Enter(NewSProc(S.sfCHR8,  cSFunc), `CHR`);
-  Enter(NewSProc(S.sfCHR,   cSFunc), `CHR16`);
   Enter(NewSProc(S.sfCHR8,  cSFunc), `CHR8`);
 
   OpenScope;

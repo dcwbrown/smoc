@@ -113,16 +113,6 @@ END Finalise;
 PROCEDURE CreateFile(name: ARRAY OF CHAR8; op: INTEGER): INTEGER;
 VAR hFile, len, access, mode, disposition, flags: INTEGER; name16: PathStr16;
 BEGIN
-  (*
-  w.s(`** Create file '`); w.s(name); w.s(`' operation `);
-  CASE op OF
-  | FileNew:      w.sl(`FileNew.`)
-  | FileRegister: w.sl(`FileRegister.`)
-  | FileOpenR:    w.sl(`FileOpenR.`)
-  | FileOpenW:    w.sl(`FileOpenW.`)
-  END;
-  *)
-
   IF op = FileNew THEN
     disposition := CREATE_NEW;
     flags       := ORD(FILE_ATTRIBUTE_TEMPORARY+FILE_FLAG_DELETE_ON_CLOSE);

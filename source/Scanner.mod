@@ -37,13 +37,13 @@ CONST
   stringBufSize = 256;
 
   (* Symbols *)
-  null*   = 0;   times*  = 1;   rdiv*  = 2;   div*    = 3;   mod* = 4;
-  and*    = 5;   plus*   = 6;   minus* = 7;   or*     = 8;   eql* = 9;
-  neq*    = 10;  lss*    = 11;  leq*   = 12;  gtr*    = 13;  geq* = 14;
-  in*     = 15;  is*     = 16;  arrow* = 17;  period* = 18;
-  char*   = 20;  int*    = 21;  real*  = 22;  false*  = 23;  true*  = 24;
-  nil*    = 25;  string* = 26;  not*   = 27;  lparen* = 28;  lbrak* = 29;
-  lbrace* = 30;  ident*  = 31;
+  null*   = 0;   times*   = 1;   rdiv*  = 2;   div*    = 3;   mod* = 4;
+  and*    = 5;   plus*    = 6;   minus* = 7;   or*     = 8;   eql* = 9;
+  neq*    = 10;  lss*     = 11;  leq*   = 12;  gtr*    = 13;  geq* = 14;
+  in*     = 15;  is*      = 16;  arrow* = 17;  period* = 18;
+  char*   = 20;  int*     = 21;  real*  = 22;  false*  = 23;  true*  = 24;
+  nil*    = 25;  string8* = 26;  not*   = 27;  lparen* = 28;  lbrak* = 29;
+  lbrace* = 30;  ident*   = 31;
 
   if*     = 32;  while*  = 34;  repeat*    = 35;  case*   = 36;  for*    = 37;
   comma*  = 40;  colon*  = 41;  becomes*   = 42;  upto*   = 43;  rparen* = 44;
@@ -59,11 +59,10 @@ CONST
   begSf*   = 110;
   sfABS*   = 110;  sfODD* = 111;  sfLEN* = 112;
   sfLSL*   = 113;  sfASR* = 114;  sfROR* = 115;
-  sfFLOOR* = 116;  sfFLT* = 117;  sfORD* = 118;  sfCHR* = 119;
+  sfFLOOR* = 116;  sfFLT* = 117;  sfORD* = 118;  sfCHR8* = 119;
 
   sfADR*          = 120;  sfBIT* = 121;  sfVAL* = 122;  sfSIZE* = 123;
   sfNtCurrentTeb* = 124;  sfCAS* = 125;
-  sfCHR8*         = 126;
   endSf*          = 129;
 
   begSp* = 130;
@@ -75,22 +74,17 @@ CONST
   spPAUSE*        = 155;
   endSp*          = 159;
 
-  (* Additions during conversion to 8 bit characters *)
-  string8*        = 160;
-
 TYPE
   IdStr8* = ARRAY MaxIdLen+1  OF CHAR8;
-  Str*    = ARRAY MaxStrLen+1 OF SYSTEM.CARD16;
   Str8*   = ARRAY MaxStrLen+1 OF CHAR8;
 
   SetCompilerFlagProc* = PROCEDURE(pragma: ARRAY OF CHAR8);
-  NotifyError8Proc* = PROCEDURE(line, column: INTEGER;  msg: ARRAY OF CHAR8);
+  NotifyError8Proc*    = PROCEDURE(line, column: INTEGER;  msg: ARRAY OF CHAR8);
 
 VAR
   ival*, slen*: INTEGER;
   rval*:        REAL;
   id8*:         IdStr8;
-  str*:         Str;
   str8*:        Str8;
   ansiStr*:     BOOLEAN;
   errCnt*:      INTEGER;
@@ -118,12 +112,6 @@ BEGIN
   END;
   INC(errCnt);  errPos := bufPos + 1
 END Mark8;
-
-(*
-PROCEDURE Mark16*(msg: ARRAY OF CHAR16);
-VAR msg8: ARRAY 100 OF CHAR8;  len: INTEGER;
-BEGIN len := Rtl.Utf16ToUtf8(msg, msg8);  Mark8(msg8) END Mark16;
-*)
 
 PROCEDURE Read;
 VAR n: INTEGER;
@@ -167,16 +155,6 @@ BEGIN
   Read;  str8[slen] := 0Y;  INC(slen);
   IF slen >= MaxStrLen THEN Mark8(`String too long`) END;
 END String8;
-
-PROCEDURE String(quoteCh: INTEGER);
-BEGIN
-  slen := 0;  Read;
-  WHILE ~eof & (slen < MaxStrLen) & (ch # quoteCh) DO
-    Rtl.PutUtf16(ch, str, slen); Read
-  END;
-  Read;  str[slen] := 0;  INC(slen);
-  IF slen >= MaxStrLen THEN Mark8(`String too long`) END;
-END String;
 
 PROCEDURE HexString(): INTEGER;
 VAR i, m, n, o, p: INTEGER;
@@ -299,14 +277,7 @@ BEGIN
       IF h >= 10 THEN h := h-7 END;
       k2 := k2*10H + h;  INC(i) (* no overflow check *)
     UNTIL i = n;
-    IF ch = ORD(`X`) THEN sym := string;
-      IF k2 < 10000H THEN ival := k2
-      ELSE Mark8(`Illegal value`);  ival := 0
-      END;
-      IF k2 = 0 THEN str[0] := 0;  slen := 1
-      ELSE str[0] := k2;  str[1] := 0;  slen := 2
-      END
-    ELSIF ch = ORD(`Y`) THEN sym := string8;
+    IF ch = ORD(`Y`) THEN sym := string8;
       IF k2 < 100H THEN ival := k2 ELSE Mark8(`Illegal value`);  ival := 0  END;
       IF k2 = 0 THEN str8[0] := 0Y;  slen := 1
       ELSE str8[0] := CHR8(k2);  str8[1] := 0Y;  slen := 2
@@ -382,7 +353,7 @@ BEGIN
 
     IF ch < ORD(`A`) THEN
       IF ch < ORD(`0`) THEN
-        IF (ch = 22H) OR (ch = 27H) THEN String(ch);  sym := string
+        IF (ch = 22H) OR (ch = 27H) THEN String8(ch);  sym := string8
         ELSIF ch = ORD(`#`) THEN Read;  sym := neq
         ELSIF ch = ORD(`$`) THEN sym := HexString();
         ELSIF ch = ORD(`&`) THEN Read;  sym := and

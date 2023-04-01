@@ -3,7 +3,9 @@ IMPORT S := Scanner, B := Base, G := Generator, w := Writer;
 
 TYPE
   UndefPtrList = POINTER TO RECORD
-    name: S.IdStr8;  tp: B.Type;  next: UndefPtrList
+    name: S.IdStr8;
+    tp:   B.Type;
+    next: UndefPtrList
   END;
 
 VAR
@@ -446,7 +448,7 @@ BEGIN GetSym;
     IF y IS B.Const THEN x := G.OddConst(y)
     ELSE x := NewNode(S.sfODD, y, NIL);  x.type := B.boolType
     END
-  ELSIF f.id = S.sfLEN THEN y := designator();  Check1(y, {B.tArray, B.tStr16});
+  ELSIF f.id = S.sfLEN THEN y := designator();  Check1(y, {B.tArray, B.tStr8});
     IF (y.type.form = B.tArray) & (y.type.len >= 0) THEN
       x := B.NewConst(B.intType, y.type.len)
     ELSIF y.type.form = B.tStr8 THEN
@@ -472,7 +474,7 @@ BEGIN GetSym;
   ELSIF f.id = S.sfORD THEN y := expression0();
     IF (y.type = B.str8Type)  & (y(B.Str8).len  <= 2) THEN (* ORD ok *)
     ELSE
-      Check1(y, {B.tSet, B.tBool, B.tChar8, B.tChar16})
+      Check1(y, {B.tSet, B.tBool, B.tChar8})
     END;
     IF IsConst(y) THEN x := G.TypeTransferConst(B.intType, y)
     ELSE x := NewNode(S.sfORD, y, NIL);  x.type := B.intType
@@ -860,8 +862,8 @@ VAR x, y: B.Object;  xform: INTEGER;
       IF y = NIL THEN Mark8(`Invalid value`)
       ELSIF y IS B.Const THEN
         IF xform = B.tInt THEN CheckInt(y)
-        ELSIF xform = B.tChar16 THEN
-          IF y.type.form # B.tChar16 THEN Mark8(`not char`) END
+        ELSIF xform = B.tChar8 THEN
+          IF y.type.form # B.tChar8 THEN Mark8(`not char`) END
         END
       ELSIF y IS B.Str8 THEN
         IF xform # B.tChar8 THEN Mark8(`Invalid value`) END;
@@ -887,7 +889,7 @@ VAR x, y: B.Object;  xform: INTEGER;
   PROCEDURE NumericCase(x: B.Object): B.Node;
   VAR bar, colon: B.Node;  y: B.Node;
   BEGIN
-    IF (sym = S.int) OR (sym = S.string) OR (sym = S.ident) THEN
+    IF (sym = S.int) OR (sym = S.string8) OR (sym = S.ident) THEN
       y := LabelRange(x);
       WHILE sym = S.comma DO
         GetSym;  y := NewNode(S.or, y, LabelRange(x))
