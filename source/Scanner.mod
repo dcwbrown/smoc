@@ -174,11 +174,13 @@ BEGIN
   slen := 0;
   WHILE ~eof & (ch # ORD("$")) DO
     WHILE ~eof & ((ch = SP) OR (ch = TAB) OR (ch = CR) OR (ch = LF)) DO Read END;
-    m := hexdigit(); Read;  IF m >= 0 THEN n := hexdigit(); Read END;
-    IF (m >= 0) & (n >= 0) THEN
-      IF slen < MaxStrLen THEN str8[slen] := CHR(m * 10H + n); INC(slen) END
-    ELSE
-      Mark("Hex digit expected")
+    IF ~eof & (ch # ORD("$")) THEN
+      m := hexdigit(); Read;  IF m >= 0 THEN n := hexdigit(); Read END;
+      IF (m >= 0) & (n >= 0) THEN
+        IF slen < MaxStrLen THEN str8[slen] := CHR(m * 10H + n); INC(slen) END
+      ELSE
+        Mark("Hex digit expected")
+      END
     END
   END;
   IF slen > MaxStrLen THEN Mark("Hex string too long") END;

@@ -627,10 +627,10 @@ BEGIN
   (* MSDOS stub *)
   hdr.eMagic               := 5A4DH;
   hdr.eLfanew              := 128;
-  hdr.dosProgram           := $$0E1FBA0E00B409CD 21B8014CCD215468
-                                69732070726F6772 616D2063616E6E6F
-                                74202072756E2069 6E20444F53206D6F
-                                64652E0D0A24$;
+  hdr.dosProgram           := $ 0E 1F BA 0E 00 B4 09 CD  21 B8 01 4C CD 21 54 68
+                                69 73 20 70 72 6F 67 72  61 6D 20 63 61 6E 6E 6F
+                                74 20 20 72 75 6E 20 69  6E 20 44 4F 53 20 6D 6F
+                                64 65 2E 0D 0A 24 $;
   hdr.signature            := 4550H;
 
   (* COFF file header*)
