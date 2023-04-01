@@ -11,11 +11,11 @@ CONST
   cField* = 6;   cSProc*  = 7;  cSFunc* = 8;
 
   (* Type form *)
-  tInt*   = 0;  tBool* = 1;  tSet*   = 2;  tChar* = 3;  tReal*  = 4;
+  tInt*   = 0;  tBool* = 1;  tSet*   = 2;  tChar* = 3;  tReal* = 4;
   tPtr*   = 5;  tProc* = 6;  tArray* = 7;  tRec*  = 8;  tStr*  = 9;  tNil* = 10;
 
-  typScalar* = {tInt,  tBool, tSet,   tChar,  tReal, tPtr, tProc, tNil};
-  typEql*    = {tBool, tSet,  tPtr,   tProc,   tNil};
+  typScalar* = {tInt,  tBool, tSet,  tChar,  tReal, tPtr, tProc, tNil};
+  typEql*    = {tBool, tSet,  tPtr,  tProc,  tNil};
   typCmp*    = {tInt,  tReal, tChar, tStr};
 
 TYPE
@@ -37,7 +37,7 @@ TYPE
                ronly*:             BOOLEAN
              END;
   Par*     = POINTER TO RECORD (Var)  varpar*: BOOLEAN END;
-  Str*    = POINTER TO RECORD (Var)  bufpos*, len*: INTEGER END;
+  Str*     = POINTER TO RECORD (Var)  bufpos*, len*: INTEGER END;
   TempVar* = POINTER TO RECORD (Var)  inited*: BOOLEAN END;
 
   Proc* = POINTER TO RECORD (ObjDesc)
@@ -56,17 +56,17 @@ TYPE
             fix*, lim*:          INTEGER
           END;
 
-  ObjList*   = POINTER TO RECORD obj*:  Object;  next*: ObjList   END;
-  TypeList*  = POINTER TO RECORD type*: Type;    next*: TypeList  END;
-  ProcList*  = POINTER TO RECORD obj*:  Proc;    next*: ProcList  END;
-  Str8List*  = POINTER TO RECORD obj*:  Str;    next*: Str8List  END;
+  ObjList*  = POINTER TO RECORD obj*:  Object;  next*: ObjList   END;
+  TypeList* = POINTER TO RECORD type*: Type;    next*: TypeList  END;
+  ProcList* = POINTER TO RECORD obj*:  Proc;    next*: ProcList  END;
+  StrList*  = POINTER TO RECORD obj*:  Str;     next*: StrList  END;
 
   Module* = POINTER TO RECORD (ObjDesc)
     export*, import*: BOOLEAN;
-    id*:              S.IdStr8;
+    id*:              S.IdStr;
     key*:             ModuleKey;
     no*, lev*:        INTEGER;
-    adr8*:            INTEGER;
+    adr*:            INTEGER;
     next*:            Module;
     first*, impList*: Ident;
     types*:           TypeList
@@ -85,7 +85,7 @@ TYPE
 
   IdentDesc* = RECORD
     export*: BOOLEAN;
-    name*:   S.IdStr8;
+    name*:   S.IdStr;
     obj*:    Object;
     next*:   Ident
   END;
@@ -107,14 +107,15 @@ TYPE
   END;
 
 VAR
-  topScope*, universe*, systemScope: Scope;
-  curLev*, modlev*:                  INTEGER;
-  modid*:                            S.IdStr8;
-  modkey*:                           ModuleKey;
-  system*:                           BOOLEAN;
-  expList*, lastExp:                 ObjList;
-  str8List*:                         Str8List;
-  recList*:                          TypeList;
+  topScope*, universe*,
+  systemScope:          Scope;
+  curLev*, modlev*:     INTEGER;
+  modid*:               S.IdStr;
+  modkey*:              ModuleKey;
+  system*:              BOOLEAN;
+  expList*, lastExp:    ObjList;
+  strList*:             StrList;
+  recList*:             TypeList;
 
   (* Predefined Types *)
   nilType*,    noType*,
@@ -123,7 +124,7 @@ VAR
   card16Type*, card32Type*,
   intType*,    int8Type*,
   int16Type*,  int32Type*,
-  char8Type*,  str8Type*:    Type;
+  charType*,   strType*:    Type;
 
   predefTypes: TypeList;
 
@@ -137,13 +138,8 @@ VAR
 
   refno, preTypeNo, expno*, modno*: INTEGER;
 
-  str8bufSize*:  INTEGER;
-  str8buf*:      ARRAY 1000H OF BYTE;  (* TODO change to CHAR *)
-
-  (*
-  str16bufSize*: INTEGER;
-  str16buf*:     ARRAY 1000H OF SYSTEM.CARD16;
-  *)
+  strBufSize*:  INTEGER;
+  strBuf*:      ARRAY 1000H OF BYTE;  (* TODO change to CHAR *)
 
   symPath, srcPath, sym: ARRAY 1024 OF CHAR;
 
@@ -171,12 +167,12 @@ BEGIN
   dst[i] := 0Y
 END Append;
 
-PROCEDURE Str8Len* (str: ARRAY OF CHAR): INTEGER;
+PROCEDURE strLen* (str: ARRAY OF CHAR): INTEGER;
 VAR len: INTEGER;
 BEGIN
   len := 0;  WHILE (len < LEN(str)) & (str[len] # 0Y) DO INC(len) END;
   RETURN len
-END Str8Len;
+END strLen;
 
 PROCEDURE Align(VAR n: INTEGER;  align: INTEGER);
 BEGIN
@@ -196,9 +192,9 @@ PROCEDURE IsNormalArray*(tp: Type): BOOLEAN;
   RETURN (tp.form = tArray) & (tp.len >= 0)
 END IsNormalArray;
 
-PROCEDURE IsStr8*(t: Type): BOOLEAN;
-  RETURN (t = str8Type) OR (t.form = tArray) & (t.base.form = tChar)
-END IsStr8;
+PROCEDURE IsStr*(t: Type): BOOLEAN;
+  RETURN (t = strType) OR (t.form = tArray) & (t.base.form = tChar)
+END IsStr;
 
 (* -------------------------------------------------------------------------- *)
 (* -------------------------------------------------------------------------- *)
@@ -240,29 +236,29 @@ BEGIN
   RETURN fld
 END NewField;
 
-PROCEDURE NewStr8*(str: ARRAY OF BYTE;  slen: INTEGER): Str;
-VAR x: Str;  i: INTEGER;  p: Str8List;
+PROCEDURE NewStr*(str: ARRAY OF BYTE;  slen: INTEGER): Str;
+VAR x: Str;  i: INTEGER;  p: StrList;
 BEGIN
   NEW(x);  x.class := cVar;  x.ronly := TRUE;
-  x.type := str8Type;  x.lev := curLev;  x.len := slen;
+  x.type := strType;  x.lev := curLev;  x.len := slen;
   IF x.lev >= -1 (* need to alloc buffer *) THEN
-    IF str8bufSize + slen >= LEN(str8buf) THEN
-      S.Mark8(`too many 8 bit strings`);  x.bufpos := -1
-    ELSE x.bufpos  := str8bufSize;  str8bufSize := str8bufSize + slen;
-      FOR i := 0 TO slen-1 DO str8buf[x.bufpos+i] := str[i] END;
-      NEW(p);  p.obj := x;  p.next := str8List;  str8List := p
+    IF strBufSize + slen >= LEN(strBuf) THEN
+      S.Mark(`too many strings`);  x.bufpos := -1
+    ELSE x.bufpos  := strBufSize;  strBufSize := strBufSize + slen;
+      FOR i := 0 TO slen-1 DO strBuf[x.bufpos+i] := str[i] END;
+      NEW(p);  p.obj := x;  p.next := strList;  strList := p
     END
   ELSE x.bufpos := -1
   END;
   RETURN x
-END NewStr8;
+END NewStr;
 
-PROCEDURE NewStr8Z*(str: ARRAY OF BYTE): Str;
+PROCEDURE NewStrZ*(str: ARRAY OF BYTE): Str;
 VAR slen: INTEGER;
 BEGIN
   slen := 0;  WHILE str[slen] # 0 DO INC(slen) END;  INC(slen);
-  RETURN NewStr8(str, slen)
-END NewStr8Z;
+  RETURN NewStr(str, slen)
+END NewStrZ;
 
 PROCEDURE NewProc*(): Proc;
 VAR p: Proc;
@@ -383,7 +379,7 @@ PROCEDURE IncLev*(n: INTEGER);
 BEGIN curLev := curLev + n
 END IncLev;
 
-PROCEDURE Enter(x: Object;  name: S.IdStr8);
+PROCEDURE Enter(x: Object;  name: S.IdStr);
 VAR ident: Ident;
 BEGIN
   NEW(ident);  ident.name := name;  ident.export := FALSE;
@@ -394,7 +390,7 @@ END Enter;
 (* -------------------------------------------------------------------------- *)
 (* -------------------------------------------------------------------------- *)
 
-PROCEDURE FindMod(name: S.IdStr8): Module;
+PROCEDURE FindMod(name: S.IdStr): Module;
 VAR mod: Module;
 BEGIN
   mod := modList;
@@ -429,7 +425,7 @@ BEGIN
       Files.WriteNum(rider, 2);  Files.WriteNum(rider, typ.ref);
       IF typ.ref < 0 THEN ExportType0(typ) END
     ELSE
-      Files.WriteNum(rider, 3);  Files.WriteString8(rider, typ.mod.id);
+      Files.WriteNum(rider, 3);  Files.WriteString(rider, typ.mod.id);
       Files.WriteBool(rider, ~typ.mod.export);
       IF ~typ.mod.export THEN
         WriteModkey(typ.mod.key);  typ.mod.export := TRUE
@@ -448,7 +444,7 @@ BEGIN
   Files.WriteNum(rider, typ.parblksize);  DetectType(typ.base);
   par := typ.fields;
   WHILE par # NIL DO x := par.obj(Par);
-    Files.WriteNum(rider, cVar);  Files.WriteString8(rider, par.name);
+    Files.WriteNum(rider, cVar);  Files.WriteString(rider, par.name);
     Files.WriteBool(rider, x.varpar);  DetectType(x.type);  par := par.next
   END;
   Files.WriteNum(rider, cNull)
@@ -460,7 +456,7 @@ BEGIN
   IF typ.mod = NIL THEN
     IF refno < MaxExpTypes THEN
       INC(refno);  typ.ref := refno
-    ELSE S.Mark8(`Too many exported types`)
+    ELSE S.Mark(`Too many exported types`)
     END
   ELSE typ.ref := -typ.ref
   END;
@@ -475,8 +471,8 @@ BEGIN
     WHILE fld # NIL DO ftyp := fld.obj.type;
       IF fld.export OR (ftyp.nPtr > 0) OR (ftyp.nProc > 0) THEN
         Files.WriteNum(rider, cField);
-        IF fld.export THEN Files.WriteString8(rider, fld.name)
-        ELSE Files.WriteString8(rider, 0Y)
+        IF fld.export THEN Files.WriteString(rider, fld.name)
+        ELSE Files.WriteString(rider, 0Y)
         END;
         Files.WriteNum(rider, fld.obj(Field).off);  DetectType(ftyp)
       END;
@@ -513,13 +509,13 @@ BEGIN
   Insert(modid, symfname, i);
   Insert(`.sym`, symfname, i);
 
-  symfile := Files.New8(symfname);
+  symfile := Files.New(symfname);
   Files.Set(rider, symfile, 16);
   Files.WriteNum(rider, modlev);
 
   imod := modList;
   WHILE imod # NIL DO
-    Files.WriteNum(rider, cModule);  Files.WriteString8(rider, imod.id);
+    Files.WriteNum(rider, cModule);  Files.WriteString(rider, imod.id);
     WriteModkey(imod.key);  imod := imod.next
   END;
 
@@ -528,29 +524,29 @@ BEGIN
     IF ident.export THEN x := ident.obj;
       IF x.class = cConst THEN
         Files.WriteNum(rider, cConst);
-        Files.WriteString8(rider, ident.name);
+        Files.WriteString(rider, ident.name);
         Files.WriteNum(rider, x(Const).val);
         DetectType(x.type)
       ELSIF x.class = cType THEN
         Files.WriteNum(rider, cType);
-        Files.WriteString8(rider, ident.name);
+        Files.WriteString(rider, ident.name);
         DetectType(x.type)
       ELSIF x.class = cVar THEN
         IF x IS Str THEN
           Files.WriteNum(rider, cConst);
-          Files.WriteString8(rider, ident.name);
+          Files.WriteString(rider, ident.name);
           NewExport(exp);  exp.obj := x;
           Files.WriteNum(rider, expno);  DetectType(x.type);
           Files.WriteNum(rider, x(Str).len)
         ELSE
           Files.WriteNum(rider, cVar);
-          Files.WriteString8(rider, ident.name);
+          Files.WriteString(rider, ident.name);
           NewExport(exp);  exp.obj := x;
           Files.WriteNum(rider, expno);  DetectType(x.type)
         END
       ELSIF x.class = cProc THEN
         Files.WriteNum(rider, cProc);
-        Files.WriteString8(rider, ident.name);
+        Files.WriteString(rider, ident.name);
         NewExport(exp);  exp.obj := x;
         Files.WriteNum(rider, expno);  DetectType(x.type)
       ELSE ASSERT(FALSE)
@@ -588,7 +584,7 @@ BEGIN p := types;
   RETURN typ
 END FindType;
 
-PROCEDURE NewImport(name: S.IdStr8;  x: Object);
+PROCEDURE NewImport(name: S.IdStr;  x: Object);
 VAR ident, p: Ident;
 BEGIN
   NEW(ident);  p := topScope.last;
@@ -608,7 +604,7 @@ VAR
   n, ref: INTEGER;
   first:  BOOLEAN;
   mod:    Module;
-  id:     S.IdStr8;
+  id:     S.IdStr;
   key:    ModuleKey;
 BEGIN
   Files.ReadNum(rider, n);
@@ -621,12 +617,12 @@ BEGIN
     ELSE ImportType0(typ, imod)
     END
   ELSIF n = 3 THEN
-    Files.ReadString8(rider, id);  Files.ReadBool(rider, first);
+    Files.ReadString(rider, id);  Files.ReadBool(rider, first);
     mod := FindMod(id);
     IF first THEN ReadModkey(key);
       IF mod # NIL THEN
         IF (mod.key[0] # key[0]) OR (mod.key[1] # key[1]) THEN
-          S.Mark8(`Modkey mismatched`)
+          S.Mark(`Modkey mismatched`)
         END
       ELSE
         NEW(mod);  mod.id := id;  mod.key := key;
@@ -655,7 +651,7 @@ PROCEDURE ImportType(VAR typ: Type;  mod: Module);
 VAR typ0: TypeDesc;  form, ref, len: INTEGER;
 
   PROCEDURE ImportRecord(VAR typ: TypeDesc;  new: BOOLEAN);
-    VAR cls, off: INTEGER;  fltype: Type;  x: Field;  name: S.IdStr8;
+    VAR cls, off: INTEGER;  fltype: Type;  x: Field;  name: S.IdStr;
   BEGIN
     Files.ReadNum(rider, typ.expno);  Files.ReadNum(rider, typ.size0);
     Files.ReadNum(rider, typ.size);  Files.ReadNum(rider, typ.align);
@@ -663,7 +659,7 @@ VAR typ0: TypeDesc;  form, ref, len: INTEGER;
     IF S.errCnt = 0 THEN ExtendRecord(typ);
       Files.ReadNum(rider, cls);  OpenScope;
       WHILE (cls = cField) & (S.errCnt = 0) DO
-        Files.ReadString8(rider, name);  Files.ReadNum(rider, off);
+        Files.ReadString(rider, name);  Files.ReadNum(rider, off);
         DetectTypeI(fltype);  Files.ReadNum(rider, cls);
         IF new & (S.errCnt = 0) THEN
           x := NewField(typ, fltype);
@@ -690,14 +686,14 @@ VAR typ0: TypeDesc;  form, ref, len: INTEGER;
 
   PROCEDURE ImportProc(VAR typ: TypeDesc;  new: BOOLEAN);
     VAR cls: INTEGER;  varpar: BOOLEAN;
-      par: Ident;  x: Par;  xtype: Type;  name: S.IdStr8;
+      par: Ident;  x: Par;  xtype: Type;  name: S.IdStr;
   BEGIN
     Files.ReadNum(rider, typ.size);  Files.ReadNum(rider, typ.align);
     Files.ReadNum(rider, typ.parblksize);  DetectTypeI(typ.base);
     IF S.errCnt = 0 THEN
       Files.ReadNum(rider, cls);  OpenScope;
       WHILE (cls = cVar) & (S.errCnt = 0) DO
-        Files.ReadString8(rider, name);  Files.ReadBool(rider, varpar);
+        Files.ReadString(rider, name);  Files.ReadBool(rider, varpar);
         DetectTypeI(xtype);  Files.ReadNum(rider, cls);
         IF new & (S.errCnt = 0) THEN
           x := NewPar(typ, xtype, varpar);  NewImport(name, x)
@@ -745,7 +741,7 @@ BEGIN (* ImportType *)
   END
 END ImportType;
 
-PROCEDURE Import(imodid: S.IdStr8): Module;
+PROCEDURE Import(imodid: S.IdStr): Module;
 VAR dep:       Module;
     x:         Object;
     key:       ModuleKey;
@@ -753,8 +749,8 @@ VAR dep:       Module;
     lev, val,
     cls, slen: INTEGER;
     tp:        Type;
-    depid:     S.IdStr8;
-    name:      S.IdStr8;
+    depid:     S.IdStr;
+    name:      S.IdStr;
     msg:       ARRAY 512 OF CHAR;
 BEGIN
   Files.Set(rider, symfile, 0);
@@ -763,40 +759,40 @@ BEGIN
   Files.ReadNum(rider, lev);
 
   IF imod = NIL THEN
-    NEW(imod);  imod.id := imodid;  imod.adr8 := 0;  imod.import := TRUE;
+    NEW(imod);  imod.id := imodid;  imod.adr := 0;  imod.import := TRUE;
     imod.next := modList;  modList := imod;  imod.no := modno;
     DEC(modno);  imod.key := key;  imod.lev := lev;  imod.export := FALSE;
     IF lev >= modlev THEN
       modlev := lev + 1;
-      IF modlev > MaxModLev THEN S.Mark8(`Module level too high`) END
+      IF modlev > MaxModLev THEN S.Mark(`Module level too high`) END
     END
   ELSIF (key[0] = imod.key[0]) & (key[1] = imod.key[1]) THEN
-    imod.adr8 := 0;  imod.lev := lev;  imod.export := FALSE
-  ELSE S.Mark8(`Was imported with a different key`)
+    imod.adr := 0;  imod.lev := lev;  imod.export := FALSE
+  ELSE S.Mark(`Was imported with a different key`)
   END;
 
   IF S.errCnt = 0 THEN
     OpenScope;  curLev := imod.no;  Files.ReadNum(rider, cls);
     WHILE (cls = cModule) & (S.errCnt = 0) DO
-      Files.ReadString8(rider, depid);
+      Files.ReadString(rider, depid);
       ReadModkey(key);
       dep := FindMod(depid);
-      IF depid = modid THEN S.Mark8(`Circular dependency`)
+      IF depid = modid THEN S.Mark(`Circular dependency`)
       ELSIF dep # NIL THEN
         IF (dep.key[0] # key[0]) OR (dep.key[1] # key[1]) THEN
           msg := `Module `;                  Append(depid, msg);
           Append(` was imported by `, msg);  Append(imodid, msg);
-          Append(` with a different key`, msg);  S.Mark8(msg)
+          Append(` with a different key`, msg);  S.Mark(msg)
         END
       END;
       Files.ReadNum(rider, cls)
     END;
     WHILE (cls = cConst) & (S.errCnt = 0) DO
-      Files.ReadString8(rider, name);
+      Files.ReadString(rider, name);
       Files.ReadNum(rider, val);  DetectTypeI(tp);
       IF S.errCnt = 0 THEN
-        IF tp = str8Type THEN
-          Files.ReadNum(rider, slen);  x := NewStr8(``, slen);
+        IF tp = strType THEN
+          Files.ReadNum(rider, slen);  x := NewStr(``, slen);
           x(Str).adr := 0;  x(Str).expno := val
         ELSE
           x := NewConst(tp, val)
@@ -806,12 +802,12 @@ BEGIN
       Files.ReadNum(rider, cls)
     END;
     WHILE (cls = cType) & (S.errCnt = 0) DO
-      Files.ReadString8(rider, name);  DetectTypeI(tp);
+      Files.ReadString(rider, name);  DetectTypeI(tp);
       IF S.errCnt = 0 THEN x := NewTypeObj(tp);  NewImport(name, x) END;
       Files.ReadNum(rider, cls)
     END;
     WHILE (cls = cVar) & (S.errCnt = 0) DO
-      Files.ReadString8(rider, name);
+      Files.ReadString(rider, name);
       Files.ReadNum(rider, val);  DetectTypeI(tp);
       IF S.errCnt = 0 THEN
         x := NewVar(tp);  x(Var).ronly := TRUE;
@@ -820,7 +816,7 @@ BEGIN
       Files.ReadNum(rider, cls)
     END;
     WHILE (cls = cProc) & (S.errCnt = 0) DO
-      Files.ReadString8(rider, name);
+      Files.ReadString(rider, name);
       Files.ReadNum(rider, val);  DetectTypeI(tp);
       IF S.errCnt = 0 THEN
         x := NewProc();  x(Proc).adr := 0;
@@ -844,7 +840,7 @@ BEGIN
   modident.obj := mod;  mod.ident := modident;  system := TRUE
 END NewSystemModule;
 
-PROCEDURE NewModule*(ident: Ident;  id: S.IdStr8);
+PROCEDURE NewModule*(ident: Ident;  id: S.IdStr);
 VAR
   path, symfname: ARRAY 512 OF CHAR;
   x, i:           INTEGER;
@@ -864,7 +860,7 @@ VAR
 
 BEGIN (* NewModule *)
   mod := FindMod(id);  IF (mod # NIL) & ~mod.import THEN mod := NIL END;
-  IF id = modid THEN S.Mark8(`Cannot import self`)
+  IF id = modid THEN S.Mark(`Cannot import self`)
   ELSIF mod = NIL THEN
     i := 0;  Insert(id, symfname, i);  Insert(`.sym`, symfname, i);
     symfile := Files.Old(symfname);  found := symfile # NIL;  i := 0;
@@ -879,7 +875,7 @@ BEGIN (* NewModule *)
     IF found THEN ident.obj := Import(id)
     ELSE
       path := `Symbol file not found: `;  Append(symfname, path);
-      S.Mark8(path)
+      S.Mark(path)
     END
   END
 END NewModule;
@@ -917,7 +913,7 @@ END SetSrcPath;
 (* -------------------------------------------------------------------------- *)
 (* -------------------------------------------------------------------------- *)
 
-PROCEDURE Init*(modid0: S.IdStr8);
+PROCEDURE Init*(modid0: S.IdStr);
 VAR symfname: ARRAY 512 OF CHAR;  i, res: INTEGER;
 BEGIN
   modid := modid0;  i := 0;    Insert(srcPath, symfname, i);
@@ -925,9 +921,9 @@ BEGIN
   Files.Delete8(symfname, res);
 
   NEW(universe);  topScope := universe;  curLev := -1;
-  system := FALSE;  modno := -2;  str8bufSize := 0;
+  system := FALSE;  modno := -2;  strBufSize := 0;
   (*str16bufSize := 0;*)
-  expList := NIL;  lastExp := NIL;  str8List := NIL;  recList := NIL;
+  expList := NIL;  lastExp := NIL;  strList := NIL;  recList := NIL;
   InitCompilerFlag;
 
   Enter(NewTypeObj(intType),    `INTEGER`);
@@ -935,7 +931,7 @@ BEGIN
   Enter(NewTypeObj(realType),   `REAL`);
   Enter(NewTypeObj(setType),    `SET`);
   Enter(NewTypeObj(boolType),   `BOOLEAN`);
-  Enter(NewTypeObj(char8Type),  `CHAR`);
+  Enter(NewTypeObj(charType),  `CHAR`);
 
   Enter(NewSProc(S.spINC,    cSProc), `INC`);
   Enter(NewSProc(S.spDEC,    cSProc), `DEC`);
@@ -988,7 +984,7 @@ PROCEDURE Cleanup*;
 VAR i: INTEGER;
 BEGIN
   universe := NIL;  topScope := NIL;  systemScope := NIL;  modList := NIL;
-  expList  := NIL;  lastExp  := NIL;  str8List    := NIL;  recList := NIL
+  expList  := NIL;  lastExp  := NIL;  strList    := NIL;  recList := NIL
 END Cleanup;
 
 BEGIN
@@ -1000,10 +996,10 @@ BEGIN
   NewPredefinedType(byteType,   tInt);
   NewPredefinedType(boolType,   tBool);
   NewPredefinedType(setType,    tSet);
-  NewPredefinedType(char8Type,  tChar);
+  NewPredefinedType(charType,  tChar);
   NewPredefinedType(nilType,    tNil);
   NewPredefinedType(realType,   tReal);
-  NewPredefinedType(str8Type,   tStr);
+  NewPredefinedType(strType,   tStr);
   NewPredefinedType(noType,     tPtr);    noType.base := intType;
   NewPredefinedType(card16Type, tInt);
   NewPredefinedType(card32Type, tInt);

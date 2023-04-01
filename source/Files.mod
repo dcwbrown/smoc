@@ -232,7 +232,7 @@ BEGIN
   INC(tempId);
 END MakeTempName;
 
-PROCEDURE New8*(name: ARRAY OF CHAR): File;
+PROCEDURE New*(name: ARRAY OF CHAR): File;
 VAR
   hFile: Handle;
   file:  File;
@@ -248,7 +248,7 @@ BEGIN
     file.pos := 0; file.len := 0
   END;
   RETURN file
-END New8;
+END New;
 
 
 PROCEDURE Register*(f: File);
@@ -395,7 +395,7 @@ VAR bRes: Bool; byteRead: Dword; f: File;
 BEGIN Read0(r, x)
 END ReadChar16;
 
-PROCEDURE ReadString8*(VAR r: Rider; VAR x: ARRAY OF CHAR);
+PROCEDURE ReadString*(VAR r: Rider; VAR x: ARRAY OF CHAR);
 VAR i: INTEGER;  done: BOOLEAN;  b: BYTE;
 BEGIN
   done := FALSE; i := 0;
@@ -403,7 +403,7 @@ BEGIN
     Read(r, b);  x[i] := CHR(b);
     IF r.eof THEN x[i] := 0Y ELSE done := x[i] = 0Y; INC(i) END
   END
-END ReadString8;
+END ReadString;
 
 PROCEDURE ReadString16*(VAR r: Rider; VAR x: ARRAY OF SYSTEM.CARD16);
 VAR i: INTEGER; done: BOOLEAN;
@@ -483,12 +483,12 @@ PROCEDURE WriteChar16*(VAR r: Rider; x: SYSTEM.CARD16);
 BEGIN Write0(r, x)
 END WriteChar16;
 
-PROCEDURE WriteString8*(VAR r: Rider; x: ARRAY OF BYTE);
+PROCEDURE WriteString*(VAR r: Rider; x: ARRAY OF BYTE);
 VAR i: INTEGER;
 BEGIN i := 0;
   WHILE (i < LEN(x)) & (x[i] # 0) DO Write(r, x[i]); INC(i) END;
   Write(r, 0)
-END WriteString8;
+END WriteString;
 
 PROCEDURE WriteString16*(VAR r: Rider; x: ARRAY OF SYSTEM.CARD16);
 VAR i: INTEGER;

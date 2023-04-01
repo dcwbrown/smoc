@@ -173,7 +173,7 @@ VAR
   t:       B.TypeList;
   obj:     B.Object;
   str:     ARRAY 512 OF CHAR;
-  slist8:  B.Str8List;   y: B.Str;
+  slist8:  B.StrList;   y: B.Str;
 BEGIN
   ASSERT(Rva MOD SectionAlignment = 0);
   ASSERT(Rva = RvaInitGlobals);
@@ -196,22 +196,22 @@ BEGIN
   Files.WriteInt(Rider, RvaInitGlobals);
 
   (* Write 8 bit character names of imported modules at offsets *)
-  (* specified by the .adr8 field of each module object.        *)
+  (* specified by the .adr field of each module object.        *)
   imod := B.modList;
   WHILE imod # NIL DO
     IF imod.import OR (imod.impList # NIL) THEN
-      Files.Set(Rider, Out, metrics.fadr + imod.adr8);
+      Files.Set(Rider, Out, metrics.fadr + imod.adr);
       i := 0;  B.Insert(imod.id, str, i);
-      B.Insert(`.dll`, str, i);  Files.WriteString8(Rider, str)
+      B.Insert(`.dll`, str, i);  Files.WriteString(Rider, str)
     END;
     imod := imod.next
   END;
 
-  slist8 := B.str8List;
+  slist8 := B.strList;
   WHILE slist8 # NIL DO y := slist8.obj;
     Files.Set(Rider, Out, metrics.fadr + y.adr);  i := 0;
     WHILE i < y.len DO
-      Files.Write(Rider, B.str8buf[y.bufpos+i]);  INC(i)
+      Files.Write(Rider, B.strBuf[y.bufpos+i]);  INC(i)
     END;
     slist8 := slist8.next
   END;
@@ -300,14 +300,14 @@ BEGIN (* WriteImports *)
   FOR i := 0 TO K32TableLen - 1 DO Files.WriteInt(Rider, Kernel32Table[i]) END;
 
   (* Write DLL name being imported from *)
-  Files.Set(Rider, Out, metrics.fadr + K32NameOffset);  Files.WriteString8(Rider, `KERNEL32.DLL`);
+  Files.Set(Rider, Out, metrics.fadr + K32NameOffset);  Files.WriteString(Rider, `KERNEL32.DLL`);
 
   (* Write hint table of imported entry point names *)
-  Files.Set(Rider, Out, metrics.fadr + K32HintOffset + 2);   Files.WriteString8(Rider, `GetProcAddress`);
-  Files.Set(Rider, Out, metrics.fadr + K32HintOffset + 34);  Files.WriteString8(Rider, `LoadLibraryA`);
-  Files.Set(Rider, Out, metrics.fadr + K32HintOffset + 66);  Files.WriteString8(Rider, `ExitProcess`);
-  Files.Set(Rider, Out, metrics.fadr + K32HintOffset + 98);  Files.WriteString8(Rider, `GetModuleHandleExW`);
-  Files.Set(Rider, Out, metrics.fadr + K32HintOffset + 130); Files.WriteString8(Rider, `AddVectoredExceptionHandler`);
+  Files.Set(Rider, Out, metrics.fadr + K32HintOffset + 2);   Files.WriteString(Rider, `GetProcAddress`);
+  Files.Set(Rider, Out, metrics.fadr + K32HintOffset + 34);  Files.WriteString(Rider, `LoadLibraryA`);
+  Files.Set(Rider, Out, metrics.fadr + K32HintOffset + 66);  Files.WriteString(Rider, `ExitProcess`);
+  Files.Set(Rider, Out, metrics.fadr + K32HintOffset + 98);  Files.WriteString(Rider, `GetModuleHandleExW`);
+  Files.Set(Rider, Out, metrics.fadr + K32HintOffset + 130); Files.WriteString(Rider, `AddVectoredExceptionHandler`);
 
   metrics.size := K32HintOffset + 160;
 
@@ -392,7 +392,7 @@ BEGIN (* WriteExports *)
   metrics.fadr := Align(Files.Pos(Rider), FileAlignment);
   metrics.rva  := Rva;
 
-  moduleNameSize := B.Str8Len(FileName)+1;
+  moduleNameSize := B.strLen(FileName)+1;
   exportCount    := B.expno;
 
   export    := B.expList;
@@ -437,7 +437,7 @@ BEGIN (* WriteExports *)
   name := names;  nameRva := namesRva + moduleNameSize;
   WHILE name # NIL DO
     Files.WriteCard32(Rider, nameRva);
-    INC(nameRva, B.Str8Len(name.ident.name)+1);
+    INC(nameRva, B.strLen(name.ident.name)+1);
     name := name.next
   END;
 
@@ -449,10 +449,10 @@ BEGIN (* WriteExports *)
   END;
 
   (* Name strings *)
-  Files.WriteString8(Rider, FileName);
+  Files.WriteString(Rider, FileName);
   name := names;
   WHILE name # NIL DO
-    Files.WriteString8(Rider, name.ident.name);
+    Files.WriteString(Rider, name.ident.name);
     name := name.next
   END;
 
@@ -707,7 +707,7 @@ BEGIN
   ELSE                ImageBase := 10000000H;  B.Append(`.dll`, FileName)
   END;
 
-  Out := Files.New8(FileName);
+  Out := Files.New(FileName);
 
   (* First section starts after headers *)
   Rva            := Align(HeaderSize,                  SectionAlignment);

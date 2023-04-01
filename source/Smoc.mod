@@ -45,7 +45,7 @@ BEGIN
   S.Init(srcfile);  S.Get(sym);
 
   startTime := Rtl.Time();
-  IF sym = S.module THEN modinit := P.Module() ELSE S.Mark8(`Expected 'MODULE'`) END;
+  IF sym = S.module THEN modinit := P.Module() ELSE S.Mark(`Expected 'MODULE'`) END;
   IF S.errCnt = 0 THEN
     B.WriteSymfile;  G.Generate(modinit);
     B.Cleanup;  G.Cleanup;  endTime := Rtl.Time();
@@ -108,18 +108,18 @@ PROCEDURE Get;
 BEGIN INC(argIdx);  Rtl.GetArg(arg, argIdx)
 END Get;
 
-PROCEDURE Mark8(msg: ARRAY OF CHAR);
+PROCEDURE Mark(msg: ARRAY OF CHAR);
 BEGIN
   w.s(`arg `);  w.i(argIdx);  w.s(`: `);
   w.s(msg);  w.l;  errFlag := TRUE
-END Mark8;
+END Mark;
 
 PROCEDURE Arguments;
   PROCEDURE Option;
   BEGIN (*Rtl.LowerCase(arg);*)
     IF arg = `/b` THEN buildMode := TRUE;  Get;  Arguments
     ELSIF arg = `/sym` THEN Get;
-      IF arg[0] = `/` THEN Mark8(`path to symbols?`);  Option
+      IF arg[0] = `/` THEN Mark(`path to symbols?`);  Option
       ELSE B.SetSymPath(arg);  Get;  Arguments
       END
     ELSE (* unhandled *) Get;  Arguments
@@ -129,7 +129,7 @@ BEGIN (* Arguments *)
   IF arg[0] = 0Y THEN (* end parsing *)
   ELSIF arg[0] # `/` THEN
     IF fname[0] = 0Y THEN fname := arg
-    ELSE Mark8(`expecting another filename`)
+    ELSE Mark(`expecting another filename`)
     END;
     Get;  Arguments
   ELSIF arg[0] = `/` THEN Option

@@ -488,7 +488,7 @@ END EmitRep;
 
 PROCEDURE CheckTypeSize(VAR sz: INTEGER);
 BEGIN
-  IF sz > MaxSize THEN S.Mark8(`type too big`);  sz := 8 END
+  IF sz > MaxSize THEN S.Mark(`type too big`);  sz := 8 END
 END CheckTypeSize;
 
 PROCEDURE SetTypeSize*(tp: B.Type);
@@ -541,7 +541,7 @@ BEGIN
   Align(varSize, x.type.align);  INC(varSize, x.type.size);
   x(B.Var).adr := -varSize;
   IF varSize > MaxSize THEN varSize := 8;
-    S.Mark8(`global var size limit reached`)
+    S.Mark(`global var size limit reached`)
   END
 END SetGlobalVarSize;
 
@@ -551,7 +551,7 @@ BEGIN size := proc.locblksize;
   Align(size, x.type.align);  INC(size, x.type.size);
   x(B.Var).adr := -size;  proc.locblksize := size;
   IF size > MaxLocBlkSize THEN proc.locblksize := 8;
-    S.Mark8(`local var size limit reached`)
+    S.Mark(`local var size limit reached`)
   END
 END SetProcVarSize;
 
@@ -574,20 +574,20 @@ BEGIN
   Align(staticSize, 16);  imod := B.modList;
   WHILE imod # NIL DO
     IF imod.import OR (imod.impList # NIL) THEN
-      size := B.Str8Len(imod.id)+5;
-      imod.adr8 := staticSize;  INC(staticSize, size)
+      size := B.strLen(imod.id)+5;
+      imod.adr := staticSize;  INC(staticSize, size)
     END;
     imod := imod.next
   END
 END AllocImportModules;
 
 PROCEDURE AllocStaticData;
-VAR o: B.Str8List;  q: B.TypeList;
+VAR o: B.StrList;  q: B.TypeList;
     x: B.Object;    z: B.Str;
     strSize, tdSize, align: INTEGER;
 BEGIN
   (* Allocate 8 bit literal strings *)
-  o := B.str8List;
+  o := B.strList;
   WHILE o # NIL DO
     z := o.obj;  strSize := z.len;
     z.adr := staticSize;  INC(staticSize, strSize);  o := o.next
@@ -606,7 +606,7 @@ BEGIN
   AllocImportModules;
 
   IF staticSize + varSize > MaxSize THEN
-    S.Mark8(`static variables size too big`);  ASSERT(FALSE)
+    S.Mark(`static variables size too big`);  ASSERT(FALSE)
   END
 END AllocStaticData;
 
@@ -677,7 +677,7 @@ BEGIN (* ScanNode *)
     ELSIF (node.op >= S.sfLSL) & (node.op <= S.sfROR) THEN
       IF ~(right IS B.Const) THEN INCL(node.regUsed, reg_C) END
     ELSIF (node.op >= S.eql) & (node.op <= S.geq) THEN
-      IF B.IsStr8(left.type) THEN
+      IF B.IsStr(left.type) THEN
         node.regUsed := node.regUsed + {reg_SI, reg_DI}
       END
     ELSIF node.op = S.upto THEN INCL(node.regUsed, reg_C)
@@ -766,16 +766,16 @@ END Append;
 PROCEDURE Pass1(VAR modinit: B.Node);
 VAR str: ARRAY 512 OF CHAR;
 BEGIN
-  modidStr    := B.NewStr8Z(B.modid);
-  errFmtStr   := B.NewStr8Z(`[%d:%d]: %16.16s`);
-  err2FmtStr  := B.NewStr8Z(`Module key of %s is mismatched`);
-  err3FmtStr  := B.NewStr8Z(`Unknown exception;  PC: %x`);
-  err4FmtStr  := B.NewStr8Z(`Cannot load module %s (not exist?)`);
-  rtlName     := B.NewStr8Z(`Rtl.dll`);
-  user32name  := B.NewStr8Z(`user32.dll`);
+  modidStr    := B.NewStrZ(B.modid);
+  errFmtStr   := B.NewStrZ(`[%d:%d]: %16.16s`);
+  err2FmtStr  := B.NewStrZ(`Module key of %s is mismatched`);
+  err3FmtStr  := B.NewStrZ(`Unknown exception;  PC: %x`);
+  err4FmtStr  := B.NewStrZ(`Cannot load module %s (not exist?)`);
+  rtlName     := B.NewStrZ(`Rtl.dll`);
+  user32name  := B.NewStrZ(`user32.dll`);
   str         := `Error in module `;  Append(B.modid, str);
-  err5FmtStr  := B.NewStr8Z(str);
-  trapDesc    := B.NewStr8Z(`Module key      Array index     Type mismatch   String index    Nil dereference Nil proc call   Divide by zero  Assertion false Run time missing`);
+  err5FmtStr  := B.NewStrZ(str);
+  trapDesc    := B.NewStrZ(`Module key      Array index     Type mismatch   String index    Nil dereference Nil proc call   Divide by zero  Assertion false Run time missing`);
 
   AllocStaticData;
   ScanDeclaration(B.universe.first, 0);
@@ -979,7 +979,7 @@ PROCEDURE ModKeyTrap(cond, errno: INTEGER;  imod: B.Module);
 VAR L: INTEGER;
 BEGIN
   L := pc;  Jcc1(negated(cond), 0);
-  SetRm_regI(reg_B, imod.adr8);  EmitRegRm(LEA, reg_C, 8);
+  SetRm_regI(reg_B, imod.adr);  EmitRegRm(LEA, reg_C, 8);
   MoveRI(reg_D, 1, errno);  CallProc(trapProc2);  Fixup(L, pc)
 END ModKeyTrap;
 
@@ -1015,7 +1015,7 @@ BEGIN
       WHILE (reg < 12) & (reg IN cantAlloc) DO INC(reg) END;
       IF reg >= 12 THEN reg := 6;
         WHILE (reg < 16) & (reg IN cantAlloc) DO INC(reg) END;
-        IF reg >= 16 THEN S.Mark8(`Reg stack overflow`) END
+        IF reg >= 16 THEN S.Mark(`Reg stack overflow`) END
       END
     END
   ELSE reg := MkItmStat.bestReg
@@ -1032,7 +1032,7 @@ BEGIN cantAlloc := avoid + allocReg + {reg_SP, reg_BP, reg_B};
     WHILE (reg < 12) & (reg IN cantAlloc) DO INC(reg) END;
     IF reg >= 12 THEN reg := 6;
       WHILE (reg < 16) & (reg IN cantAlloc) DO INC(reg) END;
-      IF reg >= 16 THEN S.Mark8(`Reg stack overflow`) END
+      IF reg >= 16 THEN S.Mark(`Reg stack overflow`) END
     END
   END;
   ASSERT(reg < 16);  SetAlloc(reg);
@@ -1053,7 +1053,7 @@ BEGIN
   cantAlloc := MkItmStat.xAvoid + allocXReg;
   IF (MkItmStat.bestXReg = 255) OR (MkItmStat.bestXReg IN cantAlloc) THEN
     reg := 0;  WHILE (reg < 16) & (reg IN cantAlloc) DO INC(reg) END;
-    IF reg >= 16 THEN S.Mark8(`Reg stack overflow`);  ASSERT(FALSE) END
+    IF reg >= 16 THEN S.Mark(`Reg stack overflow`);  ASSERT(FALSE) END
   ELSE reg := MkItmStat.bestXReg
   END;
   SetAllocX(reg);
@@ -1064,7 +1064,7 @@ PROCEDURE AllocXReg2(avoid: SET): BYTE;
 VAR reg: BYTE;  cantAlloc: SET;
 BEGIN cantAlloc := avoid + allocXReg;
   reg := 0;  WHILE (reg < 16) & (reg IN cantAlloc) DO INC(reg) END;
-  IF reg >= 16 THEN S.Mark8(`Reg stack overflow`);  ASSERT(FALSE) END;
+  IF reg >= 16 THEN S.Mark(`Reg stack overflow`);  ASSERT(FALSE) END;
   SetAllocX(reg);
   RETURN reg
 END AllocXReg2;
@@ -1147,7 +1147,7 @@ BEGIN
       END
     ELSIF type.size = 1 THEN
       IF (type = B.byteType)
-      OR (type = B.char8Type)
+      OR (type = B.charType)
       OR (type = B.boolType)  THEN EmitMOVZX(r, 1)
       ELSIF type = B.int8Type THEN EmitMOVSX(r, 1)
       ELSE ASSERT(FALSE)
@@ -1165,8 +1165,8 @@ BEGIN RefToRegI(x);
       IF x.mode # mRegI THEN r := AllocReg() ELSE r := x.r END;
       IF x.mode = mImm THEN LoadImm(r, size, x.a)
       ELSIF x.mode IN {mRegI, mBP, mBX} THEN
-        IF x.type = B.str8Type THEN
-          ASSERT(x.strlen <= 2);  LoadToReg0(r, x, B.char8Type)
+        IF x.type = B.strType THEN
+          ASSERT(x.strlen <= 2);  LoadToReg0(r, x, B.charType)
         ELSE LoadToReg0(r, x, x.type)
         END
       ELSIF x.mode = mProc THEN
@@ -1503,7 +1503,7 @@ BEGIN
     ELSIF tp = B.realType THEN CompareReal(x, node)
     ELSE ASSERT(FALSE)
     END
-  ELSIF B.IsStr8(tp) THEN  (* TODO Test thouroughly 8 bit string compare *)
+  ELSIF B.IsStr(tp) THEN  (* TODO Test thouroughly 8 bit string compare *)
     SetBestReg(reg_SI);
     AvoidUsedBy(node.right);
     SetAvoid(reg_DI);
@@ -1688,7 +1688,7 @@ BEGIN
   ftype := fpar.obj.type;  varpar := fpar.obj(B.Par).varpar;
   IF ftype.form = B.tArray THEN LoadParam(x, par, n, TRUE);
     IF B.IsOpenArray(ftype) & ~ftype.notag THEN INC(i) END
-  ELSIF ftype = B.str8Type  THEN LoadParam(x, par, n, TRUE)
+  ELSIF ftype = B.strType  THEN LoadParam(x, par, n, TRUE)
   ELSIF ftype.form = B.tRec THEN
     IF varpar THEN LoadParam(x, par, n, TRUE);  INC(i)
     ELSIF (ftype.size < 9) & (ftype.size IN {0, 1, 2, 4, 8}) THEN
@@ -1826,8 +1826,8 @@ BEGIN
   ELSIF id = S.sfORD THEN MakeItem0(x, obj1);  Load(x)
 
   ELSIF id = S.sfCHR8 THEN MakeItem0(x, obj1);  RefToRegI(x);
-    IF x.mode IN {mRegI, mBP, mBX} THEN x.type := B.char8Type;  Load(x)
-    ELSIF x.mode = mReg            THEN LoadToReg0(x.r, x, B.char8Type)
+    IF x.mode IN {mRegI, mBP, mBX} THEN x.type := B.charType;  Load(x)
+    ELSIF x.mode = mReg            THEN LoadToReg0(x.r, x, B.charType)
     ELSE ASSERT(FALSE) END
   ELSIF id = S.sfADR THEN MakeItem0(x, obj1);  LoadAdr(x)
   ELSIF id = S.sfBIT THEN
@@ -1897,13 +1897,13 @@ BEGIN
     SetBestReg(reg_SI);  MakeItem0(y, node.right);  LoadAdr(y);
     IF y.r # reg_SI THEN RelocReg(y.r, reg_SI) END;
     IF x.r # reg_DI THEN RelocReg(x.r, reg_DI) END;
-    IF y.type = B.str8Type THEN cx := y.strlen;  (* Copied from str16Type below - needs changes? *)
+    IF y.type = B.strType THEN cx := y.strlen;  (* Copied from str16Type below - needs changes? *)
       IF B.IsOpenArray(x.type) THEN
         ArrayLen(z, node.left);  SetRmOperand(z);
         EmitRmImm(CMPi, 4, cx);  Trap(ccB, stringTrap)
       END;
       SetAlloc(reg_C);  LoadImm(reg_C, 4, cx);  EmitRep(MOVSrep, 1, 1) (* Size 2 -> 1 for CHAR *)
-    ELSIF B.IsStr8(x.type) THEN       (* Changed to LODSB/STOSB otherwise test thoroughly *)
+    ELSIF B.IsStr(x.type) THEN       (* Changed to LODSB/STOSB otherwise test thoroughly *)
       SetAlloc(reg_A);  SetAlloc(reg_C);
       ClearReg(reg_C);  ClearReg(reg_A);
       first := pc;  EmitRI(ADDi, reg_C, 4, 1);
@@ -2494,7 +2494,7 @@ BEGIN
     imod := B.modList;
     WHILE imod # NIL DO
       IF imod.import OR (imod.impList # NIL) THEN
-        SetRm_regI(reg_B, imod.adr8);     EmitRegRm (LEA,  reg_C, 8);
+        SetRm_regI(reg_B, imod.adr);     EmitRegRm (LEA,  reg_C, 8);
         SetRm_regI(reg_B, LoadLibraryA);  EmitRm    (CALL, 4);
                                           EmitRR    (TEST, reg_A, 8, reg_A);
                                           ModKeyTrap(ccZ, 1, imod);
@@ -2766,7 +2766,7 @@ VAR val: INTEGER;
 BEGIN
   IF x IS B.Const THEN val := x(B.Const).val ELSE val := 0 END;
   IF (val < 0) OR (val > 63) THEN
-    S.Mark8(`Set element must be >= 0 and <= 63`)
+    S.Mark(`Set element must be >= 0 and <= 63`)
   END
 END CheckSetElement;
 
@@ -2839,13 +2839,13 @@ BEGIN
     val := x(B.Const).val;  fraction := val MOD 10000000000000H;
     exp := val DIV 10000000000000H MOD 800H;  sign := val < 0;
     IF exp = 0 (* subnormal *) THEN val := 0
-    ELSIF exp = 7FFH (* Inf or NaN *) THEN S.Mark8(`Float too large`)
+    ELSIF exp = 7FFH (* Inf or NaN *) THEN S.Mark(`Float too large`)
     ELSE DEC(exp, 1023);  INC(fraction, 10000000000000H);  p := 52;
       IF exp < 0 THEN val := 0 ELSIF exp = 0 THEN val := 1
       ELSE WHILE (p > 0) & (exp > 0) DO DEC(p);  DEC(exp) END;
         IF exp = 0 THEN val := ASR(fraction, p)
         ELSIF exp <= 11 THEN val := LSL(fraction, exp)
-        ELSE S.Mark8(`Float too large`)
+        ELSE S.Mark(`Float too large`)
         END
       END;
       IF sign THEN val := -val END
@@ -2879,7 +2879,7 @@ END FltConst;
 PROCEDURE TypeTransferConst*(type: B.Type;  x: B.Object): B.Object;
 VAR val: INTEGER;
 BEGIN
-  IF    x IS B.Str  THEN val := B.str8buf[x(B.Str).bufpos]
+  IF    x IS B.Str  THEN val := B.strBuf[x(B.Str).bufpos]
   ELSE val := x(B.Const).val
   END;
   IF type # x.type THEN
@@ -2923,9 +2923,9 @@ BEGIN
       xstr8 := x(B.Str);  ystr8 := y(B.Str);
       IF (xstr8.bufpos >= 0) & (ystr8.bufpos >= 0) THEN
         i := xstr8.bufpos;  k := ystr8.bufpos;
-        cb1 := B.str8buf[i];  cb2 := B.str8buf[k];
+        cb1 := B.strBuf[i];  cb2 := B.strBuf[k];
         WHILE (cb1 = cb2) & (cb1 # 0) DO
-          INC(i);  INC(k);  cb1 := B.str8buf[i];  cb2 := B.str8buf[k]
+          INC(i);  INC(k);  cb1 := B.strBuf[i];  cb2 := B.strBuf[k]
         END;
         IF (op = S.eql) & (cb1 = cb2) OR (op = S.neq) & (cb1 # cb2)
         OR (op = S.gtr) & (cb1 > cb2) OR (op = S.geq) & (cb1 >= cb2)
@@ -2942,7 +2942,7 @@ BEGIN
       ELSIF op = S.minus THEN val := xval - yval
       ELSIF op = S.times THEN val := xval * yval
       ELSIF (op = S.div) OR (op = S.mod) THEN
-        IF yval <= 0 THEN S.Mark8(`invalid divisor`)
+        IF yval <= 0 THEN S.Mark(`invalid divisor`)
         ELSIF op = S.div THEN val := xval DIV yval
         ELSE val := xval MOD yval
         END
@@ -2988,7 +2988,7 @@ BEGIN
 
   B.intType.size    := 8;  B.intType.align    := 8;
   B.byteType.size   := 1;  B.byteType.align   := 1;
-  B.char8Type.size  := 1;  B.char8Type.align  := 1;
+  B.charType.size  := 1;  B.charType.align  := 1;
   B.boolType.size   := 1;  B.boolType.align   := 1;
   B.setType.size    := 8;  B.setType.align    := 8;
   B.realType.size   := 8;  B.realType.align   := 8;
@@ -3014,7 +3014,7 @@ BEGIN
   LoadLibraryA                := 8;
   GetProcAddress              := 0;
 
-  debug := Files.New8(`.DebugInfo`);  Files.Set(rider, debug, 0)
+  debug := Files.New(`.DebugInfo`);  Files.Set(rider, debug, 0)
 END Init;
 
 PROCEDURE Generate*(VAR modinit: B.Node);
