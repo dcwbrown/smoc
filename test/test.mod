@@ -59,10 +59,10 @@ BEGIN
   s := $ 40 41
          42 43 00 $;
   w.s("s: '");  w.s(s);  w.sl("'.");
-  s[2] := 50Y;
+  s[2] := 50X;
   w.s("s: '");  w.s(s);  w.sl("'.");
 
-  ASSERT(s[2] # 1Y);
+  ASSERT(s[2] # 1X);
 
   assignvarstring(s);
   w.s("s: '");  w.s(s);  w.sl("'.");

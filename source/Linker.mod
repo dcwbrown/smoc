@@ -472,7 +472,7 @@ PROCEDURE WriteSectionHeader(sec: INTEGER; name: ARRAY OF CHAR; flags: INTEGER);
 VAR i, l, filesize, virtualsize: INTEGER;
 BEGIN
   l := LEN(name);  i := 0;  IF l > 8 THEN l := 8 END;
-  WHILE (i < l) & (name[i] # 0Y) DO Files.Write(Rider, ORD(name[i]));  INC(i) END;
+  WHILE (i < l) & (name[i] # 0X) DO Files.Write(Rider, ORD(name[i]));  INC(i) END;
   WHILE (i < 8) DO Files.Write(Rider, 0); INC(i) END;
 
   virtualsize := Align(Section[sec].size, SectionAlignment);

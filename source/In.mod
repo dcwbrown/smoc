@@ -38,13 +38,13 @@ PROCEDURE Ln*; (* skip until CRLF and consume them *)
 BEGIN
   IF Done THEN
     IF bufLen = 0 THEN GetCh END;
-    WHILE (bufLen = 1) & (buf # 0AY) DO GetCh END;
+    WHILE (bufLen = 1) & (buf # 0AX) DO GetCh END;
     IF bufLen = 1 THEN bufLen := 0 END
   END
 END Ln;
 
 PROCEDURE IsBlank(ch: CHAR): BOOLEAN;
-RETURN (ch = " ") OR (ch = 9Y) OR (ch = 0AY) OR (ch = 0DY)
+RETURN (ch = " ") OR (ch = 9X) OR (ch = 0AX) OR (ch = 0DX)
 END IsBlank;
 
 PROCEDURE IsDigit(ch: CHAR): BOOLEAN;

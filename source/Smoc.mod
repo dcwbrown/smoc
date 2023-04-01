@@ -29,9 +29,9 @@ PROCEDURE outFname(fname: ARRAY OF CHAR);
 VAR i, j: INTEGER;
 BEGIN
   i := 0;
-  WHILE fname[i] # 0Y DO INC(i) END;
-  WHILE (i > 0) & (fname[i-1] # "\") DO DEC(i) END;
-  j := i;  WHILE fname[i] # 0Y DO w.c(fname[i]); INC(i) END;
+  WHILE fname[i] # 0X DO INC(i) END;
+  WHILE (i > 0) & (fname[i-1] # '\') DO DEC(i) END;
+  j := i;  WHILE fname[i] # 0X DO w.c(fname[i]); INC(i) END;
   WHILE i-j < 20 DO w.c(" "); INC(i) END
 END outFname;
 
@@ -82,7 +82,7 @@ BEGIN
       srcfname[i] := CHR(x);  Files.Read(r, x);  INC(i)
     END;
     IF i > 0 THEN
-      srcfname[i] := 0Y;
+      srcfname[i] := 0X;
       IF Files.Old(srcfname) # NIL THEN
         Compile(srcfname);
         INC(codesize,   G.pc);
@@ -126,9 +126,9 @@ PROCEDURE Arguments;
     END
   END Option;
 BEGIN (* Arguments *)
-  IF arg[0] = 0Y THEN (* end parsing *)
+  IF arg[0] = 0X THEN (* end parsing *)
   ELSIF arg[0] # "/" THEN
-    IF fname[0] = 0Y THEN fname := arg
+    IF fname[0] = 0X THEN fname := arg
     ELSE Mark("expecting another filename")
     END;
     Get;  Arguments
@@ -146,7 +146,7 @@ END NotifyError8;
 
 BEGIN
   S.InstallNotifyError(NotifyError8);  Get;  Arguments;
-  IF fname[0] # 0Y THEN
+  IF fname[0] # 0X THEN
     IF Files.Old(fname) # NIL THEN
       IF ~buildMode THEN Compile(fname) ELSE Build(fname) END
     ELSE ErrorNotFound(fname)

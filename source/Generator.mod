@@ -755,11 +755,11 @@ END NewProc;
 PROCEDURE Append(s: ARRAY OF CHAR; VAR d: ARRAY OF CHAR);
 VAR si, di: INTEGER;
 BEGIN  si:= 0;  di := 0;
-  WHILE (di < LEN(d))  &  (d[di] # 0Y) DO INC(di) END;
-  WHILE (si < LEN(s))  &  (s[si] # 0Y)  &  (di < LEN(d)) DO
+  WHILE (di < LEN(d))  &  (d[di] # 0X) DO INC(di) END;
+  WHILE (si < LEN(s))  &  (s[si] # 0X)  &  (di < LEN(d)) DO
     d[di] := s[si];  INC(di);  INC(si);
   END;
-  IF di < LEN(d) THEN d[di] := 0Y ELSE d[LEN(d)-1] := 0Y END
+  IF di < LEN(d) THEN d[di] := 0X ELSE d[LEN(d)-1] := 0X END
 END Append;
 
 

@@ -136,7 +136,7 @@ BEGIN sym := ident;  id[0] := c1;  i := 1;
     Rtl.PutUtf8 (ch, id, i);
     Read
   END;
-  id[i] := 0Y;
+  id[i] := 0X;
   IF i >= MaxIdLen THEN Mark("identifier too long") END;
   (* search for keyword *)
   IF i < LEN(KWX) THEN
@@ -152,7 +152,7 @@ BEGIN
   WHILE ~eof & (slen < MaxStrLen) & (ch # ORD(quoteCh)) DO
     Rtl.PutUtf8(ch, str, slen); Read
   END;
-  Read;  str[slen] := 0Y;  INC(slen);
+  Read;  str[slen] := 0X;  INC(slen);
   IF slen >= MaxStrLen THEN Mark("String too long") END;
 RETURN string END String;
 
@@ -182,7 +182,7 @@ BEGIN
   END;
   IF slen > MaxStrLen THEN Mark("Hex string too long") END;
   Read;
-  str[slen] := 0Y;  (* Guaranteed terminator, not included in string length *)
+  str[slen] := 0X;  (* Guaranteed terminator, not included in string length *)
   RETURN string
 END HexString;
 
@@ -284,10 +284,10 @@ BEGIN
       IF h >= 10 THEN h := h-7 END;
       k2 := k2*10H + h;  INC(i) (* no overflow check *)
     UNTIL i = n;
-    IF ch = ORD("Y") THEN sym := string;
+    IF ch = ORD("X") THEN sym := string;
       IF k2 < 100H THEN ival := k2 ELSE Mark("Illegal value");  ival := 0  END;
-      IF k2 = 0 THEN str[0] := 0Y;  slen := 1
-      ELSE str[0] := CHR(k2);  str[1] := 0Y;  slen := 2
+      IF k2 = 0 THEN str[0] := 0X;  slen := 1
+      ELSE str[0] := CHR(k2);  str[1] := 0X;  slen := 2
       END
     ELSIF ch = ORD("R") THEN sym := real;  rval := SYSTEM.VAL(REAL, k2)
     ELSE sym := int;  ival := k2
@@ -331,7 +331,7 @@ VAR exit: BOOLEAN;
     WHILE (i < LEN(pragma) - 1) & (ch # ORD("*")) & ~eof DO
       Rtl.PutUtf8(ch, pragma, i);  Read
     END;
-    pragma[i] := 0Y;
+    pragma[i] := 0X;
     IF ch = ORD("*") THEN SetCompilerFlag(pragma)
     ELSE Mark("Incorrect compiler directive")
     END
@@ -358,9 +358,9 @@ BEGIN
     (* Record potential error position *)
     lastLine   := lineNumber;
     lastColumn := bufPos - linePos;
-
+    sym := null;
     IF ch < 128 THEN
-      c1 := CHR(ch);  Read;  sym := null;
+      c1 := CHR(ch);  Read;
       CASE c1 OF
       | '"':      sym := String(c1)
       | "#":      sym := neq
@@ -386,7 +386,7 @@ BEGIN
       | "|":      sym := bar
       | "}":      sym := rbrace
       | "~":      sym := not
-      | 7FY:      sym := upto
+      | 7FX:      sym := upto
       | "(":      IF ch # ORD("*") THEN sym := lparen ELSE Read; SkipComment(0) END
       | ".":      IF ch # ORD(".") THEN sym := period ELSE Read; sym := upto    END
       | ":":      IF ch # ORD("=") THEN sym := colon  ELSE Read; sym := becomes END
@@ -394,7 +394,7 @@ BEGIN
       | ">":      IF ch # ORD("=") THEN sym := gtr    ELSE Read; sym := geq     END
       END
     ELSE
-      Read;  sym := null
+      Read;
     END
   UNTIL (sym # null) OR eof
 END Get;
@@ -433,7 +433,7 @@ BEGIN
   EnterKW(to, "TO");
   EnterKW(in, "IN");
   EnterKW(is, "IS");
-  EnterKW(by, "BY");
+  EnterKW(by, "BX");
   KWX[2] := k;
   EnterKW(end, "END");
   EnterKW(nil, "NIL");
