@@ -155,22 +155,22 @@ PROCEDURE Insert*(    src: ARRAY OF CHAR;
                   VAR pos: INTEGER);
 VAR i, j: INTEGER;
 BEGIN i := pos;  j := 0;
-  WHILE src[j] # 0Y DO  dst[i] := src[j];  INC(i);  INC(j)  END;
-  dst[i] := 0Y;  pos := i
+  WHILE src[j] # 0X DO  dst[i] := src[j];  INC(i);  INC(j)  END;
+  dst[i] := 0X;  pos := i
 END Insert;
 
 PROCEDURE Append* (src: ARRAY OF CHAR;  VAR dst: ARRAY OF CHAR);
 VAR i, j: INTEGER;
 BEGIN
-  i := 0;  WHILE dst[i] # 0Y DO INC(i) END;  j := 0;
-  WHILE src[j] # 0Y DO  dst[i] := src[j];  INC(i);  INC(j)  END;
-  dst[i] := 0Y
+  i := 0;  WHILE dst[i] # 0X DO INC(i) END;  j := 0;
+  WHILE src[j] # 0X DO  dst[i] := src[j];  INC(i);  INC(j)  END;
+  dst[i] := 0X
 END Append;
 
 PROCEDURE strLen* (str: ARRAY OF CHAR): INTEGER;
 VAR len: INTEGER;
 BEGIN
-  len := 0;  WHILE (len < LEN(str)) & (str[len] # 0Y) DO INC(len) END;
+  len := 0;  WHILE (len < LEN(str)) & (str[len] # 0X) DO INC(len) END;
   RETURN len
 END strLen;
 
@@ -472,7 +472,7 @@ BEGIN
       IF fld.export OR (ftyp.nPtr > 0) OR (ftyp.nProc > 0) THEN
         Files.WriteNum(rider, cField);
         IF fld.export THEN Files.WriteString(rider, fld.name)
-        ELSE Files.WriteString(rider, 0Y)
+        ELSE Files.WriteString(rider, 0X)
         END;
         Files.WriteNum(rider, fld.obj(Field).off);  DetectType(ftyp)
       END;
@@ -504,7 +504,7 @@ VAR
   chunk:         ARRAY 64 OF BYTE;
   symfname:      ARRAY 512 OF CHAR;
 BEGIN
-  symfname := 0Y;  refno := 0;  expno := 0;
+  symfname := 0X;  refno := 0;  expno := 0;
   i := 0;  Insert(srcPath, symfname, i);
   Insert(modid, symfname, i);
   Insert(".sym", symfname, i);
@@ -850,12 +850,12 @@ VAR
   PROCEDURE GetPath(VAR path: ARRAY OF CHAR;  VAR i: INTEGER);
   VAR j: INTEGER;
   BEGIN i := 0;  j := 0;
-    WHILE (symPath[i] # 0Y) & (symPath[i] # ";") DO
+    WHILE (symPath[i] # 0X) & (symPath[i] # ";") DO
       path[j] := symPath[i];  INC(i);  INC(j)
     END;
     IF symPath[i] = ";" THEN INC(i) END;
     IF path[j-1] # "\" THEN path[j] := "\";  INC(j) END;
-    path[j] := 0Y
+    path[j] := 0X
   END GetPath;
 
 BEGIN (* NewModule *)
@@ -864,9 +864,9 @@ BEGIN (* NewModule *)
   ELSIF mod = NIL THEN
     i := 0;  Insert(id, symfname, i);  Insert(".sym", symfname, i);
     symfile := Files.Old(symfname);  found := symfile # NIL;  i := 0;
-    WHILE (symPath[i] # 0Y) & ~found DO
+    WHILE (symPath[i] # 0X) & ~found DO
       GetPath(path, i);
-      IF path # 0Y THEN
+      IF path # 0X THEN
         Append(symfname, path);
         symfile := Files.Old(path);
         found := symfile # NIL
@@ -906,8 +906,8 @@ END SetSymPath;
 PROCEDURE SetSrcPath*(path: ARRAY OF CHAR);
 VAR i: INTEGER;
 BEGIN
-  srcPath := path;  i := 0;  WHILE srcPath[i] # 0Y DO INC(i) END;
-  WHILE (i >= 0) & (srcPath[i] # "\") DO DEC(i) END;  srcPath[i+1] := 0Y
+  srcPath := path;  i := 0;  WHILE srcPath[i] # 0X DO INC(i) END;
+  WHILE (i >= 0) & (srcPath[i] # "\") DO DEC(i) END;  srcPath[i+1] := 0X
 END SetSrcPath;
 
 (* -------------------------------------------------------------------------- *)

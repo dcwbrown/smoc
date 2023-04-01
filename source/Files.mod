@@ -195,9 +195,9 @@ RETURN ch END ToHex;
 PROCEDURE Append* (src: ARRAY OF CHAR;  VAR dst: ARRAY OF CHAR);
 VAR i, j: INTEGER;
 BEGIN
-  i := 0;  WHILE dst[i] # 0Y DO INC(i) END;  j := 0;
-  WHILE src[j] # 0Y DO  dst[i] := src[j];  INC(i);  INC(j)  END;
-  dst[i] := 0Y
+  i := 0;  WHILE dst[i] # 0X DO INC(i) END;  j := 0;
+  WHILE src[j] # 0X DO  dst[i] := src[j];  INC(i);  INC(j)  END;
+  dst[i] := 0X
 END Append;
 
 PROCEDURE AppendHex(h: INTEGER; VAR dst: ARRAY OF CHAR);
@@ -209,9 +209,9 @@ BEGIN
   END;
   IF i = 19 THEN hex[i] := "0"; DEC(i) END;
   INC(i);
-  j := 0;  WHILE dst[j] # 0Y DO INC(j) END;
+  j := 0;  WHILE dst[j] # 0X DO INC(j) END;
   WHILE i < LEN(hex) DO  dst[j] := hex[i];  INC(i);  INC(j)  END;
-  dst[j] := 0Y
+  dst[j] := 0X
 END AppendHex;
 
 PROCEDURE MakeTempName(VAR name: ARRAY OF CHAR);
@@ -401,7 +401,7 @@ BEGIN
   done := FALSE; i := 0;
   WHILE ~r.eof & ~done DO
     Read(r, b);  x[i] := CHR(b);
-    IF r.eof THEN x[i] := 0Y ELSE done := x[i] = 0Y; INC(i) END
+    IF r.eof THEN x[i] := 0X ELSE done := x[i] = 0X; INC(i) END
   END
 END ReadString;
 
