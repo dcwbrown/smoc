@@ -19,8 +19,8 @@ VAR
 (* -------------------------------------------------------------------------- *)
 (* -------------------------------------------------------------------------- *)
 
-PROCEDURE GetSym;                     BEGIN S.Get(sym)   END GetSym;
-PROCEDURE Mark(msg: ARRAY OF CHAR);  BEGIN S.Mark(msg) END Mark;
+PROCEDURE GetSym;                   BEGIN S.Get(sym)  END GetSym;
+PROCEDURE Mark(msg: ARRAY OF CHAR); BEGIN S.Mark(msg) END Mark;
 
 PROCEDURE Missing(s: INTEGER);
 BEGIN

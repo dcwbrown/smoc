@@ -7,7 +7,7 @@ IMPORT
 *
 *     Arguments    - rcx, rdx, r8, r9, [rsp+$20], [rsp+$28], ...
 *     Return value - rax
-*     Unsaved      - rax, rcx, rdx, r8, r9, r10, r11
+*     Unsaved      - rax, rcx, rdx, r8,  r9,  r10, r11
 *     Saved        - rbx, rsi, rdi, rbp, r12, r13, r14, r15
 *)
 
