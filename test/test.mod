@@ -70,4 +70,3 @@ BEGIN
   IF FALSE THEN i := 50;  s[i] := " " END;
   IF FALSE THEN ASSERT(FALSE)         END;
 END test.
-8

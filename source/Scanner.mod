@@ -20,7 +20,7 @@
 *)
 
 MODULE Scanner;  (* Modified from ORS module in Project Oberon *)
-IMPORT SYSTEM, Rtl, Files, Out, BigNums;
+IMPORT SYSTEM, Rtl, Files, Out, BigNums, w := Writer;
 
 CONST
   TAB = 9;
@@ -104,6 +104,8 @@ VAR
 
   SetCompilerFlag: SetCompilerFlagProc;
   NotifyError:     NotifyErrorProc;
+
+  Usage: ARRAY 128 OF INTEGER;
 
 PROCEDURE Mark*(msg: ARRAY OF CHAR);
 BEGIN
@@ -350,6 +352,19 @@ BEGIN
   END
 END SkipComment;
 
+(*       ASCII == first 128 characters in Unicode:       *)
+(*                                                       *)
+(*            0 1 2 3 4 5 6 7 8 9 a b c d e f            *)
+(*          +---------------------------------+          *)
+(*   32   20|   ! " # $ % & ' ( ) * + , - . / |20    32  *)
+(*   48   30| 0 1 2 3 4 5 6 7 8 9 : ; < = > ? |30    48  *)
+(*   64   40| @ A B C D E F G H I J K L M N O |40    64  *)
+(*   80   50| P Q R S T U V W X Y Z [ \ ] ^ _ |50    80  *)
+(*   96   60| ` a b c d e f g h i j k l m n o |60    96  *)
+(*  112   70| p q r s t u v w x u z { | } ~   |70   112  *)
+(*          +---------------------------------+          *)
+(*            0 1 2 3 4 5 6 7 8 9 a b c d e f            *)
+
 PROCEDURE Get*(VAR sym: INTEGER);
 VAR c1: CHAR;
 BEGIN
@@ -359,45 +374,71 @@ BEGIN
     lastLine   := lineNumber;
     lastColumn := bufPos - linePos;
     sym := null;
-    IF ch < 128 THEN
+    IF (ch > 32) & (ch < 128) THEN
+      INC(Usage[ch]);
       c1 := CHR(ch);  Read;
       CASE c1 OF
-      | '"':      sym := String(c1)
-      | "#":      sym := neq
-      | "$":      sym := HexString()
-      | "&":      sym := and
-      | "'":      sym := String(c1)
-      | ")":      sym := rparen
-      | "*":      sym := times
-      | "+":      sym := plus
-      | ",":      sym := comma
-      | "-":      sym := minus
-      | "/":      sym := rdiv
-      | "0".."9": sym := Number(c1)
-      | ";":      sym := semicolon
-      | "=":      sym := eql
       | "A".."Z": sym := Identifier(c1)
-      | "[":      sym := lbrak
-      | "]":      sym := rbrak
-      | "^":      sym := arrow
-      | "_":      sym := Identifier(c1)
       | "a".."z": sym := Identifier(c1)
-      | "{":      sym := lbrace
-      | "|":      sym := bar
-      | "}":      sym := rbrace
-      | "~":      sym := not
-      | 7FX:      sym := upto
+      | ";":      sym := semicolon
       | "(":      IF ch # ORD("*") THEN sym := lparen ELSE Read; SkipComment(0) END
+      | ")":      sym := rparen
       | ".":      IF ch # ORD(".") THEN sym := period ELSE Read; sym := upto    END
       | ":":      IF ch # ORD("=") THEN sym := colon  ELSE Read; sym := becomes END
+      | ",":      sym := comma
+      | "0".."9": sym := Number(c1)
+      | "=":      sym := eql
+      | "*":      sym := times
+      | '"':      sym := String(c1)
+      | "'":      sym := String(c1)
+      | "[":      sym := lbrak
+      | "]":      sym := rbrak
+      | "#":      sym := neq
+      | "+":      sym := plus
+      | "&":      sym := and
+      | "-":      sym := minus
       | "<":      IF ch # ORD("=") THEN sym := lss    ELSE Read; sym := leq     END
       | ">":      IF ch # ORD("=") THEN sym := gtr    ELSE Read; sym := geq     END
+      | "{":      sym := lbrace
+      | "}":      sym := rbrace
+      | "~":      sym := not
+      | "|":      sym := bar
+      | "^":      sym := arrow
+      | "/":      sym := rdiv
+      | "$":      sym := HexString()
+      | "_":      sym := Identifier(c1)
+      | 7FX:      sym := upto
       END
     ELSE
       Read;
     END
   UNTIL (sym # null) OR eof
 END Get;
+
+
+PROCEDURE InitUsage;
+VAR i: INTEGER;
+BEGIN FOR i := 0 TO 127 DO Usage[i] := 0 END END InitUsage;
+
+PROCEDURE DumpUsage*;
+VAR i: INTEGER;
+BEGIN
+  (* Combine ranges to first character of range *)
+  FOR i := ORD("1") TO ORD("9") DO
+    INC(Usage[ORD("0")], Usage[i]);  Usage[i] := 0
+  END;
+  FOR i := ORD("B") TO ORD("Z") DO
+    INC(Usage[ORD("A")], Usage[i]);  Usage[i] := 0
+  END;
+  FOR i := ORD("b") TO ORD("z") DO
+    INC(Usage[ORD("a")], Usage[i]);  Usage[i] := 0
+  END;
+  FOR i := 0 TO 127 DO
+    IF Usage[i] > 0 THEN
+      w.in(i, 4); w.in(Usage[i], 6); w.l
+    END
+  END
+END DumpUsage;
 
 PROCEDURE Init*(f: Files.File);
 VAR r: Files.Rider;
@@ -468,5 +509,7 @@ BEGIN
   EnterKW(procedure, "PROCEDURE");
   KWX[9] := k;
   EnterKW(null, "EXTENSIBLE");
-  KWX[10] := k
+  KWX[10] := k;
+
+  InitUsage;
 END Scanner.
