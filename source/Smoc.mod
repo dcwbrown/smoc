@@ -98,8 +98,7 @@ BEGIN
   w.s("Total               ");
   outSep(codesize, 10);   outSep(staticsize,  10);
   outSep(varsize,  10);   outSep(Rtl.TimeToMSecs(end-start), 5);
-  w.s("ms");       w.l;
-  S.DumpUsage
+  w.s("ms");       w.l
 END Build;
 
 (* -------------------------------------------------------------------------- *)

@@ -105,8 +105,6 @@ VAR
   SetCompilerFlag: SetCompilerFlagProc;
   NotifyError:     NotifyErrorProc;
 
-  Usage: ARRAY 128 OF INTEGER;
-
 PROCEDURE Mark*(msg: ARRAY OF CHAR);
 BEGIN
   IF (bufPos > errPos) & (errCnt < 25) & (NotifyError # NIL) THEN
@@ -375,7 +373,6 @@ BEGIN
     lastColumn := bufPos - linePos;
     sym := null;
     IF (ch > 32) & (ch < 128) THEN
-      INC(Usage[ch]);
       c1 := CHR(ch);  Read;
       CASE c1 OF
       | "A".."Z": sym := Identifier(c1)
@@ -415,30 +412,6 @@ BEGIN
   UNTIL (sym # null) OR eof
 END Get;
 
-
-PROCEDURE InitUsage;
-VAR i: INTEGER;
-BEGIN FOR i := 0 TO 127 DO Usage[i] := 0 END END InitUsage;
-
-PROCEDURE DumpUsage*;
-VAR i: INTEGER;
-BEGIN
-  (* Combine ranges to first character of range *)
-  FOR i := ORD("1") TO ORD("9") DO
-    INC(Usage[ORD("0")], Usage[i]);  Usage[i] := 0
-  END;
-  FOR i := ORD("B") TO ORD("Z") DO
-    INC(Usage[ORD("A")], Usage[i]);  Usage[i] := 0
-  END;
-  FOR i := ORD("b") TO ORD("z") DO
-    INC(Usage[ORD("a")], Usage[i]);  Usage[i] := 0
-  END;
-  FOR i := 0 TO 127 DO
-    IF Usage[i] > 0 THEN
-      w.in(i, 4); w.in(Usage[i], 6); w.l
-    END
-  END
-END DumpUsage;
 
 PROCEDURE Init*(f: Files.File);
 VAR r: Files.Rider;
@@ -509,7 +482,5 @@ BEGIN
   EnterKW(procedure, "PROCEDURE");
   KWX[9] := k;
   EnterKW(null, "EXTENSIBLE");
-  KWX[10] := k;
-
-  InitUsage;
+  KWX[10] := k
 END Scanner.
