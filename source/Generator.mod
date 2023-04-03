@@ -2462,7 +2462,6 @@ BEGIN
                                         EmitRR   (MOVd, reg_C, 8, reg_A);
                                         LoadImm  (reg_A, 8, 66746E6972707377H);  (* RAX := 'wsprintf' *)
     SetRm_regI(reg_SP, 32);             EmitRegRm(MOV,  reg_A, 8);
-(*                                      LoadImm  (reg_A, 4, 0000000000000057H);  (* RAX := 'W' *) *)
                                         LoadImm  (reg_A, 4, 0000000000000041H);  (* RAX := 'A' *)
     SetRm_regI(reg_SP, 40);             EmitRegRm(MOV,  reg_A, 8);
     SetRm_regI(reg_SP, 32);             EmitRegRm(LEA,  reg_D, 8);
@@ -2494,7 +2493,7 @@ BEGIN
     imod := B.modList;
     WHILE imod # NIL DO
       IF imod.import OR (imod.impList # NIL) THEN
-        SetRm_regI(reg_B, imod.adr);     EmitRegRm (LEA,  reg_C, 8);
+        SetRm_regI(reg_B, imod.adr);      EmitRegRm (LEA,  reg_C, 8);
         SetRm_regI(reg_B, LoadLibraryA);  EmitRm    (CALL, 4);
                                           EmitRR    (TEST, reg_A, 8, reg_A);
                                           ModKeyTrap(ccZ, 1, imod);
@@ -2599,26 +2598,29 @@ VAR i, j, adr, expno, L: INTEGER;
 BEGIN
   BeginProc;
   IF pass = 3 THEN
-    (* Load the base of current module to RBX *)
-                                                PushR(reg_B);
-    SetRm_RIP(baseOffset-pc-7);                 EmitRegRm(LEA,  reg_B, 8);
-
-    IF ~B.Flag.main THEN                        EmitRI   (CMPi, reg_D, 4, 1);
-      L := pc;                                  Jcc1     (ccNZ, 0)
-    END;
-    CallProc(dllAttachProc);
-    IF modInitProc # NIL THEN CallProc(modInitProc) END;
+                                        PushR(reg_B);
+    SetRm_RIP(baseOffset-pc-7);         EmitRegRm(LEA,  reg_B, 8);      (* RBX := base of current module *)
     IF ~B.Flag.main THEN
-      Fixup(L, pc);                             EmitRR   (TEST, reg_D, 4, reg_D);
-      L := pc;                                  Jcc1     (ccNZ, 0)
+                                        EmitRI   (CMPi, reg_D, 4, 1);
+                             L := pc;   Jcc1     (ccNZ, 0)              (* Skip if not DLL_PROCESS_ATTACH *)
     END;
-    CallProc(dllDetachProc);
-    IF ~B.Flag.main THEN Fixup(L, pc);          LoadImm(reg_A, 4, 1);
-                                                PopR(reg_B);
-                                                EmitBare(RET)
+                                        CallProc(dllAttachProc);
 
-    ELSE                                        EmitRR(XOR,  reg_A, 4, reg_A);
-      SetRm_regI(reg_B, ExitProcess);           EmitRm(CALL, 4)
+    IF modInitProc # NIL THEN           CallProc(modInitProc) END;
+
+    IF ~B.Flag.main THEN
+                                        (* ERROR? RDX is not preserved and may contain anything here. *)
+                        Fixup(L, pc);   EmitRR   (TEST, reg_D, 4, reg_D);
+                             L := pc;   Jcc1     (ccNZ, 0)              (* Skip if not DLL_PROCESS_DETACH *)
+    END;
+                                        CallProc(dllDetachProc);
+    IF ~B.Flag.main THEN
+                         Fixup(L, pc);  LoadImm(reg_A, 4, 1);
+                                        PopR(reg_B);
+                                        EmitBare(RET)
+    ELSE
+                                        EmitRR(XOR,  reg_A, 4, reg_A);
+      SetRm_regI(reg_B, ExitProcess);   EmitRm(CALL, 4)
     END
   END;
   FinishProc

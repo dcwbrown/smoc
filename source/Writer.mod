@@ -31,15 +31,25 @@ BEGIN
   writebuf(SYSTEM.ADR(bytes), len)
 END writesz;
 
-PROCEDURE l*();                   BEGIN write(crlf) END l;
+PROCEDURE l*();                  BEGIN write(crlf) END l;
 PROCEDURE c*(c: CHAR);           BEGIN write(c)    END c;
 PROCEDURE s*(s: ARRAY OF CHAR);  BEGIN writesz(s)  END s;
 PROCEDURE sl*(t: ARRAY OF CHAR); BEGIN s(t); l     END sl;
-PROCEDURE b*(n: INTEGER);         BEGIN WHILE n > 0 DO writebyte(ORD(" ")); DEC(n) END END b;
 
-PROCEDURE h1*(i: INTEGER);  BEGIN IF i<10 THEN writebyte(i + 48) ELSE writebyte(i + 87) END END h1;
+PROCEDURE b*(n: INTEGER);
+BEGIN WHILE n > 0 DO writebyte(ORD(" ")); DEC(n) END END b;
 
-PROCEDURE hn*(i, n: INTEGER); BEGIN IF n>1 THEN hn(i DIV 16, n-1) END;  h1(i MOD 16) END hn;
+PROCEDURE h1*(i: INTEGER);
+BEGIN
+  IF i<10 THEN writebyte(i + 48)
+          ELSE writebyte(i + 87) END
+END h1;
+
+PROCEDURE hn*(i, n: INTEGER);
+BEGIN
+  IF n>1 THEN hn(i DIV 16, n-1) END;
+  h1(i MOD 16)
+END hn;
 
 PROCEDURE h*(i: INTEGER);
 BEGIN
@@ -47,7 +57,8 @@ BEGIN
   h1(i MOD 16);
 END h;
 
-PROCEDURE hs*(i: INTEGER); BEGIN IF i < 0 THEN writebyte(ORD("-"));  i := -i END;  h(i) END hs;
+PROCEDURE hs*(i: INTEGER);
+BEGIN IF i < 0 THEN writebyte(ORD("-"));  i := -i END;  h(i) END hs;
 
 PROCEDURE i*(j: INTEGER);
 BEGIN
