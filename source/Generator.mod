@@ -118,9 +118,9 @@ VAR
   pass, varSize*, staticSize*: INTEGER;
   baseOffset: INTEGER;  (* Base address of initialsed data section *)
 
-  procList, curProc: B.ProcList;
+  procList, curProc:                B.ProcList;
   modInitProc, trapProc, trapProc2: Proc;
-  dllInitProc, dllAttachProc, dllDetachProc: Proc;
+  dllInitProc, dllAttachProc:       Proc;
 
   modidStr,   trapDesc,
   errFmtStr,  err2FmtStr,
@@ -788,7 +788,6 @@ BEGIN
   END;
 
   NewProc(dllAttachProc, NIL);
-  NewProc(dllDetachProc, NIL);
   NewProc(dllInitProc,   NIL);
   NewProc(trapProc,      NIL);
   NewProc(trapProc2,     NIL)
@@ -2582,15 +2581,6 @@ BEGIN
 END DLLAttach;
 
 
-PROCEDURE DLLDetach;
-BEGIN
-  BeginProc;
-  IF pass = 3 THEN
-    EmitBare(RET)
-  END;
-  FinishProc
-END DLLDetach;
-
 PROCEDURE DLLInit;
 VAR i, j, adr, expno, L: INTEGER;
     imod: B.Module;  key: B.ModuleKey;
@@ -2600,31 +2590,30 @@ BEGIN
   IF pass = 3 THEN
                                         PushR(reg_B);
     SetRm_RIP(baseOffset-pc-7);         EmitRegRm(LEA,  reg_B, 8);      (* RBX := base of current module *)
-    IF ~B.Flag.main THEN
-                                        EmitRI   (CMPi, reg_D, 4, 1);
-                             L := pc;   Jcc1     (ccNZ, 0)              (* Skip if not DLL_PROCESS_ATTACH *)
-    END;
+
+    IF B.Flag.main THEN
+                                        (* .exe main program entry point *)
                                         CallProc(dllAttachProc);
+      IF modInitProc # NIL THEN         CallProc(modInitProc) END;
+                                        EmitRR(XOR,  reg_A, 4, reg_A);
+      SetRm_regI(reg_B, ExitProcess);   EmitRm(CALL, 4)
 
-    IF modInitProc # NIL THEN           CallProc(modInitProc) END;
+    ELSE
+                                        (* .dll DllMain entry point *)
+                                        EmitRI   (CMPi, reg_D, 4, 1);
+                              L := pc;  Jcc1     (ccNZ, 0);             (* Skip if not DLL_PROCESS_ATTACH *)
 
-    IF ~B.Flag.main THEN
-                                        (* ERROR? RDX is not preserved and may contain anything here. *)
-                        Fixup(L, pc);   EmitRR   (TEST, reg_D, 4, reg_D);
-                             L := pc;   Jcc1     (ccNZ, 0)              (* Skip if not DLL_PROCESS_DETACH *)
-    END;
-                                        CallProc(dllDetachProc);
-    IF ~B.Flag.main THEN
+                                        CallProc(dllAttachProc);
+      IF modInitProc # NIL THEN         CallProc(modInitProc) END;
+
                          Fixup(L, pc);  LoadImm(reg_A, 4, 1);
                                         PopR(reg_B);
                                         EmitBare(RET)
-    ELSE
-                                        EmitRR(XOR,  reg_A, 4, reg_A);
-      SetRm_regI(reg_B, ExitProcess);   EmitRm(CALL, 4)
     END
   END;
   FinishProc
 END DLLInit;
+
 
 PROCEDURE TrapHandler;
 VAR first, L: INTEGER;
@@ -3031,7 +3020,6 @@ BEGIN
     ELSIF curProc.obj = trapProc2     THEN ModKeyTrapHandler
     ELSIF curProc.obj = dllInitProc   THEN DLLInit
     ELSIF curProc.obj = dllAttachProc THEN DLLAttach
-    ELSIF curProc.obj = dllDetachProc THEN DLLDetach
     ELSE  Procedure
     END;
     curProc := curProc.next
@@ -3044,7 +3032,6 @@ BEGIN
     ELSIF curProc.obj = trapProc2     THEN ModKeyTrapHandler
     ELSIF curProc.obj = dllInitProc   THEN DLLInit
     ELSIF curProc.obj = dllAttachProc THEN DLLAttach
-    ELSIF curProc.obj = dllDetachProc THEN DLLDetach
     ELSE  Procedure
     END;
     curProc := curProc.next
