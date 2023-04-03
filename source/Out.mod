@@ -10,57 +10,52 @@ TYPE
   Bool   = SYSTEM.CARD32;
 
 VAR
-  GetStdHandle: PROCEDURE(nStdHandle: Dword): Handle;
-  AllocConsole: PROCEDURE(): Bool;
   WriteFile:    PROCEDURE(hFile, lpBuffer, nNumberOfBytesToWrite,
                           lpNumberOfBytesWrite, lpOverlapped: INTEGER): Bool;
-  HOut: Handle;
+  hOut: Handle;
 
 PROCEDURE Open*;
-CONST STD_OUTPUT_HANDLE = -11;
+CONST
+  STD_OUTPUT_HANDLE = -11;
+  UTF8              = 65001;
+VAR
+  GetStdHandle:       PROCEDURE(nStdHandle: SYSTEM.CARD32): INTEGER;
+  SetConsoleOutputCP: PROCEDURE(codepage:   INTEGER):       INTEGER;
+  AllocConsole:       PROCEDURE(): Bool;
+    res: INTEGER;
 BEGIN
-  HOut := GetStdHandle(STD_OUTPUT_HANDLE);
-  IF HOut = 0 THEN ASSERT(AllocConsole() # 0) END
+  SYSTEM.GetProcAddress(GetStdHandle,       Rtl.HKernel, SYSTEM.ADR("GetStdHandle"));       ASSERT(GetStdHandle       # NIL);
+  SYSTEM.GetProcAddress(SetConsoleOutputCP, Rtl.HKernel, SYSTEM.ADR("SetConsoleOutputCP")); ASSERT(SetConsoleOutputCP # NIL);
+  SYSTEM.GetProcAddress(WriteFile,          Rtl.HKernel, SYSTEM.ADR("WriteFile"));          ASSERT(WriteFile          # NIL);
+  hOut := GetStdHandle(STD_OUTPUT_HANDLE);
+  res  := SetConsoleOutputCP(UTF8);
+  IF hOut = 0 THEN
+    SYSTEM.GetProcAddress(AllocConsole, Rtl.HKernel, SYSTEM.ADR("AllocConsole"));
+    ASSERT(AllocConsole # NIL);
+    ASSERT(AllocConsole() # 0)
+  END
 END Open;
+
+PROCEDURE writebuf(adr, len: INTEGER);
+VAR written, result: INTEGER;
+BEGIN result := WriteFile(hOut, adr, len, SYSTEM.ADR(written), 0) END writebuf;
 
 PROCEDURE Length(str: ARRAY OF CHAR): INTEGER;
 VAR len: INTEGER;
-BEGIN len := 0;
-  WHILE (len < LEN(str)) & (str[len] # 0X) DO INC(len) END;
+BEGIN len := 0;  WHILE (len < LEN(str)) & (str[len] # 0X) DO INC(len) END;
 RETURN len END Length;
 
-(*
-PROCEDURE Char16*(ch: CHAR);
-VAR utf8: ARRAY 8 OF BYTE; str: ARRAY 2 OF CHAR;
-    i: INTEGER; bRes, dwByteWritten: INTEGER;
-BEGIN
-  str[0] := ch; str[1] := 0X; i := Rtl.Utf16ToUtf8(str, utf8);
-  bRes := WriteFile(HOut, SYSTEM.ADR(utf8), i-1,
-                    SYSTEM.ADR(dwByteWritten), 0)
-END Char;
-
-PROCEDURE String*(str: ARRAY OF CHAR);
-VAR utf8: ARRAY 1024 OF BYTE;
-    i: INTEGER; bRes, dwByteWritten: INTEGER;
-BEGIN
-  i := Rtl.Utf16ToUtf8(str, utf8);
-  bRes := WriteFile(HOut, SYSTEM.ADR(utf8), i-1,
-                    SYSTEM.ADR(dwByteWritten), 0)
-END String;
-*)
-
 PROCEDURE Char*(ch: CHAR);
-VAR bRes, dwByteWritten: INTEGER;
-BEGIN
-  bRes := WriteFile(HOut, SYSTEM.ADR(ch), 1, SYSTEM.ADR(dwByteWritten), 0)
+BEGIN writebuf(SYSTEM.ADR(ch), 1)
 END Char;
 
 PROCEDURE String*(str: ARRAY OF CHAR);
-VAR bRes, dwByteWritten: INTEGER;
-BEGIN
-  bRes := WriteFile(HOut, SYSTEM.ADR(str), Length(str),
-                    SYSTEM.ADR(dwByteWritten), 0)
+BEGIN writebuf(SYSTEM.ADR(str), Length(str))
 END String;
+
+PROCEDURE Ln*;
+BEGIN writebuf(SYSTEM.ADR($ 0D 0A $), 2);
+END Ln;
 
 
 PROCEDURE IntToDecStr(i: INTEGER; VAR str: ARRAY OF CHAR);
@@ -228,22 +223,5 @@ BEGIN
   String(str)
 END Real;
 
-PROCEDURE Ln*;
-VAR crlf: ARRAY 2 OF BYTE; dwByteWritten, bRes: INTEGER;
-BEGIN
-  crlf[0] := 13; crlf[1] := 10;
-  bRes := WriteFile(HOut, SYSTEM.ADR(crlf), 2,
-                    SYSTEM.ADR(dwByteWritten), 0)
-END Ln;
-
-PROCEDURE InitWin32;
-VAR kernel, user: INTEGER;
-BEGIN
-  SYSTEM.GetProcAddress(GetStdHandle, Rtl.HKernel, SYSTEM.ADR("GetStdHandle")); ASSERT(GetStdHandle # NIL);
-  SYSTEM.GetProcAddress(AllocConsole, Rtl.HKernel, SYSTEM.ADR("AllocConsole")); ASSERT(AllocConsole # NIL);
-  SYSTEM.GetProcAddress(WriteFile,    Rtl.HKernel, SYSTEM.ADR("WriteFile"));    ASSERT(WriteFile    # NIL);
-END InitWin32;
-
-BEGIN InitWin32;
-  Open
+BEGIN Open
 END Out.

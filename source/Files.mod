@@ -1,5 +1,5 @@
 MODULE Files;
-IMPORT SYSTEM, Rtl, w := Writer;
+IMPORT SYSTEM, Rtl;
 
 CONST
   (* Win32 Const *)

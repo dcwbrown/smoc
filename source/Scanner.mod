@@ -20,7 +20,7 @@
 *)
 
 MODULE Scanner;  (* Modified from ORS module in Project Oberon *)
-IMPORT SYSTEM, Rtl, Files, Out, BigNums, w := Writer;
+IMPORT SYSTEM, Rtl, Files, BigNums;
 
 CONST
   TAB = 9;

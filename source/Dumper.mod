@@ -10,11 +10,11 @@ VAR memstart, memlimit: INTEGER;
 (* -------------------------------------------------------------------------- *)
 (* Character output convenience functions                                     *)
 
-PROCEDURE wl();                   BEGIN Out.Ln        END wl;
+PROCEDURE wl();                  BEGIN Out.Ln        END wl;
 PROCEDURE wc(c: CHAR);           BEGIN Out.Char(c)   END wc;
 PROCEDURE ws(s: ARRAY OF CHAR);  BEGIN Out.String(s) END ws;
 PROCEDURE wsl(s: ARRAY OF CHAR); BEGIN ws(s); wl     END wsl;
-PROCEDURE wb(i: INTEGER);         BEGIN WHILE i > 0 DO wc(" ");  DEC(i) END END wb;
+PROCEDURE wb(i: INTEGER);        BEGIN WHILE i > 0 DO wc(" ");  DEC(i) END END wb;
 
 PROCEDURE wh1 (n: INTEGER); BEGIN IF n<10 THEN wc(CHR(n + 48)) ELSE wc(CHR(n + 87)) END END wh1;
 PROCEDURE wh2 (n: INTEGER); BEGIN wh1(ASR(n,4)  MOD        10H);  wh1(n MOD        10H) END wh2;

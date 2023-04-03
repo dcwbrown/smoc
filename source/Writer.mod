@@ -3,9 +3,6 @@ MODULE Writer;  (* Character output convenience functions *)
 IMPORT SYSTEM, Rtl;
 
 VAR
-  GetStdHandle:       PROCEDURE(nStdHandle: SYSTEM.CARD32): INTEGER;
-  SetConsoleOutputCP: PROCEDURE(codepage: INTEGER): INTEGER;
-
   WriteFile: PROCEDURE(
                hFile, lpBuffer, nNumberOfBytesToWrite,
                lpNumberOfBytesWritten, lpOverlapped: INTEGER
@@ -17,7 +14,6 @@ VAR
 PROCEDURE writebuf(adr, len: INTEGER);
 VAR written, result: INTEGER;
 BEGIN result := WriteFile(hOut, adr, len, SYSTEM.ADR(written), 0) END writebuf;
-
 
 PROCEDURE write(VAR bytes: ARRAY OF BYTE);
 BEGIN writebuf(SYSTEM.ADR(bytes), LEN(bytes)) END write;
@@ -86,14 +82,17 @@ PROCEDURE init;
 CONST
   STD_OUTPUT_HANDLE = -11;
   UTF8              = 65001;
-VAR result: INTEGER;
+VAR
+  GetStdHandle:       PROCEDURE(nStdHandle: SYSTEM.CARD32): INTEGER;
+  SetConsoleOutputCP: PROCEDURE(codepage:   INTEGER):       INTEGER;
+  res: INTEGER;
 BEGIN
   SYSTEM.GetProcAddress(GetStdHandle,       Rtl.HKernel, SYSTEM.ADR("GetStdHandle"));       ASSERT(GetStdHandle       # NIL);
   SYSTEM.GetProcAddress(SetConsoleOutputCP, Rtl.HKernel, SYSTEM.ADR("SetConsoleOutputCP")); ASSERT(SetConsoleOutputCP # NIL);
   SYSTEM.GetProcAddress(WriteFile,          Rtl.HKernel, SYSTEM.ADR("WriteFile"));          ASSERT(WriteFile          # NIL);
 
-  hOut    := GetStdHandle(STD_OUTPUT_HANDLE);
-  result  := SetConsoleOutputCP(UTF8);
+  hOut := GetStdHandle(STD_OUTPUT_HANDLE);
+  res  := SetConsoleOutputCP(UTF8);
   crlf[0] := 13;  crlf[1] := 10;
 END init;
 

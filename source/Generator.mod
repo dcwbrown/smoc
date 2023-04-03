@@ -1,6 +1,6 @@
 MODULE Generator;
 IMPORT
-  SYSTEM, Files, Out, S := Scanner, B := Base, Linker, Rtl;
+  SYSTEM, Files, S := Scanner, B := Base, Linker, Rtl;
 
 
 (*    Windows x64 subroutine register conventions
