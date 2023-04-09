@@ -1,6 +1,6 @@
 MODULE Generator;
 IMPORT
-  SYSTEM, Files, S := Scanner, B := Base, Linker, Rtl;
+  SYSTEM, Files, S := Scanner, B := Base, Linker, Object, Rtl, w := Writer;
 
 
 (*    Windows x64 subroutine register conventions
@@ -118,9 +118,10 @@ VAR
   pass, varSize*, staticSize*: INTEGER;
   baseOffset: INTEGER;  (* Base address of initialsed data section *)
 
-  procList, curProc:                B.ProcList;
-  modInitProc, trapProc, trapProc2: Proc;
-  dllInitProc, dllAttachProc:       Proc;
+  procList, curProc:           B.ProcList;
+  modInitProc:                 Proc;
+  trapProc,     trapProc2:     Proc;
+  dllInitProc,  dllAttachProc: Proc;
 
   modidStr,   trapDesc,
   errFmtStr,  err2FmtStr,
@@ -154,6 +155,17 @@ VAR
 (* -------------------------------------------------------------------------- *)
 (* -------------------------------------------------------------------------- *)
 
+PROCEDURE LogAlloc(msg: ARRAY OF CHAR; size: INTEGER);
+BEGIN
+  w.s("  ");         w.sn(msg, 20);
+  w.s(" at $");      w.hn(staticSize, 12);
+  w.s(" length $");  w.h(size);
+  w.sl(".");
+END LogAlloc;
+
+(* -------------------------------------------------------------------------- *)
+(* -------------------------------------------------------------------------- *)
+
 PROCEDURE log2(n: INTEGER): INTEGER;
 VAR e: INTEGER;
 BEGIN e := 0;
@@ -173,13 +185,6 @@ END IntToSet;
 PROCEDURE SmallConst(n: INTEGER): BOOLEAN;
   RETURN (n >= -80000000H) & (n < 80000000H)
 END SmallConst;
-
-PROCEDURE Align(VAR a: INTEGER;  align: INTEGER);
-BEGIN
-  IF    a > 0 THEN a := (a + align - 1) DIV align * align
-  ELSIF a < 0 THEN a :=        a        DIV align * align
-  END
-END Align;
 
 (* -------------------------------------------------------------------------- *)
 (* -------------------------------------------------------------------------- *)
@@ -551,7 +556,7 @@ BEGIN
         ftype := ident.obj.type;  SetTypeSize(ftype);
         IF ftype.align > align THEN align := ftype.align END;
         IF ~tp.union THEN
-          Align(size, ftype.align);  ident.obj(B.Field).off := size;
+          B.Align(size, ftype.align);  ident.obj(B.Field).off := size;
           INC(size, ftype.size);  CheckTypeSize(size);
         ELSE
           ident.obj(B.Field).off := 0;
@@ -559,7 +564,7 @@ BEGIN
         END;
         ident := ident.next
       END;
-      tp.size0 := size;  Align(size, align);
+      tp.size0 := size;  B.Align(size, align);
       CheckTypeSize(size);  tp.size := size;  tp.align := align
     ELSE ASSERT(FALSE)
     END
@@ -568,7 +573,7 @@ END SetTypeSize;
 
 PROCEDURE SetGlobalVarSize*(x: B.Object);
 BEGIN
-  Align(varSize, x.type.align);  INC(varSize, x.type.size);
+  B.Align(varSize, x.type.align);  INC(varSize, x.type.size);
   x(B.Var).adr := -varSize;
   IF varSize > MaxSize THEN varSize := 8;
     S.Mark("global var size limit reached")
@@ -578,59 +583,72 @@ END SetGlobalVarSize;
 PROCEDURE SetProcVarSize*(proc: B.Proc;  x: B.Object);
 VAR size: INTEGER;
 BEGIN size := proc.locblksize;
-  Align(size, x.type.align);  INC(size, x.type.size);
-  x(B.Var).adr := -size;  proc.locblksize := size;
+  B.Align(size, x.type.align);
+  INC(size, x.type.size);
+  x(B.Var).adr    := -size;
+  proc.locblksize := size;
   IF size > MaxLocBlkSize THEN proc.locblksize := 8;
     S.Mark("local var size limit reached")
   END
 END SetProcVarSize;
 
 PROCEDURE AllocImport*(x: B.Object;  module: B.Module);
-VAR p: B.Ident;  adr: INTEGER;
+VAR p: B.Ident;
 BEGIN
+  LogAlloc("import", 8);
   NEW(p);  p.obj := x;  p.next := module.impList;
-  module.impList := p;  adr := staticSize;  INC(staticSize, 8);
-  IF x IS B.Var THEN x(B.Var).adr := adr
-  ELSIF x IS B.Proc THEN x(B.Proc).adr := adr
-  ELSIF x.class = B.cType THEN
-    ASSERT(x.type.form = B.tRec);  x.type.adr := adr
-  END
+  module.impList := p;
+  IF    x IS B.Var        THEN x(B.Var).adr  := staticSize
+  ELSIF x IS B.Proc       THEN x(B.Proc).adr := staticSize
+  ELSIF x.class = B.cType THEN x.type.adr    := staticSize;
+    ASSERT(x.type.form = B.tRec)
+  END;
+  INC(staticSize, 8);
 END AllocImport;
 
 PROCEDURE AllocImportModules;
 VAR size: INTEGER;  imod: B.Module;
 BEGIN
-  (* Save module names as 8 bit characters *)
-  Align(staticSize, 16);  imod := B.modList;
-  WHILE imod # NIL DO
-    IF imod.import OR (imod.impList # NIL) THEN
-      size := B.strLen(imod.id)+5;
-      imod.adr := staticSize;  INC(staticSize, size)
-    END;
-    imod := imod.next
+  IF ~B.Flag.object THEN
+    (* Save module names as 8 bit characters *)
+    imod := B.modList;  B.Align(staticSize, 16);
+    WHILE imod # NIL DO
+      IF imod.import OR (imod.impList # NIL) THEN
+        size := B.strLen(imod.id)+5;
+        LogAlloc("import module name", size);
+        imod.adr := staticSize;  INC(staticSize, size)
+      END;
+      imod := imod.next
+    END
   END
 END AllocImportModules;
 
 PROCEDURE AllocStaticData;
-VAR o: B.StrList;  q: B.TypeList;
-    x: B.Object;    z: B.Str;
-    strSize, tdSize, align: INTEGER;
+VAR str:    B.StrList;
+    rec:    B.TypeList;
+    tdSize: INTEGER;
+    i, l:   INTEGER;
 BEGIN
   (* Allocate 8 bit literal strings *)
-  o := B.strList;
-  WHILE o # NIL DO
-    z := o.obj;  strSize := z.len;
-    z.adr := staticSize;  INC(staticSize, strSize);  o := o.next
+  str := B.strList;
+  WHILE str # NIL DO
+    LogAlloc("literal string", str.obj.len);
+    str.obj.adr := staticSize;  INC(staticSize, str.obj.len);
+    w.s("    '");  i := str.obj.bufpos;  l := i + str.obj.len;
+    WHILE (i < l) & (B.strBuf[i] # 0X) DO w.c(B.strBuf[i]); INC(i) END;
+    w.sl("'.");
+    str := str.next
   END;
 
   (* Allocate ptrTable *)
-  Align(staticSize, 16);  q := B.recList;
-  WHILE q # NIL DO
-    IF q.type.mod = NIL THEN
-      tdSize := (24 + 8*(B.MaxExt + q.type.nTraced)) DIV 16 * 16;
-      q.type.adr := staticSize;  INC(staticSize, tdSize)
+  rec := B.recList;  B.Align(staticSize, 16);
+  WHILE rec # NIL DO
+    IF rec.type.mod = NIL THEN
+      tdSize := (24 + 8*(B.MaxExt + rec.type.nTraced)) DIV 16 * 16;
+      LogAlloc("record ptr table", tdSize);
+      rec.type.adr := staticSize;  INC(staticSize, tdSize)
     END ;
-    q := q.next
+    rec := rec.next
   END;
 
   AllocImportModules;
@@ -737,7 +755,8 @@ PROCEDURE ScanProc(proc: B.Proc);
 BEGIN
   proc.adr := -1;  proc.fix := -1;
   IF proc.nTraced > 0 THEN
-    INC(proc.locblksize, 24);  Align(staticSize, 16);
+    INC(proc.locblksize, 24);  B.Align(staticSize, 16);
+    LogAlloc("procedure ptrtable", (proc.nTraced+1)*8);
     proc.descAdr := staticSize;  INC(staticSize, (proc.nTraced+1)*8)
   END;
   IF curProc # NIL THEN NEW(curProc.next);  curProc := curProc.next
@@ -765,7 +784,8 @@ BEGIN ident := decl;
     ident := ident.next
   END;
   IF lev = 0 THEN
-    Align(staticSize, 16);  modPtrTable := staticSize;
+    LogAlloc("module ptrTable", ptrTableSize);
+    B.Align(staticSize, 16);  modPtrTable := staticSize;
     INC(staticSize, ptrTableSize)
   END
 END ScanDeclaration;
@@ -811,16 +831,19 @@ BEGIN
   ScanDeclaration(B.universe.first, 0);
 
   (* Determine address of initialised data section relative to code section *)
-  baseOffset := (-staticSize) DIV 4096 * 4096;
-
+  baseOffset := -staticSize;
+  IF B.Flag.object THEN B.Align(baseOffset, 16) ELSE B.Align(baseOffset, 4096) END;
+  LogAlloc("final static size", 0);
   IF modinit # NIL THEN
     ScanNode(modinit(B.Node));  NewProc(modInitProc, modinit)
   END;
 
-  NewProc(dllAttachProc, NIL);
-  NewProc(dllInitProc,   NIL);
-  NewProc(trapProc,      NIL);
-  NewProc(trapProc2,     NIL)
+  IF ~B.Flag.object THEN
+    NewProc(dllAttachProc, NIL);
+    NewProc(dllInitProc,   NIL);
+    NewProc(trapProc,      NIL);
+    NewProc(trapProc2,     NIL)
+  END
 END Pass1;
 
 (* -------------------------------------------------------------------------- *)
@@ -2183,7 +2206,7 @@ BEGIN
     SetBestReg(rCX);  MakeItem0(y, obj2);  LoadAdr(y);
     IF y.r # rCX THEN RelocReg(y.r, rCX) END;
 
-                                      EmitRmRegI(CALL, 4, rBX, LoadLibraryA);
+    EmitRmRegI(CALL, 4, rBX, LoadLibraryA);
     FreeReg(rCX);  SetAlloc(rAX);  SetAlloc(rBX);
 
     RefToRegI(x);  SetRmOperand(x);  EmitRegRm(MOV, rAX, 8);
@@ -2198,10 +2221,11 @@ BEGIN
     IF z.r # rDX THEN RelocReg(y.r, rDX) END;
     IF y.r # rCX THEN RelocReg(y.r, rCX) END;
 
-                                      EmitRmRegI(CALL, 4, rBX, GetProcAddress);
+    EmitRmRegI(CALL, 4, rBX, GetProcAddress);
     FreeReg(rCX);  FreeReg(rDX);
-    SetAlloc(rAX);  SetAlloc(rBX);
-    RefToRegI(x);  SetRmOperand(x);     EmitRegRm(MOV, rAX, 8);
+    SetAlloc(rAX); SetAlloc(rBX);
+    RefToRegI(x);  SetRmOperand(x);
+    EmitRegRm(MOV, rAX, 8);
     IF curProc.obj.homeSpace < 32 THEN curProc.obj.homeSpace := 32 END
   ELSIF id = S.spINT3 THEN
     EmitBare(INT3)
@@ -2292,10 +2316,10 @@ END MakeItem;
 PROCEDURE BeginProc;
 VAR proc: Proc;
 BEGIN proc := curProc.obj;
-  Align(proc.locblksize, 8);  stack := proc.locblksize;
+  B.Align(proc.locblksize, 8);  stack := proc.locblksize;
   IF pass = 2 THEN
-    proc.usedReg := {};  proc.usedXReg := {};
-    proc.homeSpace := 0;  proc.stack := stack
+    proc.usedReg   := {}; proc.usedXReg := {};
+    proc.homeSpace := 0;  proc.stack    := stack
   ELSIF pass = 3 THEN proc.adr := pc
   ELSE ASSERT(FALSE)
   END
@@ -2330,7 +2354,7 @@ BEGIN
       INC(r)
     END;
     n := ((obj.stack + nSave*8 + 8) DIV 16 + nSaveX) * 16;
-    Align(obj.homeSpace, 16);  homeSpace := obj.homeSpace;
+    B.Align(obj.homeSpace, 16);  homeSpace := obj.homeSpace;
     IF n + homeSpace # 0 THEN
       IF n + homeSpace >= 4096 THEN
         LoadImm      (rAX, 8, -4096);  L := pc;
@@ -2626,13 +2650,13 @@ BEGIN
       (* .exe main program entry point *)
       CallProc(dllAttachProc);
       IF modInitProc # NIL THEN
-                  CallProc(modInitProc) END;
+        CallProc(modInitProc) END;
         EmitRR    (XOR,  rAX, 4, rAX);
         EmitRmRegI(CALL, 4, rBX, ExitProcess)
     ELSE
       (* .dll DllMain entry point *)
       EmitRI   (CMPi, rDX, 4, 1);
-      L := pc; Jcc1(ccNZ, 0);             (* Skip if not DLL_PROCESS_ATTACH *)
+      L := pc; Jcc1(ccNZ, 0);                         (* Skip if not DLL_PROCESS_ATTACH *)
 
       CallProc(dllAttachProc);
       IF modInitProc # NIL THEN CallProc(modInitProc) END;
@@ -2652,75 +2676,75 @@ BEGIN
   BeginProc;
   IF pass = 3 THEN
                  CLR(rAX);
-    EmitRegRmRegI(MOVd, rCX, 8, rCX, 0);         (* RCX := Exception record   *)
-    EmitRegRmRegI(MOVd, rDX, 8, rCX, 16);        (* RDX := Exception address  *)
-    EmitRegRmRip (LEA,  rCX, 8, -pc-7);          (* RCX := code start address *)
+    EmitRegRmRegI(MOVd, rCX, 8, rCX, 0);              (* RCX := Exception record   *)
+    EmitRegRmRegI(MOVd, rDX, 8, rCX, 16);             (* RDX := Exception address  *)
+    EmitRegRmRip (LEA,  rCX, 8, -pc-7);               (* RCX := code start address *)
     EmitRR       (CMPd, rDX, 8, rCX);
-                 Jcc1(ccAE, 1);                  (* If exception after start of code *)
+                 Jcc1(ccAE, 1);                       (* If exception after start of code *)
     EmitBare     (RET);
 
-    EmitRegRmRip (LEA,  rCX, 8, trapProc.adr - pc - 7);  (* RCX := this trap handler address *)
+    EmitRegRmRip (LEA,  rCX, 8, trapProc.adr - pc - 7); (* RCX := this trap handler address *)
     EmitRR       (CMPd, rDX, 8, rCX);
-                 Jcc1(ccB, 1);                   (* If exception before trap handler *)
+                 Jcc1(ccB, 1);                        (* If exception before trap handler *)
     EmitBare     (RET);
 
     EmitRmImmRegI(CMPi, 1, INT3, rDX, 0);
                  Jcc1(ccNZ, 1);
     EmitBare     (RET);
 
-    EmitRI       (SUBi, rSP, 8, 2064 + 64 + 8);  (* Reserve stack space *)
-    EmitRegRmRip (LEA,  rBX, 8, baseOffset-pc-7);(* RBX := base of current module *)
+    EmitRI       (SUBi, rSP, 8, 2064 + 64 + 8);       (* Reserve stack space *)
+    EmitRegRmRip (LEA,  rBX, 8, baseOffset-pc-7);     (* RBX := base of current module *)
 
-    EmitRR       (MOVd, r12, 8, rDX);            (* R12 := RDX: exception address *)
-    LoadImm      (rCX,  4, 6);                   (* RCX := 6: get module handle from address without affecting refcount *)
+    EmitRR       (MOVd, r12, 8, rDX);                 (* R12 := RDX: exception address *)
+    LoadImm      (rCX,  4, 6);                        (* RCX := 6: get module handle from address without affecting refcount *)
     EmitRegRmRegI(LEA,  r8,  8, rSP, 64);
     EmitRmRegI   (CALL, 4, rBX, GetModuleHandleExW);  (* Gets module handle to (R8) *)
 
     (* Find .traps section containing trap descriptors *)
 
-    EmitRegRmRegI(MOVd, rSI, 8, rSP, 64);        (* RSI := Module handle = module base address *)
-    EmitRegRmRegI(MOVd, rDI, 8, rSI, 400H-24);   (* RDI := pdata_rva+32 *)
-    EmitRR       (ADDd, rDI, 8, rSI);            (* RDI := pdata address + 32 *)
-    EmitRR       (SUBd, r12, 8, rSI);            (* R12 := module relative exception address *)
-    EmitRegRmRegI(SUBd, r12, 8, rSI, 400H-32);   (* DEC(R12, reloc[0]  (Set to 4 in .Linker.mod *)
+    EmitRegRmRegI(MOVd, rSI, 8, rSP, 64);             (* RSI := Module handle = module base address *)
+    EmitRegRmRegI(MOVd, rDI, 8, rSI, 400H-24);        (* RDI := pdata_rva+32 *)
+    EmitRR       (ADDd, rDI, 8, rSI);                 (* RDI := pdata address + 32 *)
+    EmitRR       (SUBd, r12, 8, rSI);                 (* R12 := module relative exception address *)
+    EmitRegRmRegI(SUBd, r12, 8, rSI, 400H-32);        (* DEC(R12, reloc[0]  (Set to 4 in .Linker.mod *)
 
     (* Loop through trap descriptors in .traps section *)
 
     first := pc;
-    EmitRI       (ADDi, rDI, 8, 8);              (* Address next trap descriptor *)
+    EmitRI       (ADDi, rDI, 8, 8);                   (* Address next trap descriptor *)
     EmitRmImmRegI(CMPi, 8, -1, rDI, -8);
-    L := pc;     Jcc1(ccZ, 0);                   (* If no more trap descriptors *)
+    L := pc;     Jcc1(ccZ, 0);                        (* If no more trap descriptors *)
 
-    EmitRegRmRegI(MOVd, rCX, 4, rDI, -8);        (* RCX := trap entry *)
-    EmitRI       (ANDi, rCX, 4, 40000000H-1);    (* Retain trap IP offset *)
+    EmitRegRmRegI(MOVd, rCX, 4, rDI, -8);             (* RCX := trap entry *)
+    EmitRI       (ANDi, rCX, 4, 40000000H-1);         (* Retain trap IP offset *)
     EmitRR       (CMPd, rCX, 8, r12);
-                 BJump(first, ccNZ);             (* If not this trap, loop back *)
+                 BJump(first, ccNZ);                  (* If not this trap, loop back *)
 
     (* Trap found, emit message and exit *)
 
-    EmitRegRmRegI(MOVd, r8, 8, rDI, -8);         (* R8 := trap entry *)
-    EmitRI       (SHRi, r8, 8, 60);              (* Extract trap number (top 4 bits) *)
-    EmitRI       (SHLi, r8, 8, 4);               (* R8 := message offset (16 wchars per message) *)
-    EmitRegRmRegI(LEA,  r9, 8, rBX, trapDesc.adr); (* R9 := message start *)
-    EmitRR       (ADDd, r9, 8, r8);              (* R9 := R8 + R9 *)
-    EmitRegRmRegI(MOV,  r9, 8, rSP, 32);         (* [sp+32] := trap description *)
+    EmitRegRmRegI(MOVd, r8, 8, rDI, -8);              (* R8 := trap entry *)
+    EmitRI       (SHRi, r8, 8, 60);                   (* Extract trap number (top 4 bits) *)
+    EmitRI       (SHLi, r8, 8, 4);                    (* R8 := message offset (16 wchars per message) *)
+    EmitRegRmRegI(LEA,  r9, 8, rBX, trapDesc.adr);    (* R9 := message start *)
+    EmitRR       (ADDd, r9, 8, r8);                   (* R9 := R8 + R9 *)
+    EmitRegRmRegI(MOV,  r9, 8, rSP, 32);              (* [sp+32] := trap description *)
 
-    EmitRegRmRegI(MOVd, r8, 8, rDI, -8);         (* R8 := source line number *)
+    EmitRegRmRegI(MOVd, r8, 8, rDI, -8);              (* R8 := source line number *)
     EmitRI       (SHRi, r8, 8, 40);
     EmitRI       (ANDi, r8, 4, 100000H-1);
 
-    EmitRegRmRegI(MOVd, r9, 8, rDI, -8);         (* R9 := source column *)
+    EmitRegRmRegI(MOVd, r9, 8, rDI, -8);              (* R9 := source column *)
     EmitRI       (SHRi, r9, 8, 30);
     EmitRI       (ANDi, r9, 4, 400H-1);
 
-    EmitRegRmRegI(LEA,  rCX, 8, rSP, 64);        (* RCX := stack space for formatted string *)
-    EmitRegRmRegI(LEA,  rDX, 8, rBX, errFmtStr.adr); (* RDX := "[%d]: %16.16s" *)
-    EmitRmRegI   (CALL, 4, rBX, wsprintfA);      (* wsprintfA(stack, errFmtStr *)
+    EmitRegRmRegI(LEA,  rCX, 8, rSP, 64);             (* RCX := stack space for formatted string *)
+    EmitRegRmRegI(LEA,  rDX, 8, rBX, errFmtStr.adr);  (* RDX := "[%d]: %16.16s" *)
+    EmitRmRegI   (CALL, 4, rBX, wsprintfA);           (* wsprintfA(stack, errFmtStr *)
 
                  CLR(rCX);
-    EmitRegRmRegI(LEA,  rDX, 8, rSP, 64);        (* RDX := stack space *)
-    EmitRegRmRegI(LEA,  r8, 8, rBX, err5FmtStr.adr); (* R8 := "Error in module ..." *)
-    EmitRR       (XOR,  r9, 4, r9);              (* R9 := 0 *)
+    EmitRegRmRegI(LEA,  rDX, 8, rSP, 64);             (* RDX := stack space *)
+    EmitRegRmRegI(LEA,  r8, 8, rBX, err5FmtStr.adr);  (* R8 := "Error in module ..." *)
+    EmitRR       (XOR,  r9, 4, r9);                   (* R9 := 0 *)
     EmitRmRegI   (CALL, 4, rBX, MessageBoxA);
 
                 CLR(rCX);
@@ -2729,15 +2753,15 @@ BEGIN
 (* Trap not found *)
 
     Fixup(L, pc);
-    EmitRegRmRegI(ADDd, r12, 8, rSI, 400H-32);   (* INC(R12, reloc[0] - restore *)
-    EmitRegRmRegI(LEA,  rCX, 8, rSP, 64);        (* RCX := stack space for formaatted string *)
+    EmitRegRmRegI(ADDd, r12, 8, rSI, 400H-32);        (* INC(R12, reloc[0] - restore *)
+    EmitRegRmRegI(LEA,  rCX, 8, rSP, 64);             (* RCX := stack space for formaatted string *)
     EmitRegRmRegI(LEA,  rDX, 8, rBX, err3FmtStr.adr); (* RDX := "Unknown exception;  Pc: %x" *)
-    EmitRR       (MOVd, r8, 8, r12);             (* R8 := R12 *)
+    EmitRR       (MOVd, r8, 8, r12);                  (* R8 := R12 *)
     EmitRmRegI   (CALL, 4, rBX, wsprintfA);
 
                  CLR(rCX);
-    EmitRegRmRegI(LEA,  rDX, 8, rSP, 64);        (* RDX := formatted string on stack *)
-    EmitRegRmRegI(LEA,  r8, 8, rBX, err5FmtStr.adr); (* R8 := "Error in module ..." *)
+    EmitRegRmRegI(LEA,  rDX, 8, rSP, 64);             (* RDX := formatted string on stack *)
+    EmitRegRmRegI(LEA,  r8, 8, rBX, err5FmtStr.adr);  (* R8 := "Error in module ..." *)
                  CLR(r9);
     EmitRmRegI   (CALL, 4, rBX, MessageBoxA);
 
@@ -2898,7 +2922,7 @@ END FltConst;
 PROCEDURE TypeTransferConst*(type: B.Type;  x: B.Object): B.Object;
 VAR val: INTEGER;
 BEGIN
-  IF    x IS B.Str  THEN val := B.strBuf[x(B.Str).bufpos]
+  IF x IS B.Str  THEN val := ORD(B.strBuf[x(B.Str).bufpos])
   ELSE val := x(B.Const).val
   END;
   IF type # x.type THEN
@@ -2919,7 +2943,7 @@ END TypeTransferConst;
 (* Compile time constant operations *)
 PROCEDURE FoldConst*(op: INTEGER;  x, y: B.Object): B.Object;
 VAR val, xval, yval, i, k: INTEGER;  type: B.Type;  r1, r2: REAL;
-    xstr8,  ystr8:  B.Str;   cb1, cb2: BYTE;
+    xstr8,  ystr8:  B.Str;   cb1, cb2: CHAR;
 BEGIN
   IF (op >= S.eql) & (op <= S.in) THEN
     IF (x IS B.Const) & (y IS B.Const) & (x.type # B.realType) THEN
@@ -2943,7 +2967,7 @@ BEGIN
       IF (xstr8.bufpos >= 0) & (ystr8.bufpos >= 0) THEN
         i := xstr8.bufpos;  k := ystr8.bufpos;
         cb1 := B.strBuf[i];  cb2 := B.strBuf[k];
-        WHILE (cb1 = cb2) & (cb1 # 0) DO
+        WHILE (cb1 = cb2) & (cb1 # 0X) DO
           INC(i);  INC(k);  cb1 := B.strBuf[i];  cb2 := B.strBuf[k]
         END;
         IF (op = S.eql) & (cb1 = cb2) OR (op = S.neq) & (cb1 # cb2)
@@ -3026,22 +3050,25 @@ BEGIN
   (* Note: offset 80 is reserved for the RVA of the static data from the      *)
   (* Windows module base.                                                     *)
 
-
   AddVectoredExceptionHandler := 32;
   GetModuleHandleExW          := 24;
   ExitProcess                 := 16;
   LoadLibraryA                := 8;
   GetProcAddress              := 0;
 
-  debug := Files.New(".DebugInfo");  Files.Set(rider, debug, 0)
+  debug := Files.New(".DebugInfo");  Files.Set(rider, debug, 0);
+  w.l;
 END Init;
 
 PROCEDURE Generate*(VAR modinit: B.Node);
+VAR initadr: INTEGER;
 BEGIN
   (* Pass 1 *)
+  w.sl("Pass 1.");
   pass := 1;  pc := 0;  Pass1(modinit);
 
   (* Pass 2 *)
+  w.sl("Pass 2.");
   pass := 2;  curProc := procList;  pc := 0;
   WHILE curProc # NIL DO
     IF    curProc.obj = trapProc      THEN TrapHandler
@@ -3054,6 +3081,7 @@ BEGIN
   END;
 
   (* Pass 3 *)
+  w.sl("Pass 3.");
   pass := 3;  curProc := procList;  pc := 0;
   WHILE curProc # NIL DO
     IF    curProc.obj = trapProc      THEN TrapHandler
@@ -3065,10 +3093,18 @@ BEGIN
     curProc := curProc.next
   END;
 
-  Linker.Link(
-    debug, code,
-    pc, dllInitProc.adr, staticSize, varSize, modPtrTable
-  )
+  IF B.Flag.object THEN
+    IF modInitProc # NIL THEN initadr := modInitProc.adr ELSE initadr := -1 END;
+    Object.Write(debug,      code,
+                 pc,         initadr,
+                 staticSize, varSize,
+                 modPtrTable)
+  ELSE
+    Linker.Link(debug,      code,
+                pc,         dllInitProc.adr,
+                staticSize, varSize,
+                modPtrTable)
+  END
 END Generate;
 
 PROCEDURE Cleanup*;

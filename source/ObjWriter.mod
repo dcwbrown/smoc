@@ -1,6 +1,6 @@
-MODULE Writer;  (* Character output convenience functions *)
+MODULE ObjWriter;  (*$OBJECT*) (* Character output convenience functions *)
 
-IMPORT SYSTEM, Rtl;
+IMPORT SYSTEM;
 
 VAR
   WriteFile: PROCEDURE(
@@ -138,16 +138,20 @@ CONST
 VAR
   GetStdHandle:       PROCEDURE(nStdHandle: SYSTEM.CARD32): INTEGER;
   SetConsoleOutputCP: PROCEDURE(codepage:   INTEGER):       INTEGER;
-  res: INTEGER;
+  res:                INTEGER;
+  HKernel:            INTEGER;
 BEGIN
-  SYSTEM.GetProcAddress(GetStdHandle,       Rtl.HKernel, SYSTEM.ADR("GetStdHandle"));       ASSERT(GetStdHandle       # NIL);
-  SYSTEM.GetProcAddress(SetConsoleOutputCP, Rtl.HKernel, SYSTEM.ADR("SetConsoleOutputCP")); ASSERT(SetConsoleOutputCP # NIL);
-  SYSTEM.GetProcAddress(WriteFile,          Rtl.HKernel, SYSTEM.ADR("WriteFile"));          ASSERT(WriteFile          # NIL);
+  SYSTEM.LoadLibraryA(HKernel, "kernel32.dll");
+  SYSTEM.GetProcAddress(GetStdHandle,       HKernel, SYSTEM.ADR("GetStdHandle"));
+  SYSTEM.GetProcAddress(SetConsoleOutputCP, HKernel, SYSTEM.ADR("SetConsoleOutputCP"));
+  SYSTEM.GetProcAddress(WriteFile,          HKernel, SYSTEM.ADR("WriteFile"));
 
   hOut := GetStdHandle(STD_OUTPUT_HANDLE);
   res  := SetConsoleOutputCP(UTF8);
   crlf[0] := 13;  crlf[1] := 10;
+
+  sl("ObjWriter initialised.");
 END init;
 
 BEGIN init
-END Writer.
+END ObjWriter.

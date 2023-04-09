@@ -350,7 +350,7 @@ BEGIN
   END
 END SkipComment;
 
-(*       ASCII == first 128 characters in Unicode:       *)
+(*       ASCII == first 128 characters of Unicode:       *)
 (*                                                       *)
 (*            0 1 2 3 4 5 6 7 8 9 a b c d e f            *)
 (*          +---------------------------------+          *)
@@ -394,8 +394,8 @@ BEGIN
       | "+":      sym := plus
       | "&":      sym := and
       | "-":      sym := minus
-      | "<":      IF ch # ORD("=") THEN sym := lss    ELSE Read; sym := leq     END
-      | ">":      IF ch # ORD("=") THEN sym := gtr    ELSE Read; sym := geq     END
+      | "<":      IF ch # ORD("=") THEN sym := lss ELSE Read; sym := leq END
+      | ">":      IF ch # ORD("=") THEN sym := gtr ELSE Read; sym := geq END
       | "{":      sym := lbrace
       | "}":      sym := rbrace
       | "~":      sym := not

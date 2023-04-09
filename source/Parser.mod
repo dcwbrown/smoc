@@ -220,7 +220,7 @@ BEGIN
 END Check1;
 
 PROCEDURE Str8ToChar8(x: B.Object): B.Object;
-  RETURN B.NewConst(B.charType, B.strBuf[x(B.Str).bufpos])
+  RETURN B.NewConst(B.charType, ORD(B.strBuf[x(B.Str).bufpos]))
 END Str8ToChar8;
 
 (* -------------------------------------------------------------------------- *)

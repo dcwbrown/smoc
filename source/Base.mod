@@ -66,7 +66,7 @@ TYPE
     id*:              S.IdStr;
     key*:             ModuleKey;
     no*, lev*:        INTEGER;
-    adr*:            INTEGER;
+    adr*:             INTEGER;
     next*:            Module;
     first*, impList*: Ident;
     types*:           TypeList
@@ -128,7 +128,7 @@ VAR
 
   predefTypes: TypeList;
 
-  Flag*: RECORD main*, console*, rtl*: BOOLEAN END;
+  Flag*: RECORD main*, console*, rtl*, object*: BOOLEAN END;
 
   imod, modList*: Module;
 
@@ -139,7 +139,7 @@ VAR
   refno, preTypeNo, expno*, modno*: INTEGER;
 
   strBufSize*:  INTEGER;
-  strBuf*:      ARRAY 1000H OF BYTE;  (* TODO change to CHAR *)
+  strBuf*:      ARRAY 1000H OF CHAR;
 
   symPath, srcPath, sym: ARRAY 1024 OF CHAR;
 
@@ -174,10 +174,10 @@ BEGIN
   RETURN len
 END strLen;
 
-PROCEDURE Align(VAR n: INTEGER;  align: INTEGER);
+PROCEDURE Align*(VAR a: INTEGER;  align: INTEGER);
 BEGIN
-  IF    n > 0 THEN n := (n + align - 1) DIV align * align
-  ELSIF n < 0 THEN n := n DIV align * align
+  IF    a > 0 THEN a := (a + align - 1) DIV align * align
+  ELSIF a < 0 THEN a :=        a        DIV align * align
   END
 END Align;
 
@@ -236,27 +236,50 @@ BEGIN
   RETURN fld
 END NewField;
 
-PROCEDURE NewStr*(str: ARRAY OF BYTE;  slen: INTEGER): Str;
+PROCEDURE LookupString(s: ARRAY OF CHAR;  slen: INTEGER): Str;
+VAR str: StrList;  result: Str;  i: INTEGER;
+BEGIN
+  str := strList;  result := NIL;
+IF FALSE THEN
+  WHILE str # NIL DO
+    i := 0;
+    IF str.obj.bufpos >= 0 THEN
+      WHILE (i < slen) & (s[i] = strBuf[str.obj.bufpos + i]) DO INC(i) END
+    END;
+    IF i = slen THEN
+      result := str.obj; str := NIL
+    ELSE
+      str := str.next
+    END
+  END
+END
+RETURN result END LookupString;
+
+PROCEDURE NewStr*(str: ARRAY OF CHAR;  slen: INTEGER): Str;
 VAR x: Str;  i: INTEGER;  p: StrList;
 BEGIN
-  NEW(x);  x.class := cVar;  x.ronly := TRUE;
-  x.type := strType;  x.lev := curLev;  x.len := slen;
-  IF x.lev >= -1 (* need to alloc buffer *) THEN
-    IF strBufSize + slen >= LEN(strBuf) THEN
-      S.Mark("too many strings");  x.bufpos := -1
-    ELSE x.bufpos  := strBufSize;  strBufSize := strBufSize + slen;
-      FOR i := 0 TO slen-1 DO strBuf[x.bufpos+i] := str[i] END;
-      NEW(p);  p.obj := x;  p.next := strList;  strList := p
+  x := LookupString(str, slen);
+  IF x = NIL THEN
+    NEW(x);  x.class := cVar;  x.ronly := TRUE;
+    x.type := strType;  x.lev := curLev;  x.len := slen;
+    IF x.lev >= -1 (* need to alloc buffer *) THEN
+      IF strBufSize + slen >= LEN(strBuf) THEN
+        S.Mark("too many strings");  x.bufpos := -1
+      ELSE
+        x.bufpos := strBufSize;  strBufSize := strBufSize + slen;
+        FOR i := 0 TO slen-1 DO strBuf[x.bufpos+i] := str[i] END;
+        NEW(p);  p.obj := x;  p.next := strList;  strList := p
+      END
+    ELSE x.bufpos := -1
     END
-  ELSE x.bufpos := -1
   END;
   RETURN x
 END NewStr;
 
-PROCEDURE NewStrZ*(str: ARRAY OF BYTE): Str;
+PROCEDURE NewStrZ*(str: ARRAY OF CHAR): Str;
 VAR slen: INTEGER;
 BEGIN
-  slen := 0;  WHILE str[slen] # 0 DO INC(slen) END;  INC(slen);
+  slen := 0;  WHILE str[slen] # 0X DO INC(slen) END;  INC(slen);
   RETURN NewStr(str, slen)
 END NewStrZ;
 
@@ -854,7 +877,7 @@ VAR
       path[j] := symPath[i];  INC(i);  INC(j)
     END;
     IF symPath[i] = ";" THEN INC(i) END;
-    IF path[j-1] # "\" THEN path[j] := "\";  INC(j) END;
+    IF path[j-1] # '\' THEN path[j] := '\';  INC(j) END;
     path[j] := 0X
   END GetPath;
 
@@ -887,15 +910,17 @@ END NewModule;
 PROCEDURE SetCompilerFlag(pragma: ARRAY OF CHAR);
 VAR i: INTEGER;
 BEGIN
-  IF    pragma = "MAIN"    THEN Flag.main  := TRUE
-  ELSIF pragma = "CONSOLE" THEN Flag.main  := TRUE;  Flag.console := TRUE
-  ELSIF pragma = "RTL-"    THEN Flag.rtl   := FALSE;
+  IF    pragma = "MAIN"    THEN Flag.main   := TRUE
+  ELSIF pragma = "CONSOLE" THEN Flag.main   := TRUE;  Flag.console := TRUE
+  ELSIF pragma = "RTL-"    THEN Flag.rtl    := FALSE
+  ELSIF pragma = "OBJECT"  THEN Flag.object := TRUE
   END
 END SetCompilerFlag;
 
 PROCEDURE InitCompilerFlag;
 BEGIN
-  Flag.main := FALSE;  Flag.console := FALSE;  Flag.rtl := TRUE;
+  Flag.main := FALSE;  Flag.console := FALSE;
+  Flag.rtl  := TRUE;   Flag.object  := FALSE;
 END InitCompilerFlag;
 
 PROCEDURE SetSymPath*(path: ARRAY OF CHAR);
@@ -907,7 +932,7 @@ PROCEDURE SetSrcPath*(path: ARRAY OF CHAR);
 VAR i: INTEGER;
 BEGIN
   srcPath := path;  i := 0;  WHILE srcPath[i] # 0X DO INC(i) END;
-  WHILE (i >= 0) & (srcPath[i] # "\") DO DEC(i) END;  srcPath[i+1] := 0X
+  WHILE (i >= 0) & (srcPath[i] # '\') DO DEC(i) END;  srcPath[i+1] := 0X
 END SetSrcPath;
 
 (* -------------------------------------------------------------------------- *)
@@ -926,12 +951,12 @@ BEGIN
   expList := NIL;  lastExp := NIL;  strList := NIL;  recList := NIL;
   InitCompilerFlag;
 
-  Enter(NewTypeObj(intType),    "INTEGER");
-  Enter(NewTypeObj(byteType),   "BYTE");
-  Enter(NewTypeObj(realType),   "REAL");
-  Enter(NewTypeObj(setType),    "SET");
-  Enter(NewTypeObj(boolType),   "BOOLEAN");
-  Enter(NewTypeObj(charType),  "CHAR");
+  Enter(NewTypeObj(intType),  "INTEGER");
+  Enter(NewTypeObj(byteType), "BYTE");
+  Enter(NewTypeObj(realType), "REAL");
+  Enter(NewTypeObj(setType),  "SET");
+  Enter(NewTypeObj(boolType), "BOOLEAN");
+  Enter(NewTypeObj(charType), "CHAR");
 
   Enter(NewSProc(S.spINC,    cSProc), "INC");
   Enter(NewSProc(S.spDEC,    cSProc), "DEC");
@@ -942,16 +967,16 @@ BEGIN
   Enter(NewSProc(S.spPACK,   cSProc), "PACK");
   Enter(NewSProc(S.spUNPK,   cSProc), "UNPK");
 
-  Enter(NewSProc(S.sfABS,   cSFunc), "ABS");
-  Enter(NewSProc(S.sfODD,   cSFunc), "ODD");
-  Enter(NewSProc(S.sfLEN,   cSFunc), "LEN");
-  Enter(NewSProc(S.sfLSL,   cSFunc), "LSL");
-  Enter(NewSProc(S.sfASR,   cSFunc), "ASR");
-  Enter(NewSProc(S.sfROR,   cSFunc), "ROR");
-  Enter(NewSProc(S.sfFLOOR, cSFunc), "FLOOR");
-  Enter(NewSProc(S.sfFLT,   cSFunc), "FLT");
-  Enter(NewSProc(S.sfORD,   cSFunc), "ORD");
-  Enter(NewSProc(S.sfCHR8,  cSFunc), "CHR");
+  Enter(NewSProc(S.sfABS,    cSFunc), "ABS");
+  Enter(NewSProc(S.sfODD,    cSFunc), "ODD");
+  Enter(NewSProc(S.sfLEN,    cSFunc), "LEN");
+  Enter(NewSProc(S.sfLSL,    cSFunc), "LSL");
+  Enter(NewSProc(S.sfASR,    cSFunc), "ASR");
+  Enter(NewSProc(S.sfROR,    cSFunc), "ROR");
+  Enter(NewSProc(S.sfFLOOR,  cSFunc), "FLOOR");
+  Enter(NewSProc(S.sfFLT,    cSFunc), "FLT");
+  Enter(NewSProc(S.sfORD,    cSFunc), "ORD");
+  Enter(NewSProc(S.sfCHR8,   cSFunc), "CHR");
 
   OpenScope;
   Enter(NewSProc(S.spGET,            cSProc), "GET");
@@ -984,7 +1009,7 @@ PROCEDURE Cleanup*;
 VAR i: INTEGER;
 BEGIN
   universe := NIL;  topScope := NIL;  systemScope := NIL;  modList := NIL;
-  expList  := NIL;  lastExp  := NIL;  strList    := NIL;  recList := NIL
+  expList  := NIL;  lastExp  := NIL;  strList     := NIL;  recList := NIL
 END Cleanup;
 
 BEGIN
@@ -996,10 +1021,10 @@ BEGIN
   NewPredefinedType(byteType,   tInt);
   NewPredefinedType(boolType,   tBool);
   NewPredefinedType(setType,    tSet);
-  NewPredefinedType(charType,  tChar);
+  NewPredefinedType(charType,   tChar);
   NewPredefinedType(nilType,    tNil);
   NewPredefinedType(realType,   tReal);
-  NewPredefinedType(strType,   tStr);
+  NewPredefinedType(strType,    tStr);
   NewPredefinedType(noType,     tPtr);    noType.base := intType;
   NewPredefinedType(card16Type, tInt);
   NewPredefinedType(card32Type, tInt);

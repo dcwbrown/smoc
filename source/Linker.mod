@@ -207,15 +207,17 @@ BEGIN
     imod := imod.next
   END;
 
+  (* Write literal strings *)
   slist8 := B.strList;
   WHILE slist8 # NIL DO y := slist8.obj;
     Files.Set(Rider, Out, metrics.fadr + y.adr);  i := 0;
     WHILE i < y.len DO
-      Files.Write(Rider, B.strBuf[y.bufpos+i]);  INC(i)
+      Files.WriteChar(Rider, B.strBuf[y.bufpos+i]);  INC(i)
     END;
     slist8 := slist8.next
   END;
 
+  (* Write record type pointer tables *)
   t := B.recList;
   WHILE t # NIL DO
     Files.Set(Rider, Out, metrics.fadr + t.type.adr);
@@ -225,7 +227,7 @@ BEGIN
     Files.WriteInt(Rider, -1);  t := t.next
   END;
 
-  (* Write module pointers into initialised data *)
+  (* Write the module global variable pointer table *)
   Files.Set(Rider, Out, metrics.fadr + ModulePointerTable);
   ident := B.universe.first;
   WHILE ident # NIL DO obj := ident.obj;
@@ -240,6 +242,7 @@ BEGIN
   END;
   Files.WriteInt(Rider, -1);
 
+  (* Write procedure stack frame pointer tables *)
   Write_proc_pointer_offset(B.universe.first);
 
   Files.Set(Rider, Out, metrics.fadr + size);
@@ -665,10 +668,10 @@ BEGIN
   hdr.numberOfRvaAndSizes     := 16;
 
   (* Optional header data directories *)
-  hdr.exportTableRVA            := Section[SecExports].rva;
-  hdr.exportTableSize           := Section[SecExports].size;
-  hdr.importTableRVA            := Section[SecImports].rva;
-  hdr.importTableSize           := Section[SecImports].size;
+  hdr.exportTableRVA          := Section[SecExports].rva;
+  hdr.exportTableSize         := Section[SecExports].size;
+  hdr.importTableRVA          := Section[SecImports].rva;
+  hdr.importTableSize         := Section[SecImports].size;
 
   Files.Set(Rider, Out, 0);
   Files.WriteBytes(Rider, hdr, SYSTEM.SIZE(PEHDR));

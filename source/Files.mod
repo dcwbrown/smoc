@@ -348,14 +348,29 @@ BEGIN
   END
 END CheckFilePos;
 
-PROCEDURE Read0(VAR r: Rider; VAR x: ARRAY OF BYTE);
-VAR bRes: Bool; byteRead: Dword; f: File;
+PROCEDURE ReadMem*(VAR r: Rider; adr, len: INTEGER);
+VAR bRes: Bool;  bytesRead: Dword;  f: File;
 BEGIN
   f := r.f; CheckFilePos(r);
-  bRes := ReadFile(f.hFile, SYSTEM.ADR(x), LEN(x), SYSTEM.ADR(byteRead), 0);
-  r.eof := (bRes # 0) & (byteRead = 0);
-  IF ~r.eof THEN INC(r.pos, byteRead); INC(f.pos, byteRead) END
+  bRes := ReadFile(f.hFile, adr, len, SYSTEM.ADR(bytesRead), 0);
+  r.eof := (bRes # 0) & (bytesRead = 0);
+  IF ~r.eof THEN INC(r.pos, bytesRead); INC(f.pos, bytesRead) END
+END ReadMem;
+
+PROCEDURE Read0(VAR r: Rider; VAR x: ARRAY OF BYTE);
+BEGIN ReadMem(r, SYSTEM.ADR(x), LEN(x))
 END Read0;
+
+(*
+PROCEDURE Read0(VAR r: Rider; VAR x: ARRAY OF BYTE);
+VAR bRes: Bool; bytesRead: Dword; f: File;
+BEGIN
+  f := r.f; CheckFilePos(r);
+  bRes := ReadFile(f.hFile, SYSTEM.ADR(x), LEN(x), SYSTEM.ADR(bytesRead), 0);
+  r.eof := (bRes # 0) & (bytesRead = 0);
+  IF ~r.eof THEN INC(r.pos, bytesRead); INC(f.pos, bytesRead) END
+END Read0;
+*)
 
 PROCEDURE Read*(VAR r: Rider; VAR x: BYTE);
 BEGIN Read0(r, x)
@@ -395,13 +410,13 @@ VAR bRes: Bool; byteRead: Dword; f: File;
 BEGIN Read0(r, x)
 END ReadChar16;
 
-PROCEDURE ReadString*(VAR r: Rider; VAR x: ARRAY OF CHAR);
+PROCEDURE ReadString*(VAR r: Rider; VAR str: ARRAY OF CHAR);
 VAR i: INTEGER;  done: BOOLEAN;  b: BYTE;
 BEGIN
   done := FALSE; i := 0;
   WHILE ~r.eof & ~done DO
-    Read(r, b);  x[i] := CHR(b);
-    IF r.eof THEN x[i] := 0X ELSE done := x[i] = 0X; INC(i) END
+    Read(r, b);  str[i] := CHR(b);
+    IF r.eof THEN str[i] := 0X ELSE done := str[i] = 0X; INC(i) END
   END
 END ReadString;
 
@@ -454,6 +469,10 @@ END Write0;
 PROCEDURE Write*(VAR r: Rider; x: BYTE);
 BEGIN Write0(r, x)
 END Write;
+
+PROCEDURE WriteChar*(VAR r: Rider; x: CHAR);
+BEGIN Write0(r, x)
+END WriteChar;
 
 PROCEDURE WriteInt*(VAR r: Rider; x: INTEGER);
 BEGIN Write0(r, x)

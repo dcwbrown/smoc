@@ -8,7 +8,12 @@ Crypt.mod
 Scanner.mod
 Base.mod
 Linker.mod
+Object.mod
 Generator.mod
 Parser.mod
 Dumper.mod
 Smoc.mod
+ObjWriter.mod
+Objtest.mod
+ObjDump.mod
+Modules.mod
