@@ -130,7 +130,8 @@ VAR
 
   Flag*: RECORD main*, console*, rtl*, object*: BOOLEAN END;
 
-  imod, modList*: Module;
+  imod:     Module;
+  modList*: Module;  (* List of imported modules *)
 
   good: BOOLEAN;
 

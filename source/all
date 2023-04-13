@@ -9,11 +9,14 @@ Scanner.mod
 Base.mod
 Linker.mod
 Object.mod
+ObjectX64.mod
 Generator.mod
 Parser.mod
 Dumper.mod
 Smoc.mod
+ObjBoot.mod
 ObjWriter.mod
 Objtest.mod
 ObjDump.mod
 Modules.mod
+Exe.mod

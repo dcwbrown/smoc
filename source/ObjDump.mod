@@ -2,113 +2,143 @@ MODULE ObjDump;  (*$CONSOLE*)  (* Dump content od .x64 object file *)
 IMPORT SYSTEM, Files, Rtl,w := Writer;
 
 VAR
-  X64: Files.Rider;  (* Input file *)
-  buf: ARRAY 80000H OF BYTE;
+  X64file: Files.File;  (* Input file *)
+  X64:     Files.Rider;
+  Buf:     ARRAY 80000H OF BYTE;
 
-
-(* -------------------------------------------------------------------------- *)
-(* -------------------------------------------------------------------------- *)
-
-(*
-PROCEDURE WriteImportReferences;
-VAR
-  impmod:     B.Module;
-  impobj:     B.Object;
-  import:     B.Ident;
-  modno:      INTEGER;
-  adr, expno: INTEGER;
-BEGIN
-  impmod := B.modList;
-  modno := 0;
-  WHILE impmod # NIL DO
-    import := impmod.impList;
-    WHILE import # NIL DO
-      impobj := import.obj;
-      IF impobj.class = B.cType THEN ASSERT(impobj.type.form = B.tRec);
-                                  adr := impobj.type.adr;    expno := impobj.type.expno
-      ELSIF impobj IS B.Var  THEN adr := impobj(B.Var).adr;  expno := impobj(B.Var).expno
-      ELSIF impobj IS B.Proc THEN adr := impobj(B.Proc).adr; expno := impobj(B.Proc).expno
-      END;
-      ASSERT(adr >= 128);
-      Files.WriteCard32(X64, adr);
-      Files.WriteCard16(X64, modno);
-      Files.WriteCard16(X64, expno);
-      import := import.next
-    END;
-    impmod := impmod.next;  INC(modno)
-  END;
-  Files.WriteCard(X64, 0);
-END WriteImportReferences;
-*)
 
 (* -------------------------------------------------------------------------- *)
 (* -------------------------------------------------------------------------- *)
 
 
 PROCEDURE DumpX64;
+TYPE
+  ModuleHeaderDesc = RECORD
+    next:            INTEGER; (*  0                                          *)
+    base:            INTEGER; (*  8                                          *)
+    code:            INTEGER; (* 16                                          *)
+    init:            INTEGER; (* 24                                          *)
+    trap:            INTEGER; (* 32                                          *)
+    name:            INTEGER; (* 40 offset of sz module name string          *)
+    key0, key1:      INTEGER; (* 48                                          *)
+    imports:         INTEGER; (* 56 offset of array of import names and keys *)
+    importCount:     INTEGER; (* 72 number of imports at base+128            *)
+    exports:         INTEGER  (* 80 offset of array of export addresses      *)
+  END;
 VAR
-  filename:     ARRAY 256 OF CHAR;
-  x64file:      Files.File;
-  modid:        ARRAY 64 OF CHAR;
-  key0, key1:   INTEGER;
-  i, n:         INTEGER;
-  modno, impno: SYSTEM.CARD16;
-  adr:          INTEGER;
-  line, col,
-  trap:         INTEGER;
-  modPtrTable:  INTEGER;
-  importCount:  INTEGER;
+  filename:   ARRAY 256 OF CHAR;
+  header:     ModuleHeaderDesc;
+  name:       ARRAY 1024 OF CHAR;
+  nameOffset: INTEGER;
+  i:          INTEGER;
+  key:        INTEGER;
+  export:     INTEGER;
+  adr:        INTEGER;
+  trap:       INTEGER;
+  line, col:  INTEGER;
 BEGIN
   Rtl.GetArg(filename, 1);
   IF filename[0] = 0X THEN
     w.sl("Expected filename.")
   ELSE
-    x64file := Files.Old(filename);
-    IF x64file = NIL THEN
+    X64file := Files.Old(filename);
+    IF X64file = NIL THEN
       w.s("File '"); w.s(filename); w.sl("' not found.");
     ELSE
       w.s("Dumping '"); w.s(filename); w.sl("'.");
-      Files.Set(X64, x64file, 0);
+      Files.Set(X64, X64file, 0);
 
-      (* 1. Module name and key *)
-      Files.ReadString(X64, modid);
-      Files.ReadInt(X64, key0);  Files.ReadInt(X64, key1);
+      (* Load header *)
+      Files.ReadInt(X64, header.next);            w.s("header.next:            $"); w.h(header.next);            w.sl(".");
+      Files.ReadInt(X64, header.base);            w.s("header.base:            $"); w.h(header.base);            w.sl(".");
+      Files.ReadInt(X64, header.code);            w.s("header.code:            $"); w.h(header.code);            w.sl(".");
+      Files.ReadInt(X64, header.init);            w.s("header.init:            $"); w.h(header.init);            w.sl(".");
+      Files.ReadInt(X64, header.trap);            w.s("header.trap:            $"); w.h(header.trap);            w.sl(".");
+      Files.ReadInt(X64, header.name);            w.s("header.name:            $"); w.h(header.name);            w.sl(".");
+      Files.ReadInt(X64, header.key0);            w.s("header.key0:            $"); w.h(header.key0);            w.sl(".");
+      Files.ReadInt(X64, header.key1);            w.s("header.key1:            $"); w.h(header.key1);            w.sl(".");
+      Files.ReadInt(X64, header.imports);         w.s("header.imports:         $"); w.h(header.imports);         w.sl(".");
+      Files.ReadInt(X64, header.importCount);     w.s("header.importCount:     $"); w.h(header.importCount);     w.sl(".");
+      Files.ReadInt(X64, header.exports);         w.s("header.exports:         $"); w.h(header.exports);         w.sl(".");
+      w.l;
 
-      w.s("MODULE '"); w.s(modid); w.s("' key $");
-      w.hn(key0, 16); w.s(', $'); w.hn(key1, 16); w.sl(".");
+      (* Module name and key *)
+      Files.Set(X64, X64file, header.name);  Files.ReadString(X64, name);
+      w.s("MODULE '"); w.s(name); w.s("' key $");
+      w.hn(header.key0, 16); w.s(', $'); w.hn(header.key1, 16); w.sl(".");
 
-      (* Import count *)
-      Files.ReadInt(X64, importCount);
-      w.s("Import count: ");  w.i(importCount);  w.sl(".");
+      (* Imported module names and keys *)
+      IF header.imports = 0 THEN
+        w.sl("No imported modules.")
+      ELSE
+        w.sl("Imported modules:");
+        Files.Set(X64, X64file, header.imports);
+        Files.ReadString(X64, name);
+        WHILE name[0] # 0X DO
+          w.s("  ");  w.in(i, 3);  w.s(": "); w.s(name);
+          Files.ReadInt(X64, key); w.s(" $"); w.h(key);
+          Files.ReadInt(X64, key); w.s(" $"); w.h(key);
+          w.sl(".");
+          Files.ReadString(X64, name)
+        END
+      END;
+
+      (* Exported addresses *)
+      IF header.exports = 0 THEN
+        w.sl("No exports.")
+      ELSE
+        w.sl("Exported addresses:");
+        Files.Set(X64, X64file, header.exports);
+        Files.ReadInt(X64, export);  i := 0;
+        WHILE export # 0 DO
+          w.s("  "); w.in(i, 3); w.s(": $"); w.h(export); w.sl(".");
+          Files.ReadInt(X64, export);  INC(i);
+        END
+      END;
+
+      (* Traps *)
+      w.sl("Trap table:");
+      Files.Set(X64, X64file, header.trap);
+      Files.ReadInt(X64, adr);
+      WHILE adr # -1 DO
+        trap := ASR(adr, 60) MOD 10H;
+        line := ASR(adr, 40) MOD 100000H;
+        col  := ASR(adr, 30) MOD 400H;
+        adr  := adr MOD 40000000H;
+        CASE trap OF
+        | 0: w.s("  modkey trap  at $");
+        | 1: w.s("  array trap   at $");
+        | 2: w.s("  type trap    at $");
+        | 3: w.s("  string trap  at $");
+        | 4: w.s("  nil trap     at $");
+        | 5: w.s("  nilProc trap at $");
+        | 6: w.s("  divide trap  at $");
+        | 7: w.s("  assert trap  at $");
+        | 8: w.s("  rtl trap     at $");
+        END;
+        w.hn(adr,12); w.s(" "); w.i(line); w.s(":"); w.i(col); w.sl(".");
+        Files.ReadInt(X64, adr)
+      END;
+
+
+      (* Load and dump static data *)
+      Files.Set(X64, X64file, header.base);
+      Files.ReadBytes(X64, Buf, header.code - header.base);
+      w.sl("Static data:");
+      w.DumpMem(2, SYSTEM.ADR(Buf), 0, header.code - header.base);
+
+      (* Load and dump code *)
+      Files.Set(X64, X64file, header.code);
+      Files.ReadBytes(X64, Buf, header.trap - header.code);
+      w.sl("Code:");
+      w.DumpMem(2, SYSTEM.ADR(Buf), 0, header.trap - header.code);
+
+
+(*
 
       (* 5b. Module ptr table address *)
       Files.ReadInt(X64, modPtrTable);
       w.s("Module ptr table at $");  w.h(modPtrTable);  w.sl(".");
-
-      (* 7. Code offset of initialisation entry point, if any *)
-      Files.ReadInt(X64, i);
-      IF i < 0 THEN
-        w.sl("No initialisation entry point.");
-      ELSE
-        w.s("Initialisation entry point $"); w.h(i); w.sl(".");
-      END;
-
-      (* 2. List of referenced modules *)
-      Files.ReadString(X64, modid);
-      IF modid[0] = 0X THEN
-        w.sl("No imported modules.")
-      ELSE
-        w.sl("Imported modules:");
-        WHILE modid[0] # 0X DO
-          Files.ReadInt(X64, key0);  Files.ReadInt(X64, key1);
-          w.s("  '"); w.s(modid); w.s("' key $");
-          w.hn(key0, 16); w.s(', $'); w.hn(key1, 16); w.sl(".");
-          Files.ReadString(X64, modid);
-        END
-      END;
-
-      Files.ReadInt(X64, i);
-      w.s("Module global VAR size "); w.i(i); w.sl(".");
 
       (* 4. Initialised static data *)
       Files.ReadInt(X64, i);
@@ -174,6 +204,7 @@ BEGIN
           Files.ReadInt(X64, adr);  INC(n);
         END
       END
+*)
     END
   END
 END DumpX64;

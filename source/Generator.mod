@@ -1,6 +1,6 @@
 MODULE Generator;
 IMPORT
-  SYSTEM, Files, S := Scanner, B := Base, Linker, Object, Rtl, w := Writer;
+  SYSTEM, Files, S := Scanner, B := Base, Linker, ObjectX64, Rtl, w := Writer;
 
 
 (*    Windows x64 subroutine register conventions
@@ -13,6 +13,9 @@ IMPORT
 
 
 CONST
+  LOGALLOCATIONS = FALSE;
+
+
   MaxInt = 9223372036854775807;
   MinInt = -MaxInt-1;
 
@@ -156,12 +159,12 @@ VAR
 (* -------------------------------------------------------------------------- *)
 
 PROCEDURE LogAlloc(msg: ARRAY OF CHAR; size: INTEGER);
-BEGIN
+BEGIN IF LOGALLOCATIONS THEN
   w.s("  ");         w.sn(msg, 20);
   w.s(" at $");      w.hn(staticSize, 12);
   w.s(" length $");  w.h(size);
   w.sl(".");
-END LogAlloc;
+END END LogAlloc;
 
 (* -------------------------------------------------------------------------- *)
 (* -------------------------------------------------------------------------- *)
@@ -634,9 +637,12 @@ BEGIN
   WHILE str # NIL DO
     LogAlloc("literal string", str.obj.len);
     str.obj.adr := staticSize;  INC(staticSize, str.obj.len);
-    w.s("    '");  i := str.obj.bufpos;  l := i + str.obj.len;
-    WHILE (i < l) & (B.strBuf[i] # 0X) DO w.c(B.strBuf[i]); INC(i) END;
-    w.sl("'.");
+    IF LOGALLOCATIONS THEN
+      w.s("    '");
+      i := str.obj.bufpos;  l := i + str.obj.len;
+      WHILE (i < l) & (B.strBuf[i] # 0X) DO w.c(B.strBuf[i]); INC(i) END;
+      w.sl("'.")
+    END;
     str := str.next
   END;
 
@@ -816,16 +822,18 @@ END Append;
 PROCEDURE Pass1(VAR modinit: B.Node);
 VAR str: ARRAY 512 OF CHAR;
 BEGIN
-  modidStr    := B.NewStrZ(B.modid);
-  errFmtStr   := B.NewStrZ("[%d:%d]: %16.16s");
-  err2FmtStr  := B.NewStrZ("Module key of %s is mismatched");
-  err3FmtStr  := B.NewStrZ("Unknown exception;  PC: %x");
-  err4FmtStr  := B.NewStrZ("Cannot load module %s (not exist?)");
-  rtlName     := B.NewStrZ("Rtl.dll");
-  user32name  := B.NewStrZ("user32.dll");
-  str         := "Error in module ";  Append(B.modid, str);
-  err5FmtStr  := B.NewStrZ(str);
-  trapDesc    := B.NewStrZ("Module key      Array index     Type mismatch   String index    Nil dereference Nil proc call   Divide by zero  Assertion false Run time missing");
+  IF ~B.Flag.object THEN
+    modidStr    := B.NewStrZ(B.modid);
+    errFmtStr   := B.NewStrZ("[%d:%d]: %16.16s");
+    err2FmtStr  := B.NewStrZ("Module key of %s is mismatched");
+    err3FmtStr  := B.NewStrZ("Unknown exception;  PC: %x");
+    err4FmtStr  := B.NewStrZ("Cannot load module %s (not exist?)");
+    rtlName     := B.NewStrZ("Rtl.dll");
+    user32name  := B.NewStrZ("user32.dll");
+    str         := "Error in module ";  Append(B.modid, str);
+    err5FmtStr  := B.NewStrZ(str);
+    trapDesc    := B.NewStrZ("Module key      Array index     Type mismatch   String index    Nil dereference Nil proc call   Divide by zero  Assertion false Run time missing");
+  END;
 
   AllocStaticData;
   ScanDeclaration(B.universe.first, 0);
@@ -3057,18 +3065,18 @@ BEGIN
   GetProcAddress              := 0;
 
   debug := Files.New(".DebugInfo");  Files.Set(rider, debug, 0);
-  w.l;
+  IF LOGALLOCATIONS THEN w.l END;
 END Init;
 
 PROCEDURE Generate*(VAR modinit: B.Node);
 VAR initadr: INTEGER;
 BEGIN
   (* Pass 1 *)
-  w.sl("Pass 1.");
+  IF LOGALLOCATIONS THEN w.sl("Pass 1.") END;
   pass := 1;  pc := 0;  Pass1(modinit);
 
   (* Pass 2 *)
-  w.sl("Pass 2.");
+  IF LOGALLOCATIONS THEN w.sl("Pass 2.") END;
   pass := 2;  curProc := procList;  pc := 0;
   WHILE curProc # NIL DO
     IF    curProc.obj = trapProc      THEN TrapHandler
@@ -3081,7 +3089,7 @@ BEGIN
   END;
 
   (* Pass 3 *)
-  w.sl("Pass 3.");
+  IF LOGALLOCATIONS THEN w.sl("Pass 3.") END;
   pass := 3;  curProc := procList;  pc := 0;
   WHILE curProc # NIL DO
     IF    curProc.obj = trapProc      THEN TrapHandler
@@ -3095,10 +3103,10 @@ BEGIN
 
   IF B.Flag.object THEN
     IF modInitProc # NIL THEN initadr := modInitProc.adr ELSE initadr := -1 END;
-    Object.Write(debug,      code,
-                 pc,         initadr,
-                 staticSize, varSize,
-                 modPtrTable)
+    ObjectX64.Write(debug,      code,
+                    pc,         initadr,
+                    staticSize, varSize,
+                    modPtrTable)
   ELSE
     Linker.Link(debug,      code,
                 pc,         dllInitProc.adr,

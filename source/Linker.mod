@@ -85,7 +85,6 @@ RETURN result END Align;
 
 PROCEDURE MakeUninitGlobals(VAR metrics: SectionMetrics; size: INTEGER);
 BEGIN
-  IF size < 1 THEN size := 1 END;  (* Guarantee presence of a globals section *)
   size := Align(size, SectionAlignment);
   metrics.size  := size;
   metrics.fadr  := 0;
@@ -711,6 +710,8 @@ BEGIN
   END;
 
   Out := Files.New(FileName);
+
+  IF varSize < 1 THEN varSize := 1 END;  (* Guarantee presence of a globals section *)
 
   (* First section starts after headers *)
   Rva            := Align(HeaderSize,                  SectionAlignment);

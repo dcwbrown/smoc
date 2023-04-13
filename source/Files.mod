@@ -455,7 +455,7 @@ END ReadBytes;
 
 (* -------------------------------------------------------------------------- *)
 
-PROCEDURE Write0(VAR r: Rider; x: ARRAY OF BYTE);
+PROCEDURE Write0*(VAR r: Rider; x: ARRAY OF BYTE);
 VAR bRes: Bool; nWritten: Dword; f: File;
 BEGIN
   f := r.f; CheckFilePos(r);
@@ -525,18 +525,18 @@ BEGIN Write0(r, x)
 END WriteBool;
 
 PROCEDURE WriteBytes*(VAR r: Rider; x: ARRAY OF BYTE; n: INTEGER);
-VAR bRes: Bool; byteWritten: Dword; f: File;
+VAR bRes: Bool; nWritten: Dword; f: File;
 BEGIN
   f := r.f; CheckFilePos(r);
-  IF n > LEN(x) THEN byteWritten := LEN(x) ELSE byteWritten := n END;
+  IF n > LEN(x) THEN nWritten := LEN(x) ELSE nWritten := n END;
   bRes := WriteFile(
-    f.hFile, SYSTEM.ADR(x), byteWritten, SYSTEM.ADR(byteWritten), 0
+    f.hFile, SYSTEM.ADR(x), nWritten, SYSTEM.ADR(nWritten), 0
   );
   IF bRes # 0 THEN
-    INC(r.pos, byteWritten); INC(f.pos, byteWritten);
+    INC(r.pos, nWritten); INC(f.pos, nWritten);
     IF f.pos > f.len THEN f.len := f.pos END
   END;
-  r.res := n - byteWritten
+  r.res := n - nWritten
 END WriteBytes;
 
 (* -------------------------------------------------------------------------- *)
