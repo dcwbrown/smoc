@@ -1,7 +1,23 @@
 MODULE ObjDump;  (*$CONSOLE*)  (* Dump content od .x64 object file *)
 IMPORT SYSTEM, Files, Rtl,w := Writer;
 
-VAR
+TYPE
+  ModuleHeader = POINTER TO ModuleHeaderDesc;
+  ModuleHeaderDesc = RECORD
+    length:      INTEGER;      (*  0                                          *)
+    next:        ModuleHeader; (*  8                                          *)
+    base:        INTEGER;      (* 16                                          *)
+    code:        INTEGER;      (* 24                                          *)
+    init:        INTEGER;      (* 32                                          *)
+    trap:        INTEGER;      (* 40                                          *)
+    name:        INTEGER;      (* 48 offset of sz module name string          *)
+    key0, key1:  INTEGER;      (* 56                                          *)
+    imports:     INTEGER;      (* 72 offset of list of import names and keys  *)
+    importCount: INTEGER;      (* 80 number of imports at base+128            *)
+    exports:     INTEGER       (* 88 offset of array of export addresses      *)
+  END;
+
+  VAR
   X64file: Files.File;  (* Input file *)
   X64:     Files.Rider;
   Buf:     ARRAY 80000H OF BYTE;
@@ -14,16 +30,17 @@ VAR
 PROCEDURE DumpX64;
 TYPE
   ModuleHeaderDesc = RECORD
-    next:            INTEGER; (*  0                                          *)
-    base:            INTEGER; (*  8                                          *)
-    code:            INTEGER; (* 16                                          *)
-    init:            INTEGER; (* 24                                          *)
-    trap:            INTEGER; (* 32                                          *)
-    name:            INTEGER; (* 40 offset of sz module name string          *)
-    key0, key1:      INTEGER; (* 48                                          *)
-    imports:         INTEGER; (* 56 offset of array of import names and keys *)
-    importCount:     INTEGER; (* 72 number of imports at base+128            *)
-    exports:         INTEGER  (* 80 offset of array of export addresses      *)
+    length:      INTEGER; (*  0                                          *)
+    next:        ModuleHeader;
+    base:        INTEGER; (*  8                                          *)
+    code:        INTEGER; (* 16                                          *)
+    init:        INTEGER; (* 24                                          *)
+    trap:        INTEGER; (* 32                                          *)
+    name:        INTEGER; (* 40 offset of sz module name string          *)
+    key0, key1:  INTEGER; (* 48                                          *)
+    imports:     INTEGER; (* 56 offset of array of import names and keys *)
+    importCount: INTEGER; (* 72 number of imports at base+128            *)
+    exports:     INTEGER  (* 80 offset of array of export addresses      *)
   END;
 VAR
   filename:   ARRAY 256 OF CHAR;
@@ -46,20 +63,21 @@ BEGIN
       w.s("File '"); w.s(filename); w.sl("' not found.");
     ELSE
       w.s("Dumping '"); w.s(filename); w.sl("'.");
-      Files.Set(X64, X64file, 0);
 
       (* Load header *)
-      Files.ReadInt(X64, header.next);            w.s("header.next:            $"); w.h(header.next);            w.sl(".");
-      Files.ReadInt(X64, header.base);            w.s("header.base:            $"); w.h(header.base);            w.sl(".");
-      Files.ReadInt(X64, header.code);            w.s("header.code:            $"); w.h(header.code);            w.sl(".");
-      Files.ReadInt(X64, header.init);            w.s("header.init:            $"); w.h(header.init);            w.sl(".");
-      Files.ReadInt(X64, header.trap);            w.s("header.trap:            $"); w.h(header.trap);            w.sl(".");
-      Files.ReadInt(X64, header.name);            w.s("header.name:            $"); w.h(header.name);            w.sl(".");
-      Files.ReadInt(X64, header.key0);            w.s("header.key0:            $"); w.h(header.key0);            w.sl(".");
-      Files.ReadInt(X64, header.key1);            w.s("header.key1:            $"); w.h(header.key1);            w.sl(".");
-      Files.ReadInt(X64, header.imports);         w.s("header.imports:         $"); w.h(header.imports);         w.sl(".");
-      Files.ReadInt(X64, header.importCount);     w.s("header.importCount:     $"); w.h(header.importCount);     w.sl(".");
-      Files.ReadInt(X64, header.exports);         w.s("header.exports:         $"); w.h(header.exports);         w.sl(".");
+      Files.Set(X64, X64file, 0);
+      Files.ReadBytes(X64, header, SYSTEM.SIZE(ModuleHeaderDesc));
+      w.s("header.length:      $"); w.h(header.length);          w.sl(".");
+      w.s("header.base:        $"); w.h(header.base);            w.sl(".");
+      w.s("header.code:        $"); w.h(header.code);            w.sl(".");
+      w.s("header.init:        $"); w.h(header.init);            w.sl(".");
+      w.s("header.trap:        $"); w.h(header.trap);            w.sl(".");
+      w.s("header.name:        $"); w.h(header.name);            w.sl(".");
+      w.s("header.key0:        $"); w.h(header.key0);            w.sl(".");
+      w.s("header.key1:        $"); w.h(header.key1);            w.sl(".");
+      w.s("header.imports:     $"); w.h(header.imports);         w.sl(".");
+      w.s("header.importCount: $"); w.h(header.importCount);     w.sl(".");
+      w.s("header.exports:     $"); w.h(header.exports);         w.sl(".");
       w.l;
 
       (* Module name and key *)

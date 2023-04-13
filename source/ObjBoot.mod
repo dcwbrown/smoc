@@ -3,26 +3,27 @@ MODULE ObjBoot;  (*$OBJECT*)
 IMPORT SYSTEM;
 
 TYPE
+  ModuleHeader = POINTER [untraced] TO ModuleHeaderDesc;
+  ModuleHeaderDesc = RECORD
+    length:      INTEGER;      (*  0                                          *)
+    next:        ModuleHeader; (*  8                                          *)
+    base:        INTEGER;      (* 16                                          *)
+    code:        INTEGER;      (* 24                                          *)
+    init:        INTEGER;      (* 32                                          *)
+    trap:        INTEGER;      (* 40                                          *)
+    name:        INTEGER;      (* 48 offset of sz module name string          *)
+    key0, key1:  INTEGER;      (* 56                                          *)
+    imports:     INTEGER;      (* 72 offset of list of import names and keys  *)
+    importCount: INTEGER;      (* 80 number of imports at base+128            *)
+    exports:     INTEGER       (* 88 offset of array of export addresses      *)
+  END;
+
   Win32Imports = POINTER TO Win32ImportsDesc;
   Win32ImportsDesc = RECORD
     GetProcAddress: PROCEDURE(module, procname: INTEGER): INTEGER;
     LoadLibraryA:   PROCEDURE(filename: INTEGER): INTEGER;
     ExitProcess:    PROCEDURE(result: INTEGER);
     New:            PROCEDURE()
-  END;
-
-  ModuleHeader = POINTER TO ModuleHeaderDesc;
-  ModuleHeaderDesc = RECORD
-    next:            INTEGER; (*  0                                          *)
-    base:            INTEGER; (*  8                                          *)
-    code:            INTEGER; (* 16                                          *)
-    init:            INTEGER; (* 24                                          *)
-    trap:            INTEGER; (* 32                                          *)
-    name:            INTEGER; (* 40 offset of sz module name string          *)
-    key0, key1:      INTEGER; (* 48                                          *)
-    imports:         INTEGER; (* 56 offset of array of import names and keys *)
-    importCount:     INTEGER; (* 72 number of imports at base+128            *)
-    exports:         INTEGER  (* 80 offset of array of export addresses      *)
   END;
 
   ModulePointers = POINTER TO ModulePointersDesc;
@@ -41,11 +42,14 @@ TYPE
 
 VAR
   oneByteBeforeBase: CHAR;      (* MUST BE THE FIRST VARIABLE - its address locates base *)
-  header:      ModuleHeader;
+  FirstHeader: ModuleHeader;
+  CurHeader:   ModuleHeader;
+  NextHeader:  ModuleHeader;
   imports:     Win32Imports;
   pointers:    ModulePointers;
   initCode:    INTEGER;
-  FirstHeader: ModuleHeader;
+  adr:         INTEGER;
+
 
   MessageBoxA: PROCEDURE(hWnd, lpText, lpCaption, uType: INTEGER);
   Initialise:  PROCEDURE;
@@ -53,11 +57,12 @@ VAR
 (* -------------------------------------------------------------------------- *)
 
 PROCEDURE Msg(str: ARRAY OF CHAR);
-VAR User: INTEGER;
+VAR user: INTEGER;  MessageBoxAdr: INTEGER;
 BEGIN
   IF MessageBoxA = NIL THEN
-    SYSTEM.LoadLibraryA(User, "user32.dll");
-    SYSTEM.GetProcAddress(MessageBoxA, User, SYSTEM.ADR("MessageBoxA"));
+    user          := imports.LoadLibraryA(SYSTEM.ADR("user32.dll"));
+    MessageBoxAdr := imports.GetProcAddress(user, SYSTEM.ADR("MessageBoxA"));
+    SYSTEM.PUT(SYSTEM.ADR(MessageBoxA), MessageBoxAdr);
   END;
   MessageBoxA(0, SYSTEM.ADR(str), SYSTEM.ADR("X64Boot"), 0);
 END Msg;
@@ -108,35 +113,12 @@ BEGIN SYSTEM.GET(adr, i);  INC(adr, 8) END GetInteger;
 
 (* -------------------------------------------------------------------------- *)
 
-PROCEDURE FindImport(name: ARRAY OF CHAR; key0, key1: INTEGER;
-                     limitheader: ModuleHeader): INTEGER;
-(* Returns address of export table of named module *)
-VAR
-  header:  ModuleHeader;
-  result:  INTEGER;
-  adr:     INTEGER;
-  hdrname: ARRAY 64 OF CHAR;
-BEGIN result := 0;
-  IF FirstHeader # NIL THEN
-    header := FirstHeader;
-    WHILE header # limitheader DO
-      adr := header.name;  GetString(adr, hdrname);
-      IF (name = hdrname) & (key0 = header.key0) & (key1 = header.key1) THEN
-        result := header.exports;  header := limitheader
-      ELSE
-        header := SYSTEM.VAL(ModuleHeader, header.next)
-      END
-    END;
-    IF (header # limitheader) THEN result := header.exports END
-  END;
-RETURN result END FindImport;
-
-
-PROCEDURE Connect(wimports: Win32Imports; header: ModuleHeader);
-(*  o  Populate procedure pointers                      *)
-(*  o  Convert offsets in the Module header to pointers *)
-(*  o  Convert import references to absolute addresses  *)
-(*  o  Convert export offsets to absolute addresses     *)
+PROCEDURE Connect(header: ModuleHeader; wimports: Win32Imports);
+(* Convert offsets in the Module header to absolute addresses. *)
+(* Populate procedure pointers.                                *)
+(* Convert export offsets to absolute addresses.               *)
+(* Lookup imported modules.                                    *)
+(* Convert import references to absolute addresses.            *)
 VAR
   pointers:  ModulePointers;
   export:    INTEGER;
@@ -148,12 +130,13 @@ VAR
   expno:     INTEGER;
   impadr:    INTEGER;
   impname:   ARRAY 64 OF CHAR;
+  impheader: ModuleHeader;
+  hdrname:   ARRAY 64 OF CHAR;
   impkey0:   INTEGER;
   impkey1:   INTEGER;
 
 BEGIN
   (* Convert module header offsets to absolute addresses *)
-  IF header.next    # 0 THEN INC(header.next,    SYSTEM.ADR(header^)) END;
   IF header.base    # 0 THEN INC(header.base,    SYSTEM.ADR(header^)) END;
   IF header.code    # 0 THEN INC(header.code,    SYSTEM.ADR(header^)) END;
   IF header.init    # 0 THEN INC(header.init,    SYSTEM.ADR(header^)) END;
@@ -182,21 +165,20 @@ BEGIN
   (* Convert import module names to module export table addresses *)
   IF header.imports # 0 THEN
     import := header.imports;
-    GetString(import, impname);  i := 0;
+    GetString(import, impname);  i := 0;  imports[i] := 0;
     WHILE impname[0] # 0X DO
       GetInteger(import, impkey0);  GetInteger(import, impkey1);
-      imports[i] := FindImport(impname, impkey0, impkey1, header);
+      impheader := FirstHeader;
+      WHILE (impheader # NIL) & (imports[i] = 0) DO
+        impadr := impheader.name;  GetString(impadr, hdrname);
+        IF (impname = hdrname) & (impkey0 = impheader.key0) & (impkey1 = impheader.key1) THEN
+          imports[i] := impheader.exports
+        END;
+        impheader := impheader.next
+      END;
       GetString(import, impname);  INC(i)
     END
   END;
-
-(*
-  FOR i := 0 TO header.importNameCount-1 DO
-    SYSTEM.GET(header.imports + i*8, import);
-    imports[i] := FindImport(import + SYSTEM.ADR(header^), header);
-    IF imports[i] = 0 THEN Abort("Cannot find import module.") END
-  END;
-*)
 
   (* Connect imports to exports *)
   FOR i := 0 TO header.importCount-1 DO
@@ -204,13 +186,17 @@ BEGIN
     modno := expno DIV 100000000H;  expno := expno MOD 100000000H;
     SYSTEM.GET(imports[modno] + expno * 8, impadr);
     SYSTEM.PUT(header.base + 128 + i*8, impadr)
-  END
+  END;
+
+  (* Set header next pointer to next header, if any. *)
+  header.next := SYSTEM.VAL(ModuleHeader, header.length + SYSTEM.ADR(header^));
+  IF header.next.length =  0 THEN header.next := NIL END;
 END Connect;
+
+(* -------------------------------------------------------------------------- *)
 
 
 BEGIN
-  FirstHeader := NIL;
-
   (* Initialisation code for the first module - this is the first code that   *)
   (* runs when the PE is loaded. It runs before it has been linked in and it  *)
   (* is its responsibility to link (connect) in both itself and all modules   *)
@@ -222,28 +208,22 @@ BEGIN
 
   (* The pointers block includes the offset from the module header to the     *)
   (* pointers block.                                                          *)
-  FirstHeader := SYSTEM.VAL(ModuleHeader,
-                            SYSTEM.ADR(pointers^) - pointers.ModHdrOffset);
+  FirstHeader := SYSTEM.VAL(ModuleHeader, SYSTEM.ADR(pointers^) - pointers.ModHdrOffset);
 
   (* A minimal set of Win32 function addresses sits just before the first     *)
   (* module header.                                                           *)
-  imports := SYSTEM.VAL(Win32Imports,
-                        SYSTEM.ADR(FirstHeader^) - SYSTEM.SIZE(Win32ImportsDesc));
+  imports := SYSTEM.VAL(Win32Imports, SYSTEM.ADR(FirstHeader^) - SYSTEM.SIZE(Win32ImportsDesc));
 
-  (* Connect the first module which is this (running) module.                 *)
-  Connect(imports, FirstHeader);
+  CurHeader := FirstHeader;
+  WHILE CurHeader # NIL DO
+    Connect(CurHeader, imports);
 
-  (* Connect the remaining modules *)
-  header := SYSTEM.VAL(ModuleHeader, FirstHeader.next);
-  WHILE header.next # 0 DO
-    Connect(imports, header);
-
-    IF header.init # 0 THEN
-      SYSTEM.PUT(SYSTEM.ADR(Initialise), header.init);
+    IF CurHeader.init # 0 THEN
+      SYSTEM.PUT(SYSTEM.ADR(Initialise), CurHeader.init);
       Initialise
     END;
 
-    header := SYSTEM.VAL(ModuleHeader, header.next)
+    CurHeader := CurHeader.next
   END;
 
 

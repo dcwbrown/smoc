@@ -12,16 +12,17 @@ TYPE
 
   ModuleHeader = POINTER TO ModuleHeaderDesc;
   ModuleHeaderDesc = RECORD
-    next:            INTEGER; (*  0                                          *)
-    base:            INTEGER; (*  8                                          *)
-    code:            INTEGER; (* 16                                          *)
-    init:            INTEGER; (* 24                                          *)
-    trap:            INTEGER; (* 32                                          *)
-    name:            INTEGER; (* 40 offset of sz module name string          *)
-    key0, key1:      INTEGER; (* 48                                          *)
-    imports:         INTEGER; (* 56 offset of array of import names and keys *)
-    importCount:     INTEGER; (* 72 number of imports at base+128            *)
-    exports:         INTEGER  (* 80 offset of array of export addresses      *)
+    length:      INTEGER;      (*  0                                          *)
+    next:        ModuleHeader; (*  8                                          *)
+    base:        INTEGER;      (* 16                                          *)
+    code:        INTEGER;      (* 24                                          *)
+    init:        INTEGER;      (* 32                                          *)
+    trap:        INTEGER;      (* 40                                          *)
+    name:        INTEGER;      (* 48 offset of sz module name string          *)
+    key0, key1:  INTEGER;      (* 56                                          *)
+    imports:     INTEGER;      (* 72 offset of list of import names and keys  *)
+    importCount: INTEGER;      (* 80 number of imports at base+128            *)
+    exports:     INTEGER       (* 88 offset of array of export addresses      *)
   END;
 
   ModulePointers = POINTER TO ModulePointersDesc;
@@ -96,15 +97,11 @@ BEGIN
   slist := B.strList;
   WHILE slist # NIL DO str := slist.obj;
     Files.Set(X64, X64file, Header.base + str.adr);  i := 0;
-    w.s("  string at $"); w.h(Header.base + str.adr); w.s(" '");
     WHILE i < str.len DO
-      w.c(B.strBuf[str.bufpos+i]);
       Files.WriteChar(X64, B.strBuf[str.bufpos+i]);  INC(i)
     END;
-    w.sl(".");
     slist := slist.next
-  END;
-
+  END
 END WriteLiteralStrings;
 
 (* -------------------------------------------------------------------------- *)
@@ -280,7 +277,6 @@ VAR
   i, adr:   INTEGER;
 BEGIN
   filename := B.modid;  B.Append(".x64", filename);
-  w.s("Write X64 object "); w.s(filename); w.sl(".");
   X64file := Files.New(filename);
 
   Header.base := Align(SYSTEM.SIZE(ModuleHeaderDesc), 16) + Align(varSize, 16);
@@ -289,11 +285,11 @@ BEGIN
   Files.Set(X64, X64file, Header.base + 96);  Files.WriteInt(X64, Header.base);
   Files.Set(X64, X64file, Header.base + 112); Files.WriteInt(X64, modPtrTable);
 
-  w.sl("WriteImportReferences.");                WriteImportReferences;
-  w.sl("WriteLiteralStrings.");                  WriteLiteralStrings;
-  w.sl("WriteRecordPointerTables.");             WriteRecordPointerTables;
-  w.sl("WriteModulePointerTable(modPtrTable)."); WriteModulePointerTable(modPtrTable);
-  w.sl("WriteStackFramePointerTables.");         WriteStackFramePointerTables;
+  WriteImportReferences;
+  WriteLiteralStrings;
+  WriteRecordPointerTables;
+  WriteModulePointerTable(modPtrTable);
+  WriteStackFramePointerTables;
 
   Header.code := Header.base + Align(staticSize, 16);
   Header.init := Header.code + initProc;
@@ -319,7 +315,7 @@ BEGIN
   Header.key0 := B.modkey[0];  Header.key1 := B.modkey[1];
 
   (* Import names *)
-  IF B.modList = NIL THEN
+  IF Header.importCount = 0 THEN
     Header.imports := 0
   ELSE
     Header.imports := Align(Files.Pos(X64), 16);
@@ -340,7 +336,8 @@ BEGIN
     Files.Write(X64,0)
   END;
 
-  Header.next := Align(Files.Pos(X64), 16);
+  Header.length := Align(Files.Pos(X64), 16);
+  Header.next   := NIL;
 
   (* Write the header *)
   Files.Set(X64, X64file, 0);
