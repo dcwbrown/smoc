@@ -1,29 +1,29 @@
-MODULE ObjBoot;  (*$OBJECT*)
+MODULE Bootstrapper;  (*$OBJECT*)
 
 IMPORT SYSTEM;
 
 TYPE
-  ModuleHeader = POINTER [untraced] TO ModuleHeaderDesc;
+  ModuleHeader* = POINTER [untraced] TO ModuleHeaderDesc;
   ModuleHeaderDesc = RECORD
-    length:      INTEGER;      (*  0                                          *)
-    next:        ModuleHeader; (*  8                                          *)
-    base:        INTEGER;      (* 16                                          *)
-    code:        INTEGER;      (* 24                                          *)
-    init:        INTEGER;      (* 32                                          *)
-    trap:        INTEGER;      (* 40                                          *)
-    name:        INTEGER;      (* 48 offset of sz module name string          *)
-    key0, key1:  INTEGER;      (* 56                                          *)
-    imports:     INTEGER;      (* 72 offset of list of import names and keys  *)
-    importCount: INTEGER;      (* 80 number of imports at base+128            *)
-    exports:     INTEGER       (* 88 offset of array of export addresses      *)
+    length*:     INTEGER;          (*   0                                *)
+    next*:       ModuleHeader;     (*   8                                *)
+    name*:       ARRAY 32 OF CHAR; (*  16                                *)
+    base:        INTEGER;          (*  48                                *)
+    code*:       INTEGER;          (*  56                                *)
+    init:        INTEGER;          (*  64                                *)
+    trap*:       INTEGER;          (*  72                                *)
+    key0, key1:  INTEGER;          (*  80                                *)
+    imports:     INTEGER;          (*  88 list of import names and keys  *)
+    importCount: INTEGER;          (*  96 number of imports at base+128  *)
+    exports:     INTEGER           (* 104 array of export addresses      *)
   END;
 
-  Win32Imports = POINTER TO Win32ImportsDesc;
-  Win32ImportsDesc = RECORD
+  StdProcs = POINTER TO StdProcsDesc;
+  StdProcsDesc = RECORD
     GetProcAddress: PROCEDURE(module, procname: INTEGER): INTEGER;
     LoadLibraryA:   PROCEDURE(filename: INTEGER): INTEGER;
     ExitProcess:    PROCEDURE(result: INTEGER);
-    New:            PROCEDURE()
+    zeroterminator: INTEGER
   END;
 
   ModulePointers = POINTER TO ModulePointersDesc;
@@ -42,32 +42,35 @@ TYPE
 
 VAR
   oneByteBeforeBase: CHAR;      (* MUST BE THE FIRST VARIABLE - its address locates base *)
-  FirstHeader: ModuleHeader;
-  CurHeader:   ModuleHeader;
-  NextHeader:  ModuleHeader;
-  imports:     Win32Imports;
-  pointers:    ModulePointers;
-  initCode:    INTEGER;
-  adr:         INTEGER;
 
+  User*:        INTEGER;
+  Kernel*:      INTEGER;
 
-  MessageBoxA: PROCEDURE(hWnd, lpText, lpCaption, uType: INTEGER);
-  Initialise:  PROCEDURE;
+  FirstModule*: ModuleHeader;
+  CurModule:    ModuleHeader;
+  NextModule:   ModuleHeader;
+  stdProcs:     StdProcs;
+  pointers:     ModulePointers;
+  initCode:     INTEGER;
+  adr:          INTEGER;
+
+  MessageBoxA:  PROCEDURE(hWnd, lpText, lpCaption, uType: INTEGER);
+  Initialise:   PROCEDURE;
+  New:          PROCEDURE;
 
 (* -------------------------------------------------------------------------- *)
 
-PROCEDURE Msg(str: ARRAY OF CHAR);
-VAR user: INTEGER;  MessageBoxAdr: INTEGER;
+PROCEDURE Msg*(str: ARRAY OF CHAR);
+VAR user: INTEGER;  adr: INTEGER;
 BEGIN
   IF MessageBoxA = NIL THEN
-    user          := imports.LoadLibraryA(SYSTEM.ADR("user32.dll"));
-    MessageBoxAdr := imports.GetProcAddress(user, SYSTEM.ADR("MessageBoxA"));
-    SYSTEM.PUT(SYSTEM.ADR(MessageBoxA), MessageBoxAdr);
+    adr := stdProcs.GetProcAddress(User, SYSTEM.ADR("MessageBoxA"));
+    SYSTEM.PUT(SYSTEM.ADR(MessageBoxA), adr);
   END;
-  MessageBoxA(0, SYSTEM.ADR(str), SYSTEM.ADR("X64Boot"), 0);
+  MessageBoxA(0, SYSTEM.ADR(str), SYSTEM.ADR("Bootstrapper"), 0);
 END Msg;
 
-PROCEDURE Msg2(str1, str2: ARRAY OF CHAR);
+PROCEDURE Msg2*(str1, str2: ARRAY OF CHAR);
 VAR msg: ARRAY 256 OF CHAR;  i, j: INTEGER;
 BEGIN i := 0;
   WHILE str1[i] # 0X DO msg[i] := str1[i];  INC(i) END;
@@ -77,7 +80,7 @@ BEGIN i := 0;
   Msg(msg)
 END Msg2;
 
-PROCEDURE MsgI(msg: ARRAY OF CHAR; n: INTEGER);
+PROCEDURE MsgI*(msg: ARRAY OF CHAR; n: INTEGER);
 VAR i, j: INTEGER;  num: ARRAY 25 OF CHAR;
 BEGIN i := LEN(num)-1;
   WHILE n > 0 DO
@@ -93,8 +96,11 @@ BEGIN i := LEN(num)-1;
   Msg2(msg, num)
 END MsgI;
 
+PROCEDURE Halt*(returnCode: INTEGER);
+BEGIN stdProcs.ExitProcess(returnCode) END Halt;
+
 PROCEDURE Abort(str: ARRAY OF CHAR);
-BEGIN Msg(str);  imports.ExitProcess(9) END Abort;
+BEGIN Msg(str);  Halt(9) END Abort;
 
 (* -------------------------------------------------------------------------- *)
 
@@ -113,7 +119,7 @@ BEGIN SYSTEM.GET(adr, i);  INC(adr, 8) END GetInteger;
 
 (* -------------------------------------------------------------------------- *)
 
-PROCEDURE Connect(header: ModuleHeader; wimports: Win32Imports);
+PROCEDURE Connect(header: ModuleHeader);
 (* Convert offsets in the Module header to absolute addresses. *)
 (* Populate procedure pointers.                                *)
 (* Convert export offsets to absolute addresses.               *)
@@ -141,16 +147,15 @@ BEGIN
   IF header.code    # 0 THEN INC(header.code,    SYSTEM.ADR(header^)) END;
   IF header.init    # 0 THEN INC(header.init,    SYSTEM.ADR(header^)) END;
   IF header.trap    # 0 THEN INC(header.trap,    SYSTEM.ADR(header^)) END;
-  IF header.name    # 0 THEN INC(header.name,    SYSTEM.ADR(header^)) END;
   IF header.imports # 0 THEN INC(header.imports, SYSTEM.ADR(header^)) END;
   IF header.exports # 0 THEN INC(header.exports, SYSTEM.ADR(header^)) END;
 
   (* Set standard procedure addresses into module static data *)
   pointers := SYSTEM.VAL(ModulePointers, header.base);
-  pointers.GetProcAddress := wimports.GetProcAddress;
-  pointers.LoadLibraryA   := wimports.LoadLibraryA;
-  pointers.ExitProcess    := wimports.ExitProcess;
-  pointers.New            := wimports.New;
+  pointers.GetProcAddress := stdProcs.GetProcAddress;
+  pointers.LoadLibraryA   := stdProcs.LoadLibraryA;
+  pointers.ExitProcess    := stdProcs.ExitProcess;
+  pointers.New            := New;
 
   (* Convert export offsets to absolute *)
   IF header.exports # 0 THEN
@@ -168,10 +173,9 @@ BEGIN
     GetString(import, impname);  i := 0;  imports[i] := 0;
     WHILE impname[0] # 0X DO
       GetInteger(import, impkey0);  GetInteger(import, impkey1);
-      impheader := FirstHeader;
+      impheader := FirstModule;
       WHILE (impheader # NIL) & (imports[i] = 0) DO
-        impadr := impheader.name;  GetString(impadr, hdrname);
-        IF (impname = hdrname) & (impkey0 = impheader.key0) & (impkey1 = impheader.key1) THEN
+        IF (impname = impheader.name) & (impkey0 = impheader.key0) & (impkey1 = impheader.key1) THEN
           imports[i] := impheader.exports
         END;
         impheader := impheader.next
@@ -186,11 +190,8 @@ BEGIN
     modno := expno DIV 100000000H;  expno := expno MOD 100000000H;
     SYSTEM.GET(imports[modno] + expno * 8, impadr);
     SYSTEM.PUT(header.base + 128 + i*8, impadr)
-  END;
+  END
 
-  (* Set header next pointer to next header, if any. *)
-  header.next := SYSTEM.VAL(ModuleHeader, header.length + SYSTEM.ADR(header^));
-  IF header.next.length =  0 THEN header.next := NIL END;
 END Connect;
 
 (* -------------------------------------------------------------------------- *)
@@ -208,24 +209,33 @@ BEGIN
 
   (* The pointers block includes the offset from the module header to the     *)
   (* pointers block.                                                          *)
-  FirstHeader := SYSTEM.VAL(ModuleHeader, SYSTEM.ADR(pointers^) - pointers.ModHdrOffset);
+  FirstModule := SYSTEM.VAL(ModuleHeader, SYSTEM.ADR(pointers^) - pointers.ModHdrOffset);
 
   (* A minimal set of Win32 function addresses sits just before the first     *)
   (* module header.                                                           *)
-  imports := SYSTEM.VAL(Win32Imports, SYSTEM.ADR(FirstHeader^) - SYSTEM.SIZE(Win32ImportsDesc));
+  stdProcs := SYSTEM.VAL(StdProcs, SYSTEM.ADR(FirstModule^) - SYSTEM.SIZE(StdProcsDesc));
 
-  CurHeader := FirstHeader;
-  WHILE CurHeader # NIL DO
-    Connect(CurHeader, imports);
+  (* Set up some useful exports from standars procedures. *)
+  Kernel := stdProcs.LoadLibraryA(SYSTEM.ADR("kernel32.dll"));
+  User   := stdProcs.LoadLibraryA(SYSTEM.ADR("user32.dll"));
 
-    IF CurHeader.init # 0 THEN
-      SYSTEM.PUT(SYSTEM.ADR(Initialise), CurHeader.init);
+  CurModule := FirstModule;
+  WHILE CurModule # NIL DO
+    Connect(CurModule);
+
+    IF CurModule.init # 0 THEN
+      CurModule.next := NIL;
+      SYSTEM.PUT(SYSTEM.ADR(Initialise), CurModule.init);
       Initialise
     END;
 
-    CurHeader := CurHeader.next
+    (* Set header next pointer to next header, if any. *)
+    NextModule := SYSTEM.VAL(ModuleHeader, CurModule.length + SYSTEM.ADR(CurModule^));
+    IF NextModule.length = 0 THEN NextModule := NIL END;
+
+    CurModule.next := NextModule;
+    CurModule      := NextModule
   END;
 
-
-  imports.ExitProcess(4);
-END ObjBoot.
+  Halt(4);
+END Bootstrapper.

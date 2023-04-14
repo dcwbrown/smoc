@@ -4,17 +4,17 @@ IMPORT SYSTEM, Files, Rtl,w := Writer;
 TYPE
   ModuleHeader = POINTER TO ModuleHeaderDesc;
   ModuleHeaderDesc = RECORD
-    length:      INTEGER;      (*  0                                          *)
-    next:        ModuleHeader; (*  8                                          *)
-    base:        INTEGER;      (* 16                                          *)
-    code:        INTEGER;      (* 24                                          *)
-    init:        INTEGER;      (* 32                                          *)
-    trap:        INTEGER;      (* 40                                          *)
-    name:        INTEGER;      (* 48 offset of sz module name string          *)
-    key0, key1:  INTEGER;      (* 56                                          *)
-    imports:     INTEGER;      (* 72 offset of list of import names and keys  *)
-    importCount: INTEGER;      (* 80 number of imports at base+128            *)
-    exports:     INTEGER       (* 88 offset of array of export addresses      *)
+    length*:     INTEGER;          (*   0                                *)
+    next*:       ModuleHeader;     (*   8                                *)
+    name:        ARRAY 32 OF CHAR; (*  16                                *)
+    base:        INTEGER;          (*  48                                *)
+    code*:       INTEGER;          (*  56                                *)
+    init:        INTEGER;          (*  64                                *)
+    trap*:       INTEGER;          (*  72                                *)
+    key0, key1:  INTEGER;          (*  80                                *)
+    imports:     INTEGER;          (*  88 list of import names and keys  *)
+    importCount: INTEGER;          (*  96 number of imports at base+128  *)
+    exports:     INTEGER           (* 104 array of export addresses      *)
   END;
 
   VAR

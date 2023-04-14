@@ -37,6 +37,9 @@ smoc test.mod
 @if errorlevel 1 goto fail
 @cd ..\..
 @build\test\test
+@
+@build\boot2\exe
+@test
 @goto end
 @
 :fail

@@ -455,7 +455,7 @@ END ReadBytes;
 
 (* -------------------------------------------------------------------------- *)
 
-PROCEDURE Write0*(VAR r: Rider; x: ARRAY OF BYTE);
+PROCEDURE Write0(VAR r: Rider; x: ARRAY OF BYTE);
 VAR bRes: Bool; nWritten: Dword; f: File;
 BEGIN
   f := r.f; CheckFilePos(r);
