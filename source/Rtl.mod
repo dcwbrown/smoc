@@ -159,10 +159,17 @@ RETURN j END Utf16ToUtf8;
 (* -------------------------------------------------------------------------- *)
 (* Utility procedures *)
 
-PROCEDURE MessageBox16*(title, msg: ARRAY OF CHAR);
-VAR iRes: Int;
-BEGIN iRes := MessageBoxW(0, SYSTEM.ADR(msg), SYSTEM.ADR(title), 0)
-END MessageBox16;
+PROCEDURE MessageBox*(title, msg: ARRAY OF CHAR);
+VAR
+  res:     INTEGER;
+  title16: ARRAY 256 OF SYSTEM.CARD16;
+  msg16:   ARRAY 256 OF SYSTEM.CARD16;
+BEGIN
+  res := Utf8ToUtf16(title, title16);
+  res := Utf8ToUtf16(msg,   msg16);
+  res := MessageBoxW(0, SYSTEM.ADR(msg16), SYSTEM.ADR(title16), 0)
+END MessageBox;
+
 
 PROCEDURE GetArg*(VAR out: ARRAY OF CHAR;  n: INTEGER);
 VAR i, arg: INTEGER;  str16: ARRAY 1024 OF SYSTEM.CARD16;
@@ -178,12 +185,14 @@ BEGIN (* GetArg *)
   i := Utf16ToUtf8(str16, out);
 END GetArg;
 
+
 PROCEDURE Time*(): INTEGER;
 VAR tick: INTEGER;
 BEGIN
   GetSystemTimeAsFileTime(SYSTEM.ADR(tick));
   RETURN tick
 END Time;
+
 
 PROCEDURE TimeToMSecs*(time: INTEGER): INTEGER;
   RETURN time DIV 10000
@@ -320,8 +329,8 @@ PROCEDURE New*(VAR ptr: INTEGER;  tdAdr: INTEGER);
 VAR p, size, need, lim: INTEGER;
 BEGIN
   SYSTEM.GET(tdAdr, size);  need := size+16;  Rounding(need);
-  IF need = 32 THEN p := GetBlock32()
-  ELSIF need = 64 THEN p := GetBlock64()
+  IF    need = 32  THEN p := GetBlock32()
+  ELSIF need = 64  THEN p := GetBlock64()
   ELSIF need = 128 THEN p := GetBlock128()
   ELSIF need = 256 THEN p := GetBlock256()
   ELSE p := GetBlock(need)

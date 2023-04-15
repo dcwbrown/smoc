@@ -106,7 +106,7 @@ BEGIN
                         SYSTEM.ADR("AddVectoredExceptionHandler"));
 
   IF AddVectoredExceptionHandler = NIL THEN
-    Bootstrapper.Msg("Trapper could not access AddVectoredExceptionHandler procedure.")
+    Bootstrapper.Msg("Trapper could not access AddVectoredExceptionHandler procedure.");
     Bootstrapper.Halt(99)
   END;
 
