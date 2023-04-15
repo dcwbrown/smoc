@@ -28,20 +28,6 @@ TYPE
 
 
 PROCEDURE DumpX64;
-TYPE
-  ModuleHeaderDesc = RECORD
-    length:      INTEGER; (*  0                                          *)
-    next:        ModuleHeader;
-    base:        INTEGER; (*  8                                          *)
-    code:        INTEGER; (* 16                                          *)
-    init:        INTEGER; (* 24                                          *)
-    trap:        INTEGER; (* 32                                          *)
-    name:        INTEGER; (* 40 offset of sz module name string          *)
-    key0, key1:  INTEGER; (* 48                                          *)
-    imports:     INTEGER; (* 56 offset of array of import names and keys *)
-    importCount: INTEGER; (* 72 number of imports at base+128            *)
-    exports:     INTEGER  (* 80 offset of array of export addresses      *)
-  END;
 VAR
   filename:   ARRAY 256 OF CHAR;
   header:     ModuleHeaderDesc;
@@ -72,7 +58,7 @@ BEGIN
       w.s("header.code:        $"); w.h(header.code);            w.sl(".");
       w.s("header.init:        $"); w.h(header.init);            w.sl(".");
       w.s("header.trap:        $"); w.h(header.trap);            w.sl(".");
-      w.s("header.name:        $"); w.h(header.name);            w.sl(".");
+      w.s("header.name:        '"); w.s(header.name);            w.sl("'.");
       w.s("header.key0:        $"); w.h(header.key0);            w.sl(".");
       w.s("header.key1:        $"); w.h(header.key1);            w.sl(".");
       w.s("header.imports:     $"); w.h(header.imports);         w.sl(".");
@@ -81,8 +67,7 @@ BEGIN
       w.l;
 
       (* Module name and key *)
-      Files.Set(X64, X64file, header.name);  Files.ReadString(X64, name);
-      w.s("MODULE '"); w.s(name); w.s("' key $");
+      w.s("MODULE '"); w.s(header.name); w.s("' key $");
       w.hn(header.key0, 16); w.s(', $'); w.hn(header.key1, 16); w.sl(".");
 
       (* Imported module names and keys *)

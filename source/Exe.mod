@@ -21,12 +21,9 @@ VAR
   ImportSize: INTEGER;
   EntryPoint: INTEGER;
 
-  (* Section layout
-
-     Generates 2 sections:
-
+  (* Section layout - generates 2 sections:
      1. Imports section requesting standard system functions
-     2. Oberon section
+     2. Oberon section containing concatenated modules in link sequence
   *)
 
 
@@ -115,8 +112,8 @@ BEGIN
 
   FirstModule := Files.Pos(Exe);
 
-  WriteFile("build\boot2\BootStrapper.X64");
-  WriteFile("build\boot2\Trapper.X64");
+  WriteFile("build\boot2\Kernel.X64");
+(*WriteFile("build\boot2\Trapper.X64");*)
   WriteFile("build\boot2\ObjWriter.X64");
   WriteFile("build\boot2\ObjTest.X64");
   Files.WriteInt(Exe, 0);  (* Mark end of modules - appears as header.length = 0 *)
@@ -304,13 +301,13 @@ BEGIN
   hdr.majorSubsystemVersion   := 5;
   hdr.sizeOfImage             := Align(HeaderSize, SectionAlignment)
                                + Align(ReserveSize, SectionAlignment)
-                               + 4096; (* import section *)
+                               + 4096;   (* import section *)
   hdr.sizeOfHeaders           := HeaderSize;
-  hdr.subsystem               := 3;    (* Console (or 2 for GUI) *)
-  hdr.dllCharacteristics      := 400H; (* No SEH *)
+  hdr.subsystem               := 3;      (* Console (or 2 for GUI) *)
+  hdr.dllCharacteristics      := 400H;   (* No SEH *)
   hdr.sizeOfStackReserve      := 1000H;
   hdr.sizeOfStackCommit       := 1000H;
-  hdr.sizeOfHeapReserve       := 10000H;
+  hdr.sizeOfHeapReserve       := 1000H;  (* Minimal heap - Windows may use it, we don't *)
   hdr.numberOfRvaAndSizes     := 16;
 
   (* Optional header data directories *)
@@ -326,12 +323,11 @@ BEGIN
                      Align(ImportSize, FileAlignment),     (* Size on disk *)
                      RvaImport, FadrImport,
                      SReadable + SWriteable + SInitialised);
-  WriteSectionHeader(".text",
-                     Align(1000000, SectionAlignment),  (* Reserved size in memory *)
-                     Align(OberonSize, FileAlignment),  (* Size on disk *)
+  WriteSectionHeader("Oberon",
+                     Align(ReserveSize, SectionAlignment),  (* Reserved size in memory *)
+                     Align(OberonSize, FileAlignment),      (* Size on disk *)
                      RvaOberon, FadrOberon,
                      SReadable + SWriteable + SExecutable + SCode);
-                   (*SReadable + SWriteable + SExecutable + SInitialised + SCode);*)
 END WritePEHeader;
 
 (* -------------------------------------------------------------------------- *)

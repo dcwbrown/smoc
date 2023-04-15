@@ -1,4 +1,4 @@
-MODULE Bootstrapper;  (*$OBJECT*)
+MODULE Kernel;  (*$OBJECT*)
 
 IMPORT SYSTEM;
 
@@ -18,16 +18,16 @@ TYPE
     exports:     INTEGER           (* 104 array of export addresses      *)
   END;
 
-  StdProcs = POINTER TO StdProcsDesc;
-  StdProcsDesc = RECORD
+  PEImportTable = POINTER [untraced] TO PEImportsDesc;
+  PEImportsDesc = RECORD
     GetProcAddress: PROCEDURE(module, procname: INTEGER): INTEGER;
     LoadLibraryA:   PROCEDURE(filename: INTEGER): INTEGER;
     ExitProcess:    PROCEDURE(result: INTEGER);
     zeroterminator: INTEGER
   END;
 
-  ModulePointers = POINTER TO ModulePointersDesc;
-  ModulePointersDesc = RECORD
+  ModuleBase = POINTER [untraced] TO ModuleBaseDesc;
+  ModuleBaseDesc = RECORD
     (*   0 *) GetProcAddress: PROCEDURE(module, procname: INTEGER): INTEGER;
     (*   8 *) LoadLibraryA:   PROCEDURE(filename: INTEGER): INTEGER;
     (*  16 *) ExitProcess:    PROCEDURE(result: INTEGER);
@@ -37,26 +37,20 @@ TYPE
     (*  96 *) ModHdrOffset:   INTEGER;
     (* 104 *) StackPtrTable:  INTEGER;
     (* 112 *) ModulePtrTable: INTEGER;
-    (* 120 *) New:            PROCEDURE()
+    (* 120 *) New:            PROCEDURE(VAR ptr: INTEGER;  tdAdr: INTEGER)
   END;
 
 VAR
-  oneByteBeforeBase: CHAR;      (* MUST BE THE FIRST VARIABLE - its address locates base *)
+  oneByteBeforeBase: CHAR;      (* MUST BE THE FIRST GLOBAL VARIABLE - its address locates base *)
 
   User*:        INTEGER;
   Kernel*:      INTEGER;
 
   FirstModule*: ModuleHeader;
-  CurModule:    ModuleHeader;
-  NextModule:   ModuleHeader;
-  stdProcs:     StdProcs;
-  pointers:     ModulePointers;
-  initCode:     INTEGER;
-  adr:          INTEGER;
+  PEImports:    PEImportTable;
 
   MessageBoxA:  PROCEDURE(hWnd, lpText, lpCaption, uType: INTEGER);
-  Initialise:   PROCEDURE;
-  New:          PROCEDURE;
+
 
 (* -------------------------------------------------------------------------- *)
 
@@ -64,10 +58,10 @@ PROCEDURE Msg*(str: ARRAY OF CHAR);
 VAR user: INTEGER;  adr: INTEGER;
 BEGIN
   IF MessageBoxA = NIL THEN
-    adr := stdProcs.GetProcAddress(User, SYSTEM.ADR("MessageBoxA"));
+    adr := PEImports.GetProcAddress(User, SYSTEM.ADR("MessageBoxA"));
     SYSTEM.PUT(SYSTEM.ADR(MessageBoxA), adr);
   END;
-  MessageBoxA(0, SYSTEM.ADR(str), SYSTEM.ADR("Bootstrapper"), 0);
+  MessageBoxA(0, SYSTEM.ADR(str), SYSTEM.ADR("Kernel"), 0);
 END Msg;
 
 PROCEDURE Msg2*(str1, str2: ARRAY OF CHAR);
@@ -97,40 +91,58 @@ BEGIN i := LEN(num)-1;
 END MsgI;
 
 PROCEDURE Halt*(returnCode: INTEGER);
-BEGIN stdProcs.ExitProcess(returnCode) END Halt;
+BEGIN PEImports.ExitProcess(returnCode) END Halt;
 
 PROCEDURE Abort(str: ARRAY OF CHAR);
 BEGIN Msg(str);  Halt(9) END Abort;
 
 (* -------------------------------------------------------------------------- *)
 
-PROCEDURE GetString(VAR adr: INTEGER; VAR str: ARRAY OF CHAR);
+PROCEDURE New*(VAR ptr: INTEGER;  tdAdr: INTEGER);
+(*VAR p, size, need, lim: INTEGER;*)
+BEGIN
+  Abort("New not implemented.");
+(*
+  SYSTEM.GET(tdAdr, size);  need := size+16;  Rounding(need);
+  IF    need = 32  THEN p := GetBlock32()
+  ELSIF need = 64  THEN p := GetBlock64()
+  ELSIF need = 128 THEN p := GetBlock128()
+  ELSIF need = 256 THEN p := GetBlock256()
+  ELSE p := GetBlock(need)
+  END;
+
+  SYSTEM.PUT(p, tdAdr);  SYSTEM.PUT(p+8, 0);  ptr := p+16;
+  INC(p, 16);  INC(allocated, need);  lim := (p+size+7) DIV 8 * 8;
+  WHILE p < lim DO SYSTEM.PUT(p, 0);  INC(p, 8) END
+*)
+END New;
+
+
+(* -------------------------------------------------------------------------- *)
+
+PROCEDURE GetString(adr: INTEGER; VAR str: ARRAY OF CHAR): INTEGER;
 VAR i: INTEGER;
 BEGIN i := 0;
   REPEAT
     SYSTEM.GET(adr, str[i]);  INC(adr);  INC(i)
   UNTIL (i = LEN(str)) OR (str[i-1] = 0X);
   IF i = LEN(str) THEN str[i-1] := 0X END
-END GetString;
-
-
-PROCEDURE GetInteger(VAR adr, i: INTEGER);
-BEGIN SYSTEM.GET(adr, i);  INC(adr, 8) END GetInteger;
+RETURN i END GetString;
 
 (* -------------------------------------------------------------------------- *)
 
-PROCEDURE Connect(header: ModuleHeader);
+PROCEDURE Link(header: ModuleHeader);
 (* Convert offsets in the Module header to absolute addresses. *)
 (* Populate procedure pointers.                                *)
 (* Convert export offsets to absolute addresses.               *)
 (* Lookup imported modules.                                    *)
 (* Convert import references to absolute addresses.            *)
 VAR
-  pointers:  ModulePointers;
+  base:      ModuleBase;
   export:    INTEGER;
   exportadr: INTEGER;
   i:         INTEGER;
-  import:    INTEGER;
+  importAdr: INTEGER;
   imports:   ARRAY 64 OF INTEGER;
   modno:     INTEGER;
   expno:     INTEGER;
@@ -151,11 +163,11 @@ BEGIN
   IF header.exports # 0 THEN INC(header.exports, SYSTEM.ADR(header^)) END;
 
   (* Set standard procedure addresses into module static data *)
-  pointers := SYSTEM.VAL(ModulePointers, header.base);
-  pointers.GetProcAddress := stdProcs.GetProcAddress;
-  pointers.LoadLibraryA   := stdProcs.LoadLibraryA;
-  pointers.ExitProcess    := stdProcs.ExitProcess;
-  pointers.New            := New;
+  base := SYSTEM.VAL(ModuleBase, header.base);
+  base.GetProcAddress := PEImports.GetProcAddress;
+  base.LoadLibraryA   := PEImports.LoadLibraryA;
+  base.ExitProcess    := Halt;
+  base.New            := New;
 
   (* Convert export offsets to absolute *)
   IF header.exports # 0 THEN
@@ -167,12 +179,14 @@ BEGIN
     END
   END;
 
-  (* Convert import module names to module export table addresses *)
+  (* Convert imported module names to module export table addresses *)
   IF header.imports # 0 THEN
-    import := header.imports;
-    GetString(import, impname);  i := 0;  imports[i] := 0;
+    importAdr := header.imports;
+    INC(importAdr, GetString(importAdr, impname));
+    i := 0;  imports[i] := 0;
     WHILE impname[0] # 0X DO
-      GetInteger(import, impkey0);  GetInteger(import, impkey1);
+      SYSTEM.GET(importAdr, impkey0);  INC(importAdr, 8);
+      SYSTEM.GET(importAdr, impkey1);  INC(importAdr, 8);
       impheader := FirstModule;
       WHILE (impheader # NIL) & (imports[i] = 0) DO
         IF (impname = impheader.name) & (impkey0 = impheader.key0) & (impkey1 = impheader.key1) THEN
@@ -180,23 +194,39 @@ BEGIN
         END;
         impheader := impheader.next
       END;
-      GetString(import, impname);  INC(i)
+      INC(importAdr, GetString(importAdr, impname));  INC(i)
     END
   END;
 
-  (* Connect imports to exports *)
+  (* Link imports to exports *)
   FOR i := 0 TO header.importCount-1 DO
     SYSTEM.GET(header.base + 128 + i*8, expno);
     modno := expno DIV 100000000H;  expno := expno MOD 100000000H;
     SYSTEM.GET(imports[modno] + expno * 8, impadr);
     SYSTEM.PUT(header.base + 128 + i*8, impadr)
   END
+END Link;
 
-END Connect;
+
+(* -------------------------------------------------------------------------- *)
+
+PROCEDURE InitialiseKernel;  (* initialise kernel module *)
+BEGIN
+  (* Set up some useful exports from standard procedures. *)
+  Kernel := PEImports.LoadLibraryA(SYSTEM.ADR("kernel32.dll"));
+  User   := PEImports.LoadLibraryA(SYSTEM.ADR("user32.dll"));
+END InitialiseKernel;
 
 (* -------------------------------------------------------------------------- *)
 
 
+PROCEDURE Bootstrap;
+VAR
+  kernelBase:   ModuleBase;
+  kernelHeader: ModuleHeader;
+  module:       ModuleHeader;
+  nextModule:   ModuleHeader;
+  initialise:   PROCEDURE;
 BEGIN
   (* Initialisation code for the first module - this is the first code that   *)
   (* runs when the PE is loaded. It runs before it has been linked in and it  *)
@@ -205,37 +235,47 @@ BEGIN
 
   (* The 128 byte pointers block is at the start of static data and is the    *)
   (* base address used within the module code.                                *)
-  pointers := SYSTEM.VAL(ModulePointers, SYSTEM.ADR(oneByteBeforeBase) + 1);
+  kernelBase := SYSTEM.VAL(ModuleBase, SYSTEM.ADR(oneByteBeforeBase) + 1);
 
-  (* The pointers block includes the offset from the module header to the     *)
-  (* pointers block.                                                          *)
-  FirstModule := SYSTEM.VAL(ModuleHeader, SYSTEM.ADR(pointers^) - pointers.ModHdrOffset);
+  (* The kernelBase block includes the offset from the module header to the   *)
+  (* kernelBase block.                                                        *)
+  kernelHeader := SYSTEM.VAL(ModuleHeader,
+                            SYSTEM.ADR(kernelBase^) - kernelBase.ModHdrOffset);
 
   (* A minimal set of Win32 function addresses sits just before the first     *)
   (* module header.                                                           *)
-  stdProcs := SYSTEM.VAL(StdProcs, SYSTEM.ADR(FirstModule^) - SYSTEM.SIZE(StdProcsDesc));
+  PEImports := SYSTEM.VAL(PEImportTable,
+                          SYSTEM.ADR(kernelHeader^) - SYSTEM.SIZE(PEImportsDesc));
 
-  (* Set up some useful exports from standars procedures. *)
-  Kernel := stdProcs.LoadLibraryA(SYSTEM.ADR("kernel32.dll"));
-  User   := stdProcs.LoadLibraryA(SYSTEM.ADR("user32.dll"));
+  (* Link this module - the kernel *)
+  FirstModule := kernelHeader;
+  Link(kernelHeader);
+  InitialiseKernel;
 
-  CurModule := FirstModule;
-  WHILE CurModule # NIL DO
-    Connect(CurModule);
+  (* Link remaining modules in EXE 'Oberon' section *)
+  module := SYSTEM.VAL(ModuleHeader,
+                          SYSTEM.ADR(kernelHeader^) + kernelHeader.length);
+  kernelHeader.next := module;
+  WHILE module # NIL DO
+    Link(module);  module.next := NIL;
 
-    IF CurModule.init # 0 THEN
-      CurModule.next := NIL;
-      SYSTEM.PUT(SYSTEM.ADR(Initialise), CurModule.init);
-      Initialise
+    IF module.init # 0 THEN
+      SYSTEM.PUT(SYSTEM.ADR(initialise), module.init);  initialise;
     END;
 
     (* Set header next pointer to next header, if any. *)
-    NextModule := SYSTEM.VAL(ModuleHeader, CurModule.length + SYSTEM.ADR(CurModule^));
-    IF NextModule.length = 0 THEN NextModule := NIL END;
+    nextModule := SYSTEM.VAL(ModuleHeader, module.length + SYSTEM.ADR(module^));
+    IF nextModule.length = 0 THEN nextModule := NIL END;
 
-    CurModule.next := NextModule;
-    CurModule      := NextModule
-  END;
+    module.next := nextModule;
+    module      := nextModule
+  END
+END Bootstrap;
 
+(* -------------------------------------------------------------------------- *)
+
+
+BEGIN
+  Bootstrap;
   Halt(4);
-END Bootstrapper.
+END Kernel.
