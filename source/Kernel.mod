@@ -40,8 +40,11 @@ TYPE
     (* 120 *) New:            PROCEDURE(VAR ptr: INTEGER;  tdAdr: INTEGER)
   END;
 
+  ExceptionHandlerProc = PROCEDURE(p: INTEGER): INTEGER;
+
 VAR
-  oneByteBeforeBase: CHAR;      (* MUST BE THE FIRST GLOBAL VARIABLE - its address locates base *)
+  oneByteBeforeBase: CHAR; (* MUST BE THE FIRST GLOBAL VARIABLE       *)
+                           (* - its address locates the kernel's base *)
 
   User*:        INTEGER;
   Kernel*:      INTEGER;
@@ -49,52 +52,290 @@ VAR
   FirstModule*: ModuleHeader;
   PEImports:    PEImportTable;
 
-  MessageBoxA:  PROCEDURE(hWnd, lpText, lpCaption, uType: INTEGER);
+  Halt*:        PROCEDURE(returnCode: INTEGER);
+
+  MessageBoxW:  PROCEDURE(hWnd, lpText, lpCaption, uType: INTEGER): INTEGER;
+  AddVectoredExceptionHandler: PROCEDURE(first: INTEGER; filter: ExceptionHandlerProc);
+
+
+(* -------------------------------------------------------------------------- *)
+(* ------------ Unicode Transformation Formats UTF-8 and UTF-16 ------------- *)
+(* -------------------------------------------------------------------------- *)
+
+(* UTF8:                                                                                           *)
+(* -------------- codepoint --------------    ----------------------- bytes ----------------------- *)
+(* 0000 0000 0000 0000 0000 0000 0zzz zzzz    0zzzzzzz                                              *)
+(* 0000 0000 0000 0000 0000 0yyy yyzz zzzz    110yyyyy 10zzzzzz                                     *)
+(* 0000 0000 0000 0000 xxxx yyyy yyzz zzzz    1110xxxx 10yyyyyy 10zzzzzz                            *)
+(* 0000 0000 000w wwxx xxxx yyyy yyzz zzzz    11110www 10xxxxxx 10yyyyyy 10zzzzzz                   *)
+(* 0000 00vv wwww wwxx xxxx yyyy yyzz zzzz    111110vv 10wwwwww 10xxxxxx 10yyyyyy 10zzzzzz          *)
+(* 0uvv vvvv wwww wwxx xxxx yyyy yyzz zzzz    1111110u 10vvvvvv 10wwwwww 10xxxxxx 10yyyyyy 10zzzzzz *)
+
+PROCEDURE GetUtf8*(src: ARRAY OF BYTE; VAR i: INTEGER): INTEGER;
+VAR n, result: INTEGER;
+BEGIN ASSERT(i < LEN(src)); result := src[i];  INC(i);
+  IF result >= 0C0H THEN
+    IF    result >= 0FCH THEN result := result MOD 2;  n := 5
+    ELSIF result >= 0F8H THEN result := result MOD 4;  n := 4
+    ELSIF result >= 0F0H THEN result := result MOD 8;  n := 3
+    ELSIF result >= 0E0H THEN result := result MOD 16; n := 2
+    ELSE                      result := result MOD 32; n := 1
+    END;
+    WHILE n > 0 DO
+      result := LSL(result,6);  DEC(n);
+      IF (i < LEN(src)) & (src[i] DIV 40H = 2) THEN
+        INC(result, src[i] MOD 40H);  INC(i)
+      END
+    END
+  END;
+RETURN result END GetUtf8;
+
+PROCEDURE PutUtf8*(c: INTEGER; VAR dst: ARRAY OF BYTE; VAR i: INTEGER);
+VAR n: INTEGER;
+BEGIN
+  ASSERT(i < LEN(dst));
+  ASSERT(c > 0);  ASSERT(c < 80000000H);
+  IF i < LEN(dst) THEN
+    IF c < 80H THEN dst[i] := c;  INC(i)
+    ELSE
+      IF    c < 800H     THEN  dst[i] := 0C0H + ASR(c, 6);    n := 1;
+      ELSIF c < 10000H   THEN  dst[i] := 0E0H + ASR(c, 12);   n := 2;
+      ELSIF c < 200000H  THEN  dst[i] := 0F0H + ASR(c, 18);   n := 3;
+      ELSIF c < 4000000H THEN  dst[i] := 0F8H + ASR(c, 24);   n := 4;
+      ELSE                     dst[i] := 0FCH + ASR(c, 30);   n := 5;
+      END;
+      INC(i);
+      WHILE (n > 0) & (i < LEN(dst)) DO
+        DEC(n);  dst[i] := 80H + ASR(c, n*6) MOD 40H;  INC(i)
+      END;
+    END
+  END
+END PutUtf8;
+
+
+PROCEDURE GetUtf16*(src: ARRAY OF SYSTEM.CARD16; VAR i: INTEGER): INTEGER;
+VAR result: INTEGER;
+BEGIN
+  ASSERT(i < LEN(src));
+  result := src[i];  INC(i);
+  IF result DIV 400H = 36H THEN    (* High surrogate *)
+    result := LSL(result MOD 400H, 10) + 10000H;
+    IF (i < LEN(src)) & (src[i] DIV 400H = 37H) THEN  (* Low surrogate *)
+      INC(result, src[i] MOD 400H);  INC(i)
+    END
+  END
+RETURN result END GetUtf16;
+
+PROCEDURE PutUtf16*(ch: INTEGER; VAR dst: ARRAY OF SYSTEM.CARD16; VAR i: INTEGER);
+BEGIN
+  ASSERT(i < LEN(dst));
+  IF (ch < 10000H) & (i < LEN(dst)) THEN
+    dst[i] := ch;  INC(i)
+  ELSIF i+1 < LEN(dst) THEN
+    DEC(ch, 10000H);
+    dst[i] := 0D800H + ch DIV 400H;  INC(i);
+    dst[i] := 0DC00H + ch MOD 400H;  INC(i);
+  END
+END PutUtf16;
+
+
+PROCEDURE Utf8ToUtf16*(src: ARRAY OF BYTE;  VAR dst: ARRAY OF SYSTEM.CARD16): INTEGER;
+VAR i, j: INTEGER;
+BEGIN  i := 0;  j := 0;
+  WHILE (i < LEN(src)) & (src[i] # 0) DO PutUtf16(GetUtf8(src, i), dst, j) END;
+  IF j < LEN(dst) THEN dst[j] := 0;  INC(j) END
+RETURN j END Utf8ToUtf16;
+
+PROCEDURE Utf16ToUtf8*(src: ARRAY OF SYSTEM.CARD16;  VAR dst: ARRAY OF BYTE): INTEGER;
+VAR i, j: INTEGER;
+BEGIN  i := 0;  j := 0;
+  WHILE (i < LEN(src)) & (src[i] # 0) DO PutUtf8(GetUtf16(src, i), dst, j) END;
+  IF j < LEN(dst) THEN dst[j] := 0;  INC(j) END
+RETURN j END Utf16ToUtf8;
+
+
+(* -------------------------------------------------------------------------- *)
+(* ---------------- Last resort error reporting - MessageBox ---------------- *)
+(* -------------------------------------------------------------------------- *)
+
+PROCEDURE MessageBox*(title, msg: ARRAY OF CHAR);
+VAR
+  res:     INTEGER;
+  title16: ARRAY 256 OF SYSTEM.CARD16;
+  msg16:   ARRAY 256 OF SYSTEM.CARD16;
+BEGIN
+  res := Utf8ToUtf16(title, title16);
+  res := Utf8ToUtf16(msg,   msg16);
+  res := MessageBoxW(0, SYSTEM.ADR(msg16), SYSTEM.ADR(title16), 0)
+END MessageBox;
+
+
+(* -------------------------------------------------------------------------- *)
+(* ----------------------- Simple Integer formatting ------------------------ *)
+(* -------------------------------------------------------------------------- *)
+
+PROCEDURE IntToDecimal*(n: INTEGER; VAR s: ARRAY OF CHAR);
+VAR i, j: INTEGER;  ch: CHAR;
+BEGIN
+  IF n = 8000000000000000H THEN s := "-9223372036854775808"
+  ELSE i := 0;
+    IF n < 0 THEN s[0] := '-';  i := 1; END;
+    j := i;
+    REPEAT s[j] := CHR(n MOD 10 + 48);  INC(j);  n := n DIV 10 UNTIL n = 0;
+    s[j] := 0X;  DEC(j);
+    WHILE i < j DO ch:=s[i]; s[i]:=s[j]; s[j]:=ch; INC(i); DEC(j) END
+  END
+END IntToDecimal;
+
+PROCEDURE IntToHex*(n: INTEGER; VAR s: ARRAY OF CHAR);
+VAR d, i, j: INTEGER;  ch: CHAR;
+BEGIN
+  i := 0;  j := 0;
+  REPEAT
+    d := n MOD 16;  n := n DIV 16;
+    IF d <= 9 THEN s[j] := CHR(d + 48) ELSE s[j] := CHR(d + 55) END;
+    INC(j)
+  UNTIL n = 0;
+  s[j] := 0X;  DEC(j);
+  WHILE i < j DO ch:=s[i]; s[i]:=s[j]; s[j]:=ch; INC(i); DEC(j) END
+END IntToHex;
+
+
+(* -------------------------------------------------------------------------- *)
+(* ---------------------- Very basic string functions ----------------------- *)
+(* -------------------------------------------------------------------------- *)
+
+PROCEDURE Length*(s: ARRAY OF CHAR): INTEGER;
+VAR l: INTEGER;
+BEGIN  l := 0;  WHILE (l < LEN(s)) & (s[l] # 0X) DO INC(l) END
+RETURN l END Length;
+
+PROCEDURE Append*(s: ARRAY OF CHAR; VAR d: ARRAY OF CHAR);
+VAR i, j: INTEGER;
+BEGIN
+  j := Length(d);
+  i := 0; WHILE (i < LEN(s)) & (j < LEN(d)) & (s[i] # 0X) DO
+    d[j] := s[i];  INC(i);  INC(j)
+  END;
+  IF j >= LEN( d) THEN DEC(j) END;  d[j] := 0X
+END Append;
+
+
+(* -------------------------------------------------------------------------- *)
+(* --------------------------- Exception handling --------------------------- *)
+(* -------------------------------------------------------------------------- *)
+
+PROCEDURE WriteException(code: INTEGER; VAR s: ARRAY OF CHAR);
+VAR number:  ARRAY 25 OF CHAR;
+BEGIN
+  IF    code = 0C0000005H THEN s := "Access violation"
+  ELSIF code = 0C0000006H THEN s := "In-page error"
+  ELSIF code = 0C000001DH THEN s := "Illegal instruction"
+  ELSIF code = 0C000008EH THEN s := "Divide by zero"
+  ELSIF code = 0C0000094H THEN s := "Integer divide by zero"
+                          ELSE s := "Exception. Code: $";
+                               IntToHex(code, number);
+                               Append(number, s)
+  END
+END WriteException;
+
+PROCEDURE ExceptionHandler(p: INTEGER): INTEGER;
+TYPE
+  Exception = POINTER TO ExceptionDesc;
+  ExceptionDesc = RECORD
+    code:         SYSTEM.CARD32;
+    flags:        SYSTEM.CARD32;
+    nested:       Exception;
+    address:      INTEGER;
+    NumberParams: SYSTEM.CARD32;
+    Params:       ARRAY 15 OF INTEGER
+  END;
+
+  Context = POINTER TO ContextDesc;
+  ContextDesc = RECORD
+  END;
+
+  ExceptionPointers = POINTER TO ExceptionPointersDesc;
+  ExceptionPointersDesc = RECORD
+    exception: Exception;
+    context:   Context
+  END;
+
+VAR
+  ep:      ExceptionPointers;
+  module:  ModuleHeader;
+  address: INTEGER;
+  trapadr: INTEGER;
+  detail:  INTEGER;
+  trap:    INTEGER;
+  line:    INTEGER;
+  col:     INTEGER;
+  adr:     INTEGER;
+  report:  ARRAY 256 OF CHAR;
+  number:  ARRAY 25 OF CHAR;
+BEGIN
+  ep := SYSTEM.VAL(ExceptionPointers, p);
+  address := ep.exception.address;
+  module  := FirstModule;
+  WHILE (module # NIL) & (module.length # 0) & ((address < module.code) OR (address > module.trap)) DO
+    module := module.next
+  END;
+
+  IF module = NIL THEN
+    WriteException(ep.exception.code, report);
+    Append(" at address $", report);
+    IntToHex(address, number);  Append(number, report);
+    Append(" (not in loaded module code).", report);
+  ELSE
+    trapadr := module.trap;
+    DEC(address, module.code);  (* Make address relative to modules code *)
+    SYSTEM.GET(trapadr, detail);
+    WHILE detail # -1 DO
+      trap := ASR(detail, 60) MOD 10H;
+      line := ASR(detail, 40) MOD 100000H;
+      col  := ASR(detail, 30) MOD 400H;
+      adr  := detail MOD 40000000H;
+      IF adr = address THEN
+        detail := -1  (* End loop *)
+      ELSE
+        INC(trapadr, 8);  SYSTEM.GET(trapadr, detail);
+      END
+    END;
+    IF (adr = address) & (trap <= 8) THEN
+      CASE trap OF
+      | 0: report := "Modkey trap in module "
+      | 1: report := "Array trap in module "
+      | 2: report := "Type trap in module "
+      | 3: report := "String trap in module "
+      | 4: report := "Nil trap in module "
+      | 5: report := "NilProc trap in module "
+      | 6: report := "Divide trap in module "
+      | 7: report := "Assert trap in module "
+      | 8: report := "Rtl trap in module "
+      END;
+      Append(module.name, report);
+      Append(" at ", report);
+      IntToDecimal(line, number); Append(number, report);
+      Append(":", report);
+      IntToDecimal(col,  number); Append(number, report);
+    ELSE
+      WriteException(ep.exception.code, report);
+      Append(" in module ", report);  Append(module.name, report);
+      Append(" at code offset $", report);
+      IntToHex(address, number);  Append(number, report)
+    END
+  END;
+
+  MessageBox("Exception", report);
+  Halt(99)
+RETURN 0 END ExceptionHandler;
+
 
 
 (* -------------------------------------------------------------------------- *)
 
-PROCEDURE Msg*(str: ARRAY OF CHAR);
-VAR user: INTEGER;  adr: INTEGER;
-BEGIN
-  IF MessageBoxA = NIL THEN
-    adr := PEImports.GetProcAddress(User, SYSTEM.ADR("MessageBoxA"));
-    SYSTEM.PUT(SYSTEM.ADR(MessageBoxA), adr);
-  END;
-  MessageBoxA(0, SYSTEM.ADR(str), SYSTEM.ADR("Kernel"), 0);
-END Msg;
-
-PROCEDURE Msg2*(str1, str2: ARRAY OF CHAR);
-VAR msg: ARRAY 256 OF CHAR;  i, j: INTEGER;
-BEGIN i := 0;
-  WHILE str1[i] # 0X DO msg[i] := str1[i];  INC(i) END;
-  j := i;  i := 0;
-  WHILE str2[i] # 0X DO msg[j] := str2[i];  INC(i);  INC(j) END;
-  msg[j] := 0X;
-  Msg(msg)
-END Msg2;
-
-PROCEDURE MsgI*(msg: ARRAY OF CHAR; n: INTEGER);
-VAR i, j: INTEGER;  num: ARRAY 25 OF CHAR;
-BEGIN i := LEN(num)-1;
-  WHILE n > 0 DO
-    num[i] := CHR(48 + n MOD 10);
-    n := n DIV 10;
-    DEC(i)
-  END;
-  IF i = LEN(num)-1 THEN num[i] := "0";  DEC(i) END;
-  j := i + 1;
-  i := 0;
-  WHILE j < LEN(num) DO num[i] := num[j];  INC(i);  INC(j) END;
-  num[i] := 0X;
-  Msg2(msg, num)
-END MsgI;
-
-PROCEDURE Halt*(returnCode: INTEGER);
-BEGIN PEImports.ExitProcess(returnCode) END Halt;
-
 PROCEDURE Abort(str: ARRAY OF CHAR);
-BEGIN Msg(str);  Halt(9) END Abort;
+BEGIN MessageBox("Abort", str);  Halt(9) END Abort;
 
 (* -------------------------------------------------------------------------- *)
 
@@ -119,6 +360,8 @@ END New;
 
 
 (* -------------------------------------------------------------------------- *)
+(* ----------------------- Extract string from memory ----------------------- *)
+(* -------------------------------------------------------------------------- *)
 
 PROCEDURE GetString(adr: INTEGER; VAR str: ARRAY OF CHAR): INTEGER;
 VAR i: INTEGER;
@@ -128,6 +371,7 @@ BEGIN i := 0;
   UNTIL (i = LEN(str)) OR (str[i-1] = 0X);
   IF i = LEN(str) THEN str[i-1] := 0X END
 RETURN i END GetString;
+
 
 (* -------------------------------------------------------------------------- *)
 
@@ -213,8 +457,17 @@ END Link;
 PROCEDURE InitialiseKernel;  (* initialise kernel module *)
 BEGIN
   (* Set up some useful exports from standard procedures. *)
+  Halt   := PEImports.ExitProcess;
   Kernel := PEImports.LoadLibraryA(SYSTEM.ADR("kernel32.dll"));
   User   := PEImports.LoadLibraryA(SYSTEM.ADR("user32.dll"));
+
+  SYSTEM.PUT(SYSTEM.ADR(MessageBoxW),
+             PEImports.GetProcAddress(User, SYSTEM.ADR("MessageBoxW")));
+
+  SYSTEM.PUT(SYSTEM.ADR(AddVectoredExceptionHandler),
+             PEImports.GetProcAddress(Kernel, SYSTEM.ADR("AddVectoredExceptionHandler")));
+
+  AddVectoredExceptionHandler(1, ExceptionHandler);
 END InitialiseKernel;
 
 (* -------------------------------------------------------------------------- *)
