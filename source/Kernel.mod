@@ -345,7 +345,7 @@ BEGIN
   END;
 
   MessageBox("Exception", report);
-  Halt(99)
+  PEImports.ExitProcess(99)  (* Immediate exit - bypass GC finalisation *)
 RETURN 0 END ExceptionHandler;
 
 
@@ -773,12 +773,12 @@ BEGIN
              PEImports.GetProcAddress(User, SYSTEM.ADR("MessageBoxW")));
 
   SYSTEM.PUT(SYSTEM.ADR(AddVectoredExceptionHandler),
-             PEImports.GetProcAddress(Kernel, SYSTEM.ADR("VirtualAlloc")));
+             PEImports.GetProcAddress(Kernel, SYSTEM.ADR("AddVectoredExceptionHandler")));
 
   AddVectoredExceptionHandler(1, ExceptionHandler);
 
   SYSTEM.PUT(SYSTEM.ADR(VirtualAlloc),
-             PEImports.GetProcAddress(Kernel, SYSTEM.ADR("AddVectoredExceptionHandler")));
+             PEImports.GetProcAddress(Kernel, SYSTEM.ADR("VirtualAlloc")));
 
   InitHeap(80000000H, 80000H);  (* Reserve 2GB, commit 512KB *)
   Collect0 := Collect;

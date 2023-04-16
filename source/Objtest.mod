@@ -20,9 +20,9 @@ BEGIN
 
   SYSTEM.PUT(SYSTEM.ADR(p), 5);  i := p.i;
 
-  j := 0;  i := 5 DIV j;
-
   ASSERT(FALSE);
+
+  j := 0;  i := 5 DIV j;
 
   w.sl("Objtest complete.");
 END Objtest.
