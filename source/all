@@ -14,7 +14,6 @@ Parser.mod
 Dumper.mod
 Smoc.mod
 Kernel.mod
-Trapper.mod
 ObjWriter.mod
 Objtest.mod
 ObjDump.mod

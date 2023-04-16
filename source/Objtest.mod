@@ -16,9 +16,9 @@ BEGIN
   w.s("User handle: $"); w.h(User); w.sl(".");
 
 
-  SYSTEM.PUT(SYSTEM.ADR(p), 5);  i := p.i;
-
   p := NIL;  i := p.i;
+
+  SYSTEM.PUT(SYSTEM.ADR(p), 5);  i := p.i;
 
   j := 0;  i := 5 DIV j;
 

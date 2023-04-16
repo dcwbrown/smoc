@@ -45,7 +45,7 @@ PROCEDURE InitialiseMemoryRange;
 VAR stackvar: INTEGER;
 BEGIN
   memstart := SYSTEM.ADR(stackvar) - 1000H;  (* 1000H is stack reserve in PE header *)
-  memlimit := Rtl.heapBase + Rtl.heapSize;
+  memlimit := Rtl.HeapBase + Rtl.HeapSize;
 END InitialiseMemoryRange;
 
 PROCEDURE CheckAddress(adr: INTEGER);
@@ -162,7 +162,7 @@ BEGIN
       ws(" = $"); wh(base+offset);
       ptr := getint(base + offset) - 16;
       ws(", target metadata at $");  wh(ptr);
-      IF ptr < Rtl.heapBase THEN wsl(": not in heap.")
+      IF ptr < Rtl.HeapBase THEN wsl(": not in heap.")
       ELSE
         descriptor := getint(ptr);  ws(", type $");  wh(descriptor);
         ws(", size $");  wh(getint(descriptor));
