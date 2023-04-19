@@ -30,7 +30,7 @@ TYPE
 
 VAR
   modList*, nMod*:    INTEGER;
-  argv,     numArgs*: INTEGER;
+  argv,     NumArgs*: INTEGER;
   finalisedList:      Finalised;
 
   (* Utility *)
@@ -158,6 +158,26 @@ RETURN j END Utf16ToUtf8;
 
 
 (* -------------------------------------------------------------------------- *)
+(* ---------------------- Very basic string functions ----------------------- *)
+(* -------------------------------------------------------------------------- *)
+
+PROCEDURE Length*(s: ARRAY OF CHAR): INTEGER;
+VAR l: INTEGER;
+BEGIN  l := 0;  WHILE (l < LEN(s)) & (s[l] # 0X) DO INC(l) END
+RETURN l END Length;
+
+PROCEDURE Append*(s: ARRAY OF CHAR; VAR d: ARRAY OF CHAR);
+VAR i, j: INTEGER;
+BEGIN
+  j := Length(d);
+  i := 0; WHILE (i < LEN(s)) & (j < LEN(d)) & (s[i] # 0X) DO
+    d[j] := s[i];  INC(i);  INC(j)
+  END;
+  IF j >= LEN( d) THEN DEC(j) END;  d[j] := 0X
+END Append;
+
+
+(* -------------------------------------------------------------------------- *)
 (* -------------------------------------------------------------------------- *)
 (* Utility procedures *)
 
@@ -173,18 +193,18 @@ BEGIN
 END MessageBox;
 
 
-PROCEDURE GetArg*(VAR out: ARRAY OF CHAR;  n: INTEGER);
+PROCEDURE GetArg*(n: INTEGER; VAR out: ARRAY OF CHAR);
 VAR i, arg: INTEGER;  str16: ARRAY 1024 OF SYSTEM.CARD16;
 BEGIN (* GetArg *)
   ASSERT(argv # 0);
-  IF (n < numArgs) & (n >= 0) THEN i := 0;
+  IF (n < NumArgs) & (n >= 0) THEN
+    i := 0;
     SYSTEM.GET(argv+n*8, arg);  ASSERT(arg # 0);
-
     SYSTEM.GET(arg, str16[i]);
     WHILE str16[i] # 0 DO INC(arg, 2);  INC(i);  SYSTEM.GET(arg, str16[i]) END
   ELSE str16[0] := 0
   END;
-  i := Utf16ToUtf8(str16, out);
+  i := Utf16ToUtf8(str16, out)
 END GetArg;
 
 
@@ -538,7 +558,7 @@ PROCEDURE GetArgv;
 VAR pCmdLine: Pointer;
 BEGIN
   pCmdLine := GetCommandLineW();
-  argv := CommandLineToArgvW(pCmdLine, SYSTEM.ADR(numArgs))
+  argv := CommandLineToArgvW(pCmdLine, SYSTEM.ADR(NumArgs))
 END GetArgv;
 
 PROCEDURE InitWin32;

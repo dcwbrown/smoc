@@ -98,9 +98,9 @@ VAR
   buffer:          ARRAY 80000H OF BYTE;
   bufPos, bufSize: INTEGER;
 
-  errPos:                 INTEGER;
-  lineNumber, linePos:    INTEGER;
-  lastLine,   lastColumn: INTEGER;
+  errPos:                  INTEGER;
+  lineNumber, linePos:     INTEGER;
+  LastLine*,  LastColumn*: INTEGER;
 
   SetCompilerFlag: SetCompilerFlagProc;
   NotifyError:     NotifyErrorProc;
@@ -108,7 +108,7 @@ VAR
 PROCEDURE Mark*(msg: ARRAY OF CHAR);
 BEGIN
   IF (bufPos > errPos) & (errCnt < 25) & (NotifyError # NIL) THEN
-    NotifyError(lastLine, lastColumn, msg)
+    NotifyError(LastLine, LastColumn, msg)
   END;
   INC(errCnt);  errPos := bufPos + 1
 END Mark;
@@ -124,7 +124,7 @@ BEGIN
 END Read;
 
 PROCEDURE SourcePos*(): INTEGER;
-RETURN LSL(lastLine, 10) + (lastColumn MOD 400H) END SourcePos;
+RETURN LSL(LastLine, 10) + (LastColumn MOD 400H) END SourcePos;
 
 PROCEDURE Identifier(c1: CHAR): INTEGER;
 VAR i, j, k, sym: INTEGER;
@@ -374,8 +374,8 @@ BEGIN
   REPEAT
     WHILE ~eof & (ch <= ORD(" ")) DO Read END;
     (* Record potential error position *)
-    lastLine   := lineNumber;
-    lastColumn := bufPos - linePos;
+    LastLine   := lineNumber;
+    LastColumn := bufPos - linePos;
     sym := null;
     IF (ch > 32) & (ch < 128) THEN
       c1 := CHR(ch);  Read;
@@ -427,7 +427,7 @@ BEGIN
   bufPos     := 0;
   errCnt     := 0;  errPos     := -10;
   lineNumber := 1;  linePos    := 0;
-  lastLine   := 1;  lastColumn := 1;
+  LastLine   := 1;  LastColumn := 1;
   Read
 END Init;
 

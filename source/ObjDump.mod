@@ -40,7 +40,7 @@ VAR
   trap:       INTEGER;
   line, col:  INTEGER;
 BEGIN
-  Rtl.GetArg(filename, 1);
+  Rtl.GetArg(1, filename);
   IF filename[0] = 0X THEN
     w.sl("Expected filename.")
   ELSE

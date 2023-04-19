@@ -11,7 +11,7 @@ TYPE
     length*:     INTEGER;          (*   0                                *)
     next*:       ModuleHeader;     (*   8                                *)
     name*:       ARRAY 32 OF CHAR; (*  16                                *)
-    base:        INTEGER;          (*  48                                *)
+    base*:       INTEGER;          (*  48                                *)
     code*:       INTEGER;          (*  56                                *)
     init:        INTEGER;          (*  64                                *)
     trap*:       INTEGER;          (*  72                                *)
@@ -31,16 +31,16 @@ TYPE
 
   ModuleBase = POINTER [untraced] TO ModuleBaseDesc;
   ModuleBaseDesc = RECORD
-    (*   0 *) GetProcAddress: PROCEDURE(module, procname: INTEGER): INTEGER;
-    (*   8 *) LoadLibraryA:   PROCEDURE(filename: INTEGER): INTEGER;
-    (*  16 *) ExitProcess:    PROCEDURE(result: INTEGER);
-    (*  24 *) z1, z2, z3, z4: INTEGER;
-    (*  56 *) z5, z6, z7, z8: INTEGER;
-    (*  88 *) z9:             INTEGER;
-    (*  96 *) ModHdrOffset:   INTEGER;
-    (* 104 *) StackPtrTable:  INTEGER;
-    (* 112 *) ModulePtrTable: INTEGER;
-    (* 120 *) New:            PROCEDURE(VAR ptr: INTEGER;  tdAdr: INTEGER)
+    (*   0 00 *) GetProcAddress: PROCEDURE(module, procname: INTEGER): INTEGER;
+    (*   8 08 *) LoadLibraryA:   PROCEDURE(filename: INTEGER): INTEGER;
+    (*  16 10 *) ExitProcess:    PROCEDURE(result: INTEGER);
+    (*  24 18 *) z1, z2, z3, z4: INTEGER;
+    (*  56 38 *) z5, z6, z7, z8: INTEGER;
+    (*  88 58 *) z9:             INTEGER;
+    (*  96 60 *) ModHdrOffset:   INTEGER;
+    (* 104 68 *) StackPtrTable:  INTEGER;
+    (* 112 70 *) ModulePtrTable: INTEGER;
+    (* 120 78 *) New:            PROCEDURE(VAR ptr: INTEGER;  tdAdr: INTEGER)
   END;
 
   ExceptionHandlerProc = PROCEDURE(p: INTEGER): INTEGER;
@@ -57,8 +57,9 @@ VAR
   oneByteBeforeBase: CHAR; (* MUST BE THE FIRST GLOBAL VARIABLE       *)
                            (* - its address locates the kernel's base *)
 
-  User*:         INTEGER;
   Kernel*:       INTEGER;
+  User*:         INTEGER;
+  Shell*:        INTEGER;
 
   FirstModule*:  ModuleHeader;
   PEImports:     PEImportTable;
@@ -67,9 +68,10 @@ VAR
 
   MessageBoxW:   PROCEDURE(hWnd, lpText, lpCaption, uType: INTEGER): INTEGER;
   AddVectoredExceptionHandler: PROCEDURE(first: INTEGER; filter: ExceptionHandlerProc);
-  VirtualAlloc:  PROCEDURE(lpAddress, dwSize, flAllocationType, flProtect: INTEGER): INTEGER;
+  GetSystemTimePreciseAsFileTime: PROCEDURE(tickAdr: INTEGER);
 
   (* Heap allocation *)
+  VirtualAlloc:  PROCEDURE(lpAddress, dwSize, flAllocationType, flProtect: INTEGER): INTEGER;
   HeapBase:      INTEGER;
   HeapSize:      INTEGER;            (* Committed heap memory                        *)
   HeapMax:       INTEGER;            (* HeapSize to HeapMax reserved, not committed  *)
@@ -82,6 +84,13 @@ VAR
   Collect0:      PROCEDURE;
   JustCollected: BOOLEAN;
   FinalisedList: Finalised;
+
+  (* Windows command line *)
+  GetCommandLineW:    PROCEDURE(): INTEGER;
+  CommandLineToArgvW: PROCEDURE(lpCmdLine, pNumArgs: INTEGER): INTEGER;
+  ArgV:               INTEGER;
+  NumArgs*:           INTEGER;
+
 
 
 (* -------------------------------------------------------------------------- *)
@@ -319,17 +328,19 @@ BEGIN
         INC(trapadr, 8);  SYSTEM.GET(trapadr, detail);
       END
     END;
-    IF (adr = address) & (trap <= 8) THEN
+    IF (adr = address) & (trap <= 10) THEN
       CASE trap OF
-      | 0: report := "Modkey trap in module "
-      | 1: report := "Array trap in module "
-      | 2: report := "Type trap in module "
-      | 3: report := "String trap in module "
-      | 4: report := "Nil trap in module "
-      | 5: report := "NilProc trap in module "
-      | 6: report := "Divide trap in module "
-      | 7: report := "Assert trap in module "
-      | 8: report := "Rtl trap in module "
+      |  0: report := "GET/PUT access violation in module "
+      |  1: report := "Array index out of range in module "
+      |  2: report := "Type trap in module "
+      |  3: report := "String size error in module "
+      |  4: report := "NIL reference in module "
+      |  5: report := "NIL procedure call in module "
+      |  6: report := "Divide by zero in module "
+      |  7: report := "Assertion FALSE in module "
+      |  8: report := "Rtl trap in module "
+      |  9: report := "SYSTEM.GET access violation in module "
+      | 10: report := "SYSTEM.PUT access violation in module "
       END;
       Append(module.name, report);
       Append(" at ", report);
@@ -392,6 +403,7 @@ BEGIN
   MarkedList := MarkedListSentinel;
 END InitHeap;
 
+
 PROCEDURE ExtendHeap;
 CONST MEM_COMMIT = 1000H;  PAGE_READWRITE = 4;
 VAR p, mark, size, prev, p2: INTEGER;
@@ -408,6 +420,7 @@ BEGIN
   END;
   HeapSize := HeapSize * 2
 END ExtendHeap;
+
 
 PROCEDURE GetLargeBlock(need: INTEGER): INTEGER;
   (* need is multiple of 512 *)
@@ -433,6 +446,7 @@ BEGIN q0 := 0;  q1 := LargeFreeList;  done := FALSE;
   END;
 RETURN p END GetLargeBlock;
 
+
 PROCEDURE GetBlock256(): INTEGER;
 VAR p, q: INTEGER;
 BEGIN
@@ -441,6 +455,7 @@ BEGIN
     SYSTEM.PUT(q+(256+16), 0);  FreeList[3] := q + 256;  p := q
   END;
 RETURN p END GetBlock256;
+
 
 PROCEDURE GetBlock128(): INTEGER;
 VAR p, q: INTEGER;
@@ -451,6 +466,7 @@ BEGIN
   END;
 RETURN p END GetBlock128;
 
+
 PROCEDURE GetBlock64(): INTEGER;
 VAR p, q: INTEGER;
 BEGIN
@@ -459,6 +475,7 @@ BEGIN
     SYSTEM.PUT(q+(64+16), 0);  FreeList[1] := q + 64;  p := q
   END;
 RETURN p END GetBlock64;
+
 
 PROCEDURE GetBlock32(): INTEGER;
 VAR p, q: INTEGER;
@@ -469,6 +486,7 @@ BEGIN
   END;
 RETURN p END GetBlock32;
 
+
 PROCEDURE RoundUp(VAR size: INTEGER);
 BEGIN
   IF    size < 32  THEN size := 32
@@ -478,6 +496,7 @@ BEGIN
                    ELSE size := Align(size, 512)
   END
 END RoundUp;
+
 
 PROCEDURE New*(VAR ptr: INTEGER;  tdAdr: INTEGER);
 VAR p, size, need, lim: INTEGER;
@@ -518,7 +537,8 @@ END New;
 
 PROCEDURE Mark(blk: INTEGER);
 VAR mark: INTEGER;
-BEGIN SYSTEM.GET(blk+8, mark);
+BEGIN
+  SYSTEM.GET(blk+8, mark);
   IF mark # 0 THEN (* already marked *)
   ELSE SYSTEM.PUT(blk+8, MarkedList);  MarkedList := blk
   END
@@ -666,7 +686,6 @@ BEGIN
 END RegisterFinalised;
 
 
-
 (* -------------------------------------------------------------------------- *)
 (* --------- Link newly loaded module to previously loaded modules ---------- *)
 (* -------------------------------------------------------------------------- *)
@@ -680,6 +699,7 @@ BEGIN i := 0;
   UNTIL (i = LEN(str)) OR (str[i-1] = 0X);
   IF i = LEN(str) THEN str[i-1] := 0X END
 RETURN i END GetString;
+
 
 PROCEDURE Link(header: ModuleHeader);
 (* Convert offsets in the Module header to absolute addresses. *)
@@ -718,6 +738,7 @@ BEGIN
   base.LoadLibraryA   := PEImports.LoadLibraryA;
   base.ExitProcess    := Halt;
   base.New            := New;
+  IF base.ModulePtrTable # 0 THEN INC(base.ModulePtrTable, header.base) END;
 
   (* Convert export offsets to absolute *)
   IF header.exports # 0 THEN
@@ -763,12 +784,16 @@ END Link;
 (* -------------------------------------------------------------------------- *)
 
 PROCEDURE InitialiseKernel;  (* initialise kernel module *)
+VAR commandAdr: INTEGER;
 BEGIN
   (* Set up some useful exports from standard procedures. *)
   Halt   := PEImports.ExitProcess;
+
   Kernel := PEImports.LoadLibraryA(SYSTEM.ADR("kernel32.dll"));
   User   := PEImports.LoadLibraryA(SYSTEM.ADR("user32.dll"));
+  Shell  := PEImports.LoadLibraryA(SYSTEM.ADR("shell32.dll"));
 
+  (* Initialise exception/trap handling *)
   SYSTEM.PUT(SYSTEM.ADR(MessageBoxW),
              PEImports.GetProcAddress(User, SYSTEM.ADR("MessageBoxW")));
 
@@ -777,12 +802,59 @@ BEGIN
 
   AddVectoredExceptionHandler(1, ExceptionHandler);
 
+  (* Initialise Heap and GC *)
   SYSTEM.PUT(SYSTEM.ADR(VirtualAlloc),
              PEImports.GetProcAddress(Kernel, SYSTEM.ADR("VirtualAlloc")));
 
   InitHeap(80000000H, 80000H);  (* Reserve 2GB, commit 512KB *)
   Collect0 := Collect;
+
+  (* Initialise command line access *)
+  SYSTEM.PUT(SYSTEM.ADR(GetCommandLineW),
+             PEImports.GetProcAddress(Kernel, SYSTEM.ADR("GetCommandLineW")));
+
+  SYSTEM.PUT(SYSTEM.ADR(CommandLineToArgvW),
+             PEImports.GetProcAddress(Shell, SYSTEM.ADR("CommandLineToArgvW")));
+
+  commandAdr := GetCommandLineW();
+  NumArgs    := 0;
+  ArgV       := CommandLineToArgvW(commandAdr, SYSTEM.ADR(NumArgs));
+
+  (* System time (precise) *)
+  SYSTEM.PUT(SYSTEM.ADR(GetSystemTimePreciseAsFileTime),
+             PEImports.GetProcAddress(Kernel, SYSTEM.ADR("GetSystemTimePreciseAsFileTime")))
+
 END InitialiseKernel;
+
+
+(* -------------------------------------------------------------------------- *)
+(* -------------------------- Windows command line -------------------------- *)
+(* -------------------------------------------------------------------------- *)
+
+PROCEDURE GetArg*(n: INTEGER; VAR str: ARRAY OF CHAR);
+VAR i, argAdr: INTEGER;  str16: ARRAY 1024 OF SYSTEM.CARD16;
+BEGIN
+  IF (n < 0) OR (n >= NumArgs) THEN
+    str := ""
+  ELSE
+    SYSTEM.GET(ArgV + n * 8, argAdr);
+    i := 0;  SYSTEM.GET(argAdr, str16[i]);
+    WHILE str16[i] # 0 DO
+      INC(argAdr, 2);  INC(i);  SYSTEM.GET(argAdr, str16[i])
+    END;
+    i := Utf16ToUtf8(str16, str)
+  END;
+END GetArg;
+
+
+(* -------------------------------------------------------------------------- *)
+(* --------- Time in 100nS ticks since since January 1, 1601 (UTC) ---------- *)
+(* -------------------------------------------------------------------------- *)
+
+PROCEDURE Time*(): INTEGER;
+VAR tick: INTEGER;
+BEGIN GetSystemTimePreciseAsFileTime(SYSTEM.ADR(tick));
+RETURN tick END Time;
 
 
 (* -------------------------------------------------------------------------- *)

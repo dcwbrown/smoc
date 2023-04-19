@@ -81,7 +81,7 @@ CONST
   mCond = 7;  mProc = 8;  mType = 9;  mBX   = 10;  mNothing = 11;
 
   (* Trap code *)
-  modkeyTrap  = 0;
+  modkeyTrap  = 0;  (* Not referenced anywhere *)
   arrayTrap   = 1;
   typeTrap    = 2;
   stringTrap  = 3;
@@ -89,7 +89,9 @@ CONST
   nilProcTrap = 5;
   divideTrap  = 6;
   assertTrap  = 7;
-  rtlTrap     = 8;
+  rtlTrap     = 8;  (* Used by dll code, not by object code *)
+  GetTrap     = 9;  (* SYSTEM.GET access violation *)
+  PutTrap     = 10; (* SYSTEM.PUT access violation *)
 
 TYPE
   Proc = B.Proc;
@@ -823,14 +825,14 @@ PROCEDURE Pass1(VAR modinit: B.Node);
 VAR str: ARRAY 512 OF CHAR;
 BEGIN
   IF ~B.Flag.object THEN
-    modidStr    := B.NewStrZ(B.modid);
+    modidStr    := B.NewStrZ(B.Modid);
     errFmtStr   := B.NewStrZ("[%d:%d]: %16.16s");
     err2FmtStr  := B.NewStrZ("Module key of %s is mismatched");
     err3FmtStr  := B.NewStrZ("Unknown exception;  PC: %x");
     err4FmtStr  := B.NewStrZ("Cannot load module %s (not exist?)");
     rtlName     := B.NewStrZ("Rtl.dll");
     user32name  := B.NewStrZ("user32.dll");
-    str         := "Error in module ";  Append(B.modid, str);
+    str         := "Error in module ";  Append(B.Modid, str);
     err5FmtStr  := B.NewStrZ(str);
     trapDesc    := B.NewStrZ("Module key      Array index     Type mismatch   String index    Nil dereference Nil proc call   Divide by zero  Assertion false Run time missing");
   END;
@@ -1961,8 +1963,9 @@ BEGIN
     IF x.r # rDI THEN RelocReg(x.r, rDI) END;
     IF y.type = B.strType THEN cx := y.strlen;  (* Copied from str16Type below - needs changes? *)
       IF B.IsOpenArray(x.type) THEN
-        ArrayLen(z, node.left);  SetRmOperand(z);
-        EmitRmImm(CMPi, 4, cx);  Trap(ccB, stringTrap)
+        ArrayLen(z, node.left);
+        SetRmOperand(z);         EmitRmImm(CMPi, 4, cx);
+                                 Trap(ccB, stringTrap)
       END;
       SetAlloc(rCX);  LoadImm(rCX, 4, cx);  EmitRep(MOVSrep, 1, 1) (* Size 2 -> 1 for CHAR *)
     ELSIF B.IsStr(x.type) THEN       (* Changed to LODSB/STOSB otherwise test thoroughly *)
@@ -2175,8 +2178,9 @@ BEGIN
     SetRmOperand(x);     EmitRegRm(MOV,  r, 8)
   ELSIF id = S.spGET THEN
     AvoidUsedBy(obj2);   MakeItem0(x, obj1);
-                         Load(x);
-                                   EmitRegRmRegI(MOVd, x.r, obj2.type.size, x.r, 0);
+                                  Load(x);
+    IF B.Flag.object THEN WriteDebug(pc, node.sourcePos, GetTrap) END;
+                     EmitRegRmRegI(MOVd, x.r, obj2.type.size, x.r, 0);
     ResetMkItmStat;      MakeItem0(y, obj2);  RefToRegI(y);
     SetRmOperand(y);     EmitRegRm(MOV,  x.r, y.type.size)
   ELSIF id = S.spPUT THEN
@@ -2187,14 +2191,15 @@ BEGIN
       SetRm_regI(x.r, 0);  EmitRmImm(MOVi, y.type.size, y.a)
     ELSE                   Load(y);
       SetRm_regI(x.r, 0);  EmitRegRm(MOV, y.r, y.type.size)
-    END
+    END;
+    IF B.Flag.object THEN WriteDebug(pc-3, node.sourcePos, PutTrap) END
   ELSIF id = S.spCOPY THEN
     obj3 := obj2(Node).right;  obj2 := obj2(Node).left;
-    AvoidUsedBy(obj2);  AvoidUsedBy(obj3);  SetAvoid(rDI);
-    SetAvoid(rCX);  SetBestReg(rSI);  MakeItem0(x, obj1);  Load(x);
-    ResetMkItmStat;  AvoidUsedBy(obj3);  SetAvoid(rCX);
-    SetBestReg(rDI);  MakeItem0(y, obj2);  Load(y);
-    ResetMkItmStat;  SetBestReg(rCX);  MakeItem0(z, obj3);  size := 1;
+    AvoidUsedBy(obj2);  AvoidUsedBy(obj3);   SetAvoid(rDI);
+    SetAvoid(rCX);      SetBestReg(rSI);     MakeItem0(x, obj1);  Load(x);
+    ResetMkItmStat;     AvoidUsedBy(obj3);   SetAvoid(rCX);
+    SetBestReg(rDI);    MakeItem0(y, obj2);  Load(y);
+    ResetMkItmStat;     SetBestReg(rCX);     MakeItem0(z, obj3);  size := 1;
     IF z.mode = mImm THEN
       IF    z.a <= 0      THEN z.a := 0;          size := 0
       ELSIF z.a MOD 8 = 0 THEN z.a := z.a DIV 8;  size := 8

@@ -1322,7 +1322,8 @@ BEGIN
   GetSym;  IF sym # S.ident THEN Missing(S.ident)
   ELSE modid := S.id;  GetSym END;
   IF S.errCnt = 0 THEN
-    B.Init(modid);  G.Init;  CheckSym(S.semicolon);
+    B.Init(modid);
+    G.Init;  CheckSym(S.semicolon);
     IF sym = S.import THEN ImportList END
   END;
   IF S.errCnt = 0 THEN

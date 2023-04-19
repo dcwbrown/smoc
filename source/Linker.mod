@@ -1,5 +1,5 @@
 MODULE Linker;
-IMPORT SYSTEM, Files, B := Base;
+IMPORT SYSTEM, Files, B := Base, w := Writer;
 
 CONST
   HeaderSize       =  400H;
@@ -697,14 +697,13 @@ END WritePEHeader;
 
 
 PROCEDURE Link*(debug: Files.File;
-                code: ARRAY OF BYTE;
+                code:  ARRAY OF BYTE;
                 codesize, entry, staticSize, varSize, modPtrTable: INTEGER);
-VAR fpos: INTEGER;
+VAR fpos, res: INTEGER;
 BEGIN
-  FileName           := B.modid;
   EntryPoint         := entry;
   ModulePointerTable := modPtrTable;
-
+  FileName           := B.SrcPath;  B.Append(B.Modid, FileName);
   IF B.Flag.main THEN ImageBase := 400000H;    B.Append(".exe", FileName)
   ELSE                ImageBase := 10000000H;  B.Append(".dll", FileName)
   END;

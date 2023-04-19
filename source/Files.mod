@@ -1,5 +1,5 @@
 MODULE Files;
-IMPORT SYSTEM, Rtl;
+IMPORT SYSTEM, Rtl, w := Writer;
 
 CONST
   (* Win32 Const *)
@@ -47,10 +47,13 @@ TYPE
 
   File*    = POINTER TO FileDesc;
   FileDesc = RECORD (Rtl.Finalised)
-               new, ronly: BOOLEAN;
-               hFile:      Handle;
-               name, temp: PathStr;
-               pos, len:   INTEGER
+               new:    BOOLEAN;
+               ronly:  BOOLEAN;
+               hFile:  Handle;
+               name*:  PathStr;
+               temp:   PathStr;
+               pos:    INTEGER;
+               len:    INTEGER
              END;
   Rider*   = RECORD
                eof*: BOOLEAN;
@@ -100,6 +103,10 @@ VAR
   GetEnvironmentVariableW: PROCEDURE(lpName:                ARRAY [untagged] OF SYSTEM.CARD16;
                                      lpBuffer:              Pointer;
                                      nSize:                 Dword): Dword;
+  GetFileAttributesExW:    PROCEDURE(lpName:                ARRAY [untagged] OF SYSTEM.CARD16;
+                                     fInfoLevelId:          INTEGER;  (* Must be 0 (GetFileExInfoStandard) *)
+                                     lpFileInformation:     INTEGER): Dword;
+  GetLastError:            PROCEDURE(): INTEGER;
 
 PROCEDURE Finalise(ptr: Rtl.Finalised);
 VAR bRes: Bool; f: File;
@@ -257,6 +264,9 @@ VAR hFile2: Handle; buf: ARRAY 10000H OF BYTE;
 BEGIN
   IF f.new THEN
     hFile2 := CreateFile(f.name, FileRegister);
+    IF hFile2 = -1 THEN
+      w.s("..  CreateFile failed, last error: $"); w.h(GetLastError()); w.l;
+    END;
     ASSERT(hFile2 # -1); f.pos := 0;
     bRes := SetFilePointerEx(f.hFile, 0, 0, FILE_BEGIN);
     REPEAT
@@ -291,20 +301,13 @@ BEGIN
   ASSERT(bRes # 0); bRes := SetEndOfFile(f.hFile); ASSERT(bRes # 0)
 END Purge;
 
-PROCEDURE Delete*(name: ARRAY OF SYSTEM.CARD16; VAR res: INTEGER);
-VAR bRes: Bool;
-BEGIN
-  bRes := DeleteFileW(name);
-  IF bRes # 0 THEN res := 0 ELSE res := -1 END
-END Delete;
-
-PROCEDURE Delete8*(name: ARRAY OF CHAR; VAR res: INTEGER);
+PROCEDURE Delete*(name: ARRAY OF CHAR;  VAR res: INTEGER);
 VAR bRes: Bool;  name16: PathStr16;  len: INTEGER;
 BEGIN
   len := Rtl.Utf8ToUtf16(name, name16);
   bRes := DeleteFileW(name16);
   IF bRes # 0 THEN res := 0 ELSE res := -1 END
-END Delete8;
+END Delete;
 
 PROCEDURE Rename*(old, new: ARRAY OF SYSTEM.CARD16; VAR res: INTEGER);
 VAR bRes: Bool;
@@ -542,6 +545,34 @@ END WriteBytes;
 (* -------------------------------------------------------------------------- *)
 (* -------------------------------------------------------------------------- *)
 
+PROCEDURE FileAttributes*(name: ARRAY OF CHAR; VAR length, time: INTEGER);
+VAR
+  name16: ARRAY 1024 OF SYSTEM.CARD16;
+  attributes: RECORD
+    fileattribytes: SYSTEM.CARD32;
+    creation:       INTEGER;
+    access:         INTEGER;
+    modification:   INTEGER;
+    sizehigh:       SYSTEM.CARD32;
+    sizelow:        SYSTEM.CARD32
+  END;
+  res: INTEGER;
+BEGIN
+  res := Rtl.Utf8ToUtf16(name, name16);
+  res := GetFileAttributesExW(name16, 0, SYSTEM.ADR(attributes));
+  IF res = 0  THEN
+    length := -1;
+    time := 0
+  ELSE
+    length := attributes.sizehigh * 100000000H + attributes.sizelow;
+    time   := attributes.modification
+  END;
+END FileAttributes;
+
+(* -------------------------------------------------------------------------- *)
+(* -------------------------------------------------------------------------- *)
+
+
 PROCEDURE InitWin32;
 BEGIN
   SYSTEM.GetProcAddress(GetFileAttributesW,      Rtl.HKernel, SYSTEM.ADR("GetFileAttributesW"));      ASSERT(GetFileAttributesW      # NIL);
@@ -558,6 +589,8 @@ BEGIN
   SYSTEM.GetProcAddress(wsprintfW,               Rtl.HUser,   SYSTEM.ADR("wsprintfW"));               ASSERT(wsprintfW               # NIL);
   SYSTEM.GetProcAddress(GetEnvironmentVariableW, Rtl.HKernel, SYSTEM.ADR("GetEnvironmentVariableW")); ASSERT(GetEnvironmentVariableW # NIL);
   SYSTEM.GetProcAddress(GetCurrentProcessId,     Rtl.HKernel, SYSTEM.ADR("GetCurrentProcessId"));     ASSERT(GetCurrentProcessId     # NIL);
+  SYSTEM.GetProcAddress(GetFileAttributesExW,    Rtl.HKernel, SYSTEM.ADR("GetFileAttributesExW"));    ASSERT(GetFileAttributesExW    # NIL);
+  SYSTEM.GetProcAddress(GetLastError,            Rtl.HKernel, SYSTEM.ADR("GetLastError"));            ASSERT(GetLastError    # NIL);
 END InitWin32;
 
 BEGIN InitWin32

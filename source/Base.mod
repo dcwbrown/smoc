@@ -110,7 +110,7 @@ VAR
   topScope*, universe*,
   systemScope:          Scope;
   curLev*, modlev*:     INTEGER;
-  modid*:               S.IdStr;
+  Modid*:               S.IdStr;
   modkey*:              ModuleKey;
   system*:              BOOLEAN;
   expList*, lastExp:    ObjList;
@@ -142,7 +142,8 @@ VAR
   strBufSize*:  INTEGER;
   strBuf*:      ARRAY 1000H OF CHAR;
 
-  symPath, srcPath, sym: ARRAY 1024 OF CHAR;
+  SymFilename:       ARRAY 1024 OF CHAR;
+  symPath, SrcPath*: ARRAY 1024 OF CHAR;
 
   ExportType0: PROCEDURE(typ: Type);
   ImportType0: PROCEDURE(VAR typ: Type;  mod: Module);
@@ -526,14 +527,9 @@ VAR
   i, k, n, size: INTEGER;
   hash:          Crypt.MD5Hash;
   chunk:         ARRAY 64 OF BYTE;
-  symfname:      ARRAY 512 OF CHAR;
 BEGIN
-  symfname := 0X;  refno := 0;  expno := 0;
-  i := 0;  Insert(srcPath, symfname, i);
-  Insert(modid, symfname, i);
-  Insert(".sym", symfname, i);
-
-  symfile := Files.New(symfname);
+  refno := 0;  expno := 0;  i := 0;
+  symfile := Files.New(SymFilename);
   Files.Set(rider, symfile, 16);
   Files.WriteNum(rider, modlev);
 
@@ -801,7 +797,7 @@ BEGIN
       Files.ReadString(rider, depid);
       ReadModkey(key);
       dep := FindMod(depid);
-      IF depid = modid THEN S.Mark("Circular dependency")
+      IF depid = Modid THEN S.Mark("Circular dependency")
       ELSIF dep # NIL THEN
         IF (dep.key[0] # key[0]) OR (dep.key[1] # key[1]) THEN
           msg := "Module ";                  Append(depid, msg);
@@ -873,7 +869,7 @@ VAR
 
   PROCEDURE GetPath(VAR path: ARRAY OF CHAR;  VAR i: INTEGER);
   VAR j: INTEGER;
-  BEGIN i := 0;  j := 0;
+  BEGIN j := 0;
     WHILE (symPath[i] # 0X) & (symPath[i] # ";") DO
       path[j] := symPath[i];  INC(i);  INC(j)
     END;
@@ -884,7 +880,7 @@ VAR
 
 BEGIN (* NewModule *)
   mod := FindMod(id);  IF (mod # NIL) & ~mod.import THEN mod := NIL END;
-  IF id = modid THEN S.Mark("Cannot import self")
+  IF id = Modid THEN S.Mark("Cannot import self")
   ELSIF mod = NIL THEN
     i := 0;  Insert(id, symfname, i);  Insert(".sym", symfname, i);
     symfile := Files.Old(symfname);  found := symfile # NIL;  i := 0;
@@ -893,8 +889,8 @@ BEGIN (* NewModule *)
       IF path # 0X THEN
         Append(symfname, path);
         symfile := Files.Old(path);
-        found := symfile # NIL
-      END
+        found := symfile # NIL;
+     END
     END;
     IF found THEN ident.obj := Import(id)
     ELSE
@@ -932,24 +928,26 @@ END SetSymPath;
 PROCEDURE SetSrcPath*(path: ARRAY OF CHAR);
 VAR i: INTEGER;
 BEGIN
-  srcPath := path;  i := 0;  WHILE srcPath[i] # 0X DO INC(i) END;
-  WHILE (i >= 0) & (srcPath[i] # '\') DO DEC(i) END;  srcPath[i+1] := 0X
+  SrcPath := path;  i := 0;  WHILE SrcPath[i] # 0X DO INC(i) END;
+  WHILE (i >= 0) & (SrcPath[i] # '\') & (SrcPath[i] # '/') DO DEC(i) END;
+  SrcPath[i+1] := 0X
 END SetSrcPath;
 
 (* -------------------------------------------------------------------------- *)
 (* -------------------------------------------------------------------------- *)
 
-PROCEDURE Init*(modid0: S.IdStr);
-VAR symfname: ARRAY 512 OF CHAR;  i, res: INTEGER;
+PROCEDURE Init*(modid: S.IdStr);
+VAR i, res: INTEGER;
 BEGIN
-  modid := modid0;  i := 0;    Insert(srcPath, symfname, i);
-  Insert(modid, symfname, i);  Insert(".sym", symfname, i);
-  Files.Delete8(symfname, res);
+  Modid := modid;  i := 0;
+  Insert(SrcPath, SymFilename, i);
+  Insert(Modid,   SymFilename, i);
+  Insert(".sym",  SymFilename, i);
+  Files.Delete(SymFilename, res);
 
-  NEW(universe);  topScope := universe;  curLev := -1;
-  system := FALSE;  modno := -2;  strBufSize := 0;
-  (*str16bufSize := 0;*)
-  expList := NIL;  lastExp := NIL;  strList := NIL;  recList := NIL;
+  NEW(universe);     topScope := universe;  curLev := -1;
+  system  := FALSE;  modno    := -2;        strBufSize := 0;
+  expList := NIL;    lastExp  := NIL;       strList    := NIL;  recList := NIL;
   InitCompilerFlag;
 
   Enter(NewTypeObj(intType),  "INTEGER");

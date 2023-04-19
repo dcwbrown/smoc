@@ -85,7 +85,7 @@ END WriteImports;
 (* -------------------------------------------------------------------------- *)
 (* -------------------------------------------------------------------------- *)
 
-PROCEDURE WriteFile(name: ARRAY OF CHAR);
+PROCEDURE CopyFile(name: ARRAY OF CHAR);
 VAR  f: Files.File;  r: Files.Rider;  buf: ARRAY 1000H OF BYTE;
 BEGIN
   f := Files.Old(name);  Files.Set(r, f, 0);
@@ -93,7 +93,7 @@ BEGIN
     Files.ReadBytes(r, buf, LEN(buf));
     Files.WriteBytes(Exe, buf, LEN(buf) - r.res);
   END
-END WriteFile;
+END CopyFile;
 
 
 (* -------------------------------------------------------------------------- *)
@@ -112,10 +112,9 @@ BEGIN
 
   FirstModule := Files.Pos(Exe);
 
-  WriteFile("build\boot2\Kernel.X64");
-(*WriteFile("build\boot2\Trapper.X64");*)
-  WriteFile("build\boot2\ObjWriter.X64");
-  WriteFile("build\boot2\ObjTest.X64");
+  CopyFile("build\boot2\Kernel.X64");
+  CopyFile("build\boot2\ObjWriter.X64");
+  CopyFile("build\boot2\ObjTest.X64");
   Files.WriteInt(Exe, 0);  (* Mark end of modules - appears as header.length = 0 *)
   Files.WriteInt(Exe, 0);  (* Mark end of modules - appears as header.next = NIL *)
 

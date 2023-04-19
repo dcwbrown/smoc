@@ -276,7 +276,7 @@ VAR
   export:   B.ObjList;
   i, adr:   INTEGER;
 BEGIN
-  filename := B.modid;  B.Append(".x64", filename);
+  filename := B.Modid;  B.Append(".x64", filename);
   X64file := Files.New(filename);
 
   Header.base := Align(SYSTEM.SIZE(ModuleHeaderDesc), 16) + Align(varSize, 16);
@@ -309,7 +309,7 @@ BEGIN
   Files.WriteInt(X64, -1);
 
   (* Module name *)
-  Header.name := B.modid;
+  Header.name := B.Modid;
   Header.key0 := B.modkey[0];  Header.key1 := B.modkey[1];
 
   (* Import names *)

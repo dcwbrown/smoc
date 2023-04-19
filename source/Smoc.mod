@@ -105,7 +105,7 @@ END Build;
 (* -------------------------------------------------------------------------- *)
 
 PROCEDURE Get;
-BEGIN INC(argIdx);  Rtl.GetArg(arg, argIdx)
+BEGIN INC(argIdx);  Rtl.GetArg(argIdx, arg)
 END Get;
 
 PROCEDURE Mark(msg: ARRAY OF CHAR);
