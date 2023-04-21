@@ -262,7 +262,9 @@ BEGIN
       prev := mod;  mod := mod.next
     END;
     IF mod # NIL THEN
-      Compile(mod);  RemoveDependencies(mod);
+      Compile(mod);
+      IF S.errCnt # 0 THEN Rtl.Halt(99) END;
+      RemoveDependencies(mod);
       IF prev = NIL THEN Modules := mod.next ELSE prev.next := mod.next END
     ELSE
       w.sl("Cannot resolve circular dependency order in:");
