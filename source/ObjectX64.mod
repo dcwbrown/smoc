@@ -59,13 +59,13 @@ RETURN result END Align;
 
 PROCEDURE WriteImportReferences;
 VAR
-  impmod:          B.Module;
-  import:          B.Ident;
-  impobj:          B.Object;
-  importCount:     INTEGER;
-  modno:           INTEGER;
-  impadr:          INTEGER;
-  expno:           INTEGER;
+  impmod:      B.Module;
+  import:      B.Ident;
+  impobj:      B.Object;
+  importCount: INTEGER;
+  modno:       INTEGER;
+  impadr:      INTEGER;
+  expno:       INTEGER;
 BEGIN
   impmod := B.modList;  modno := 0;  importCount := 0;
   WHILE impmod # NIL DO
@@ -80,7 +80,7 @@ BEGIN
       ASSERT(impadr >= 128);
       ASSERT(expno > 0);  (* Export indices are 1 based for GetProcAddress.      *)
       Files.Set(X64, X64file, Header.base + impadr);
-      Files.WriteInt(X64, modno * `100000000H + expno-1);
+      Files.WriteInt(X64, modno * 100000000H + expno-1);
       INC(importCount);
       import := import.next
     END;
@@ -224,8 +224,8 @@ END WriteStackFramePointerTables;
 
 PROCEDURE WriteImportNames;
 VAR
-  impmod:      B.Module;
-  modno:       INTEGER;
+  impmod: B.Module;
+  modno:  INTEGER;
 BEGIN
   Files.Set(X64, X64file, Header.imports);
   impmod := B.modList;  modno := 0;

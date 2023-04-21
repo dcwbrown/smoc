@@ -171,88 +171,64 @@ TYPE
   U8  = BYTE;         U16 = SYSTEM.CARD16;  U32 = SYSTEM.CARD32;
   I8  = SYSTEM.INT8;  I16 = SYSTEM.INT16;   I32 = SYSTEM.INT32;   I64 = INTEGER;
   PEHDR = RECORD
-            eMagic:     U16;  (* 5AD4 *)
-            zeroes1:    ARRAY 3AH OF BYTE;
-            eLfanew:    U32;
-            dosProgram: ARRAY 40H OF CHAR;
-            signature:  U32;
+    eMagic:     U16;  (* 5AD4 *)
+    zeroes:     ARRAY 3AH OF BYTE;
+    eLfanew:    U32;
+    dosProgram: ARRAY 40H OF CHAR;
+    signature:  U32;
 
-            (* COFF file header*)
-            machine:              U16;
-            numberOfSections:     U16;
-            timeDateStamp:        U32;
-            pointerToSymbolTable: U32;
-            numberOfSymbols:      U32;
-            sizeOfOptionalHeader: U16;
-            characteristics:      U16;
+    (* COFF file header*)
+    machine:              U16;
+    numberOfSections:     U16;
+    timeDateStamp:        U32;
+    pointerToSymbolTable: U32;
+    numberOfSymbols:      U32;
+    sizeOfOptionalHeader: U16;
+    characteristics:      U16;
 
-            (* PE32+ optional header *)
-            pe32magic:               U16;
-            majorLinkerVersion:      U8;
-            minorLinkerVersion:      U8;
-            sizeOfCode:              U32;
-            sizeOfInitializedData:   U32;
-            sizeOfUninitializedData: U32;
-            addressOfEntryPoint:     U32;
-            baseOfCode:              U32;
+    (* PE32+ optional header *)
+    pe32magic:               U16;
+    majorLinkerVersion:      U8;  minorLinkerVersion:  U8;
+    sizeOfCode:              U32;
+    sizeOfInitializedData:   U32;
+    sizeOfUninitializedData: U32;
+    addressOfEntryPoint:     U32;
+    baseOfCode:              U32;
 
-            (* Windows specific PE32+ fields *)
-            imageBase:             I64;
-            sectionAlignment:      U32;
-            fileAlignment:         U32;
-            majorOSVersion:        U16;
-            minorOSVersion:        U16;
-            majorImageVersion:     U16;
-            minorImageVersion:     U16;
-            majorSubsystemVersion: U16;
-            minorSubsystemVersion: U16;
-            win32VersionValue:     U32;
-            sizeOfImage:           U32;
-            sizeOfHeaders:         U32;
-            checksum:              U32;
-            subsystem:             U16;
-            dllCharacteristics:    U16;
-            sizeOfStackReserve:    I64;
-            sizeOfStackCommit:     I64;
-            sizeOfHeapReserve:     I64;
-            sizeOfHeapCommit:      I64;
-            loaderFlags:           U32;
-            numberOfRvaAndSizes:   U32;
+    (* Windows specific PE32+ fields *)
+    imageBase:             I64;
+    sectionAlignment:      U32;  fileAlignment:         U32;
+    majorOSVersion:        U16;  minorOSVersion:        U16;
+    majorImageVersion:     U16;  minorImageVersion:     U16;
+    majorSubsystemVersion: U16;  minorSubsystemVersion: U16;
+    win32VersionValue:     U32;
+    sizeOfImage:           U32;  sizeOfHeaders:         U32;
+    checksum:              U32;
+    subsystem:             U16;
+    dllCharacteristics:    U16;
+    sizeOfStackReserve:    I64;  sizeOfStackCommit:     I64;
+    sizeOfHeapReserve:     I64;  sizeOfHeapCommit:      I64;
+    loaderFlags:           U32;
+    numberOfRvaAndSizes:   U32;
 
-            (* Optional header data directories *)
-            exportTableRVA:            U32;
-            exportTableSize:           U32;
-            importTableRVA:            U32;
-            importTableSize:           U32;
-            resourceTableRVA:          U32;
-            resourceTableSize:         U32;
-            exceptionTableRVA:         U32;
-            exceptionTableSize:        U32;
-            certificateTableRVA:       U32;
-            certificateTableSize:      U32;
-            baseRelocationTableRVA:    U32;
-            baseRelocationTableSize:   U32;
-            debugRVA:                  U32;
-            debugSize:                 U32;
-            architectureRVA:           U32;
-            architectureSize:          U32;
-            globalPtrRVA:              U32;
-            globalPtrSize:             U32;
-            tlsTableRVA:               U32;
-            tlsTableSize:              U32;
-            loadConfigTableRVA:        U32;
-            loadConfigTableSize:       U32;
-            boundImportRVA:            U32;
-            boundImportSize:           U32;
-            IATRVA:                    U32;
-            IATSize:                   U32;
-            delayImportDescriptorRVA:  U32;
-            delayImportDescriptorSize: U32;
-            CLRRuntimeHeaderRVA:       U32;
-            CLRRuntimeHeaderSize:      U32;
-            reservedZeroRVA:           U32;
-            reservedZeroSize:          U32
-          END;
+    (* Optional header data directories *)
+    exportTableRVA:           U32;  exportTableSize:           U32;
+    importTableRVA:           U32;  importTableSize:           U32;
+    resourceTableRVA:         U32;  resourceTableSize:         U32;
+    exceptionTableRVA:        U32;  exceptionTableSize:        U32;
+    certificateTableRVA:      U32;  certificateTableSize:      U32;
+    baseRelocationTableRVA:   U32;  baseRelocationTableSize:   U32;
+    debugRVA:                 U32;  debugSize:                 U32;
+    architectureRVA:          U32;  architectureSize:          U32;
+    globalPtrRVA:             U32;  globalPtrSize:             U32;
+    tlsTableRVA:              U32;  tlsTableSize:              U32;
+    loadConfigTableRVA:       U32;  loadConfigTableSize:       U32;
+    boundImportRVA:           U32;  boundImportSize:           U32;
+    IATRVA:                   U32;  IATSize:                   U32;
+    delayImportDescriptorRVA: U32;  delayImportDescriptorSize: U32;
+    CLRRuntimeHeaderRVA:      U32;  CLRRuntimeHeaderSize:      U32;
+    reservedZeroRVA:          U32;  reservedZeroSize:          U32
+  END;
 VAR
   hdr: PEHDR;
 

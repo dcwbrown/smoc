@@ -391,8 +391,7 @@ BEGIN
       | "0".."9": sym := Number(c1)
       | "=":      sym := eql
       | "*":      sym := times
-      | '"':      sym := String(c1)
-      | "'":      sym := String(c1)
+      | '"', "'": sym := String(c1)
       | "[":      sym := lbrak
       | "]":      sym := rbrak
       | "#":      sym := neq
@@ -410,6 +409,9 @@ BEGIN
       | "$":      sym := HexString()
       | "_":      sym := Identifier(c1)
       | 7FX:      sym := upto
+      | "!", "%",
+        "@", '\',
+        "|", "`": Mark("Unexpected character")
       END
     ELSE
       Read;

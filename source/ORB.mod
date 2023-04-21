@@ -240,7 +240,7 @@ VAR mod, prev: Module;  allscanned: BOOLEAN;
 BEGIN
   AddModule(Modulename);
 
-  (* Keep scanning until all dependencies have been scanned *)
+  (* Keep scanning and adding modules until all dependencies have been scanned *)
   REPEAT
     mod := Modules;  allscanned := TRUE;
     WHILE mod # NIL DO
@@ -255,7 +255,7 @@ BEGIN
 
   (* Compile dependentless modules until all modules compiled. *)
   w.sn("Module", LongestModname+1);  w.sn("File", LongestFilename+1);
-  w.sl("      code      data    global   time");
+  w.sl("      code    static       VAR   time");
   REPEAT
     mod := Modules;  prev := NIL;
     WHILE (mod # NIL) & (mod.dependencies # NIL) DO
@@ -268,7 +268,6 @@ BEGIN
       w.sl("Cannot resolve circular dependency order in:");
       ReportDependencies; Rtl.Halt(99)
     END
-
   UNTIL Modules = NIL
 END Build;
 
