@@ -914,10 +914,10 @@ BEGIN
   END
 END SetCompilerFlag;
 
+PROCEDURE SetObject*(o: BOOLEAN); BEGIN Flag.object := o END SetObject;
+
 PROCEDURE InitCompilerFlag;
-BEGIN
-  Flag.main := FALSE;  Flag.console := FALSE;
-  Flag.rtl  := TRUE;   Flag.object  := FALSE;
+BEGIN Flag.main := FALSE;  Flag.console := FALSE;  Flag.rtl  := TRUE;
 END InitCompilerFlag;
 
 PROCEDURE SetSymPath*(path: ARRAY OF CHAR);

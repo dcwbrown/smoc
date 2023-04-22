@@ -13,6 +13,7 @@ Generator.mod
 Parser.mod
 Dumper.mod
 Smoc.mod
+Boot.mod
 Kernel.mod
 ObjWriter.mod
 Objtest.mod

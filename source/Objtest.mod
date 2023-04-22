@@ -1,6 +1,6 @@
 MODULE Objtest;  (*$OBJECT*)
 
-IMPORT SYSTEM, Kernel, w := ObjWriter;
+IMPORT SYSTEM, Boot, Kernel, w := ObjWriter;
 
 VAR
   MessageBoxA: PROCEDURE(hWnd, lpText, lpCaption, uType: INTEGER): INTEGER;
@@ -9,7 +9,7 @@ VAR
   result: INTEGER;
   p:      POINTER TO RECORD i: INTEGER END;
   s:      ARRAY 10 OF CHAR;
-  module: Kernel.ModuleHeader;
+  module: Boot.ModuleHeader;
 BEGIN
   w.sl("Objtest starting.");
 (*Kernel.MessageBox("Objtest", "Starting.");*)
@@ -23,7 +23,7 @@ BEGIN
   Kernel.Collect;
 
   (* List loaded module info *)
-  module := Kernel.FirstModule;
+  module := Boot.FirstModule;
   WHILE module # NIL DO
     w.s("Module ");    w.sn(module.name,   12);
     w.s("base at $");  w.hn(module.base,   12);

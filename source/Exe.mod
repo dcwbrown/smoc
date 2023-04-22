@@ -1,5 +1,5 @@
 MODULE Exe; (*$CONSOLE*) (* Create exe from a tree of Oberon modules *)
-IMPORT SYSTEM, Files, B := Base;
+IMPORT SYSTEM, Rtl, Files, B := Base, w := Writer;
 
 
 CONST
@@ -88,7 +88,8 @@ END WriteImports;
 PROCEDURE CopyFile(name: ARRAY OF CHAR);
 VAR  f: Files.File;  r: Files.Rider;  buf: ARRAY 1000H OF BYTE;
 BEGIN
-  f := Files.Old(name);  Files.Set(r, f, 0);
+  f := Files.Old(name);  IF f = NIL THEN w.sl("EXE couldn't copy."); Rtl.Halt(99) END;
+  Files.Set(r, f, 0);
   WHILE ~r.eof DO
     Files.ReadBytes(r, buf, LEN(buf));
     Files.WriteBytes(Exe, buf, LEN(buf) - r.res);
@@ -112,6 +113,7 @@ BEGIN
 
   FirstModule := Files.Pos(Exe);
 
+  CopyFile("build\boot2\Boot.X64");
   CopyFile("build\boot2\Kernel.X64");
   CopyFile("build\boot2\ObjWriter.X64");
   CopyFile("build\boot2\ObjTest.X64");

@@ -43,7 +43,7 @@ BEGIN
   outFname(fname);
   B.SetSrcPath(fname);  srcfile := Files.Old(fname);
   S.Init(srcfile);  S.Get(sym);
-
+  B.SetObject(FALSE);
   startTime := Rtl.Time();
   IF sym = S.module THEN modinit := P.Module() ELSE S.Mark("Expected 'MODULE'") END;
   IF S.errCnt = 0 THEN

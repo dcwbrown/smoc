@@ -33,6 +33,7 @@ TYPE
 VAR
   Modulename: ModuleName;
   Searchpath: ARRAY 2048 OF CHAR;
+  Object:     BOOLEAN;
 
   Modules:    Module;
 
@@ -177,6 +178,7 @@ BEGIN
   w.sn(module.modname, LongestModname+1); w.sn(module.filename, LongestFilename+1);
   B.SetSrcPath(module.filename);  B.SetSymPath(Searchpath);
   S.Init(module.file);  S.Get(sym);
+  B.SetObject(Object);  (* Temp hack during transition to objects *)
   startTime := Rtl.Time();
   IF sym = S.module THEN modinit := P.Module() ELSE S.Mark("Expected 'MODULE'") END;
   IF S.errCnt = 0 THEN
@@ -295,7 +297,9 @@ BEGIN
     Rtl.GetArg(i, arg);
     IF arg[0] = "/" THEN
       IF arg = "/search" THEN
-        INC(i);  Rtl.GetArg(i, Searchpath);
+        INC(i);  Rtl.GetArg(i, Searchpath)
+      ELSIF arg = "/object" THEN
+        Object := TRUE
       ELSE
         ArgError(i, arg, "unrecognised option.")
       END
@@ -317,6 +321,7 @@ BEGIN
 END ScanArguments;
 
 BEGIN
+  Object := FALSE;
   LongestModname  := 0;
   LongestFilename := 0;
   S.InstallNotifyError(NotifyError);

@@ -1,48 +1,11 @@
 MODULE Kernel;  (*$OBJECT*)
 
-IMPORT SYSTEM;
+IMPORT SYSTEM, Boot;
 
 CONST
   MarkedListSentinel = 2;  (* Used to mark end of list of marked heap blocks during GC *)
 
 TYPE
-  ModuleHeader* = POINTER [untraced] TO ModuleHeaderDesc;
-  ModuleHeaderDesc = RECORD
-    length*:     INTEGER;          (*   0                                *)
-    next*:       ModuleHeader;     (*   8                                *)
-    name*:       ARRAY 32 OF CHAR; (*  16                                *)
-    base*:       INTEGER;          (*  48                                *)
-    code*:       INTEGER;          (*  56                                *)
-    init:        INTEGER;          (*  64                                *)
-    trap*:       INTEGER;          (*  72                                *)
-    key0, key1:  INTEGER;          (*  80                                *)
-    imports:     INTEGER;          (*  88 list of import names and keys  *)
-    importCount: INTEGER;          (*  96 number of imports at base+128  *)
-    exports:     INTEGER           (* 104 array of export addresses      *)
-  END;
-
-  PEImportTable = POINTER [untraced] TO PEImportsDesc;
-  PEImportsDesc = RECORD
-    GetProcAddress: PROCEDURE(module, procname: INTEGER): INTEGER;
-    LoadLibraryA:   PROCEDURE(filename: INTEGER): INTEGER;
-    ExitProcess:    PROCEDURE(result: INTEGER);
-    zeroterminator: INTEGER
-  END;
-
-  ModuleBase = POINTER [untraced] TO ModuleBaseDesc;
-  ModuleBaseDesc = RECORD
-    (*   0 00 *) GetProcAddress: PROCEDURE(module, procname: INTEGER): INTEGER;
-    (*   8 08 *) LoadLibraryA:   PROCEDURE(filename: INTEGER): INTEGER;
-    (*  16 10 *) ExitProcess:    PROCEDURE(result: INTEGER);
-    (*  24 18 *) z1, z2, z3, z4: INTEGER;
-    (*  56 38 *) z5, z6, z7, z8: INTEGER;
-    (*  88 58 *) z9:             INTEGER;
-    (*  96 60 *) ModHdrOffset:   INTEGER;
-    (* 104 68 *) StackPtrTable:  INTEGER;
-    (* 112 70 *) ModulePtrTable: INTEGER;
-    (* 120 78 *) New:            PROCEDURE(VAR ptr: INTEGER;  tdAdr: INTEGER)
-  END;
-
   ExceptionHandlerProc = PROCEDURE(p: INTEGER): INTEGER;
 
   (* Finalisation during garbage collection *)
@@ -60,9 +23,6 @@ VAR
   Kernel*:       INTEGER;
   User*:         INTEGER;
   Shell*:        INTEGER;
-
-  FirstModule*:  ModuleHeader;
-  PEImports:     PEImportTable;
 
   Halt*:         PROCEDURE(returnCode: INTEGER);
 
@@ -90,6 +50,7 @@ VAR
   CommandLineToArgvW: PROCEDURE(lpCmdLine, pNumArgs: INTEGER): INTEGER;
   ArgV:               INTEGER;
   NumArgs*:           INTEGER;
+  CommandAdr:         INTEGER;
 
 
 
@@ -290,7 +251,7 @@ TYPE
 
 VAR
   ep:      ExceptionPointers;
-  module:  ModuleHeader;
+  module:  Boot.ModuleHeader;
   address: INTEGER;
   trapadr: INTEGER;
   detail:  INTEGER;
@@ -303,7 +264,7 @@ VAR
 BEGIN
   ep := SYSTEM.VAL(ExceptionPointers, p);
   address := ep.exception.address;
-  module  := FirstModule;
+  module  := Boot.FirstModule;
   WHILE (module # NIL) & (module.length # 0) & ((address < module.code) OR (address > module.trap)) DO
     module := module.next
   END;
@@ -356,7 +317,7 @@ BEGIN
   END;
 
   MessageBox("Exception", report);
-  PEImports.ExitProcess(99)  (* Immediate exit - bypass GC finalisation *)
+  Boot.PEImports.ExitProcess(99)  (* Immediate exit - bypass GC finalisation *)
 RETURN 0 END ExceptionHandler;
 
 
@@ -624,7 +585,7 @@ END Finalise;
 
 PROCEDURE Collect*;
 VAR
-  module:  ModuleHeader;
+  module:  Boot.ModuleHeader;
   modBase: INTEGER;  (* modBase is both the start of the initialised .data    *)
                      (* section and also the limit of the uninitialised (.bss)*)
                      (* data section. Global VARs are Allocated backward from *)
@@ -634,7 +595,7 @@ BEGIN
 (*
   IF HeapTracer # NIL THEN HeapTracer(0) END;  (* Trace collect call *)
 *)
-  module := FirstModule;
+  module := Boot.FirstModule;
   WHILE module # NIL DO
     modBase := module.base;
     (* Loop through list of traced data items.                                *)
@@ -687,147 +648,6 @@ END RegisterFinalised;
 
 
 (* -------------------------------------------------------------------------- *)
-(* --------- Link newly loaded module to previously loaded modules ---------- *)
-(* -------------------------------------------------------------------------- *)
-
-PROCEDURE GetString(adr: INTEGER; VAR str: ARRAY OF CHAR): INTEGER;
-(* Extract string from memory *)
-VAR i: INTEGER;
-BEGIN i := 0;
-  REPEAT
-    SYSTEM.GET(adr, str[i]);  INC(adr);  INC(i)
-  UNTIL (i = LEN(str)) OR (str[i-1] = 0X);
-  IF i = LEN(str) THEN str[i-1] := 0X END
-RETURN i END GetString;
-
-
-PROCEDURE Link(header: ModuleHeader);
-(* Convert offsets in the Module header to absolute addresses. *)
-(* Populate procedure pointers.                                *)
-(* Convert export offsets to absolute addresses.               *)
-(* Lookup imported modules.                                    *)
-(* Convert import references to absolute addresses.            *)
-VAR
-  base:      ModuleBase;
-  export:    INTEGER;
-  exportadr: INTEGER;
-  i:         INTEGER;
-  importAdr: INTEGER;
-  imports:   ARRAY 64 OF INTEGER;
-  modno:     INTEGER;
-  expno:     INTEGER;
-  impadr:    INTEGER;
-  impname:   ARRAY 64 OF CHAR;
-  impheader: ModuleHeader;
-  hdrname:   ARRAY 64 OF CHAR;
-  impkey0:   INTEGER;
-  impkey1:   INTEGER;
-
-BEGIN
-  (* Convert module header offsets to absolute addresses *)
-  IF header.base    # 0 THEN INC(header.base,    SYSTEM.ADR(header^)) END;
-  IF header.code    # 0 THEN INC(header.code,    SYSTEM.ADR(header^)) END;
-  IF header.init    # 0 THEN INC(header.init,    SYSTEM.ADR(header^)) END;
-  IF header.trap    # 0 THEN INC(header.trap,    SYSTEM.ADR(header^)) END;
-  IF header.imports # 0 THEN INC(header.imports, SYSTEM.ADR(header^)) END;
-  IF header.exports # 0 THEN INC(header.exports, SYSTEM.ADR(header^)) END;
-
-  (* Set standard procedure addresses into module static data *)
-  base := SYSTEM.VAL(ModuleBase, header.base);
-  base.GetProcAddress := PEImports.GetProcAddress;
-  base.LoadLibraryA   := PEImports.LoadLibraryA;
-  base.ExitProcess    := Halt;
-  base.New            := New;
-  IF base.ModulePtrTable # 0 THEN INC(base.ModulePtrTable, header.base) END;
-
-  (* Convert export offsets to absolute *)
-  IF header.exports # 0 THEN
-    export := header.exports;  SYSTEM.GET(export, exportadr);
-    WHILE exportadr # 0 DO
-      SYSTEM.PUT(export, exportadr + header.base);
-      INC(export, 8);
-      SYSTEM.GET(export, exportadr)
-    END
-  END;
-
-  (* Convert imported module names to module export table addresses *)
-  IF header.imports # 0 THEN
-    importAdr := header.imports;
-    INC(importAdr, GetString(importAdr, impname));
-    i := 0;  imports[i] := 0;
-    WHILE impname[0] # 0X DO
-      SYSTEM.GET(importAdr, impkey0);  INC(importAdr, 8);
-      SYSTEM.GET(importAdr, impkey1);  INC(importAdr, 8);
-      impheader := FirstModule;
-      WHILE (impheader # NIL) & (imports[i] = 0) DO
-        IF (impname = impheader.name) & (impkey0 = impheader.key0) & (impkey1 = impheader.key1) THEN
-          imports[i] := impheader.exports
-        END;
-        impheader := impheader.next
-      END;
-      INC(importAdr, GetString(importAdr, impname));  INC(i)
-    END
-  END;
-
-  (* Link imports to exports *)
-  FOR i := 0 TO header.importCount-1 DO
-    SYSTEM.GET(header.base + 128 + i*8, expno);
-    modno := expno DIV 100000000H;  expno := expno MOD 100000000H;
-    SYSTEM.GET(imports[modno] + expno * 8, impadr);
-    SYSTEM.PUT(header.base + 128 + i*8, impadr)
-  END
-END Link;
-
-
-(* -------------------------------------------------------------------------- *)
-(* ------- Kernel initialisation code - called following kernel link -------- *)
-(* -------------------------------------------------------------------------- *)
-
-PROCEDURE InitialiseKernel;  (* initialise kernel module *)
-VAR commandAdr: INTEGER;
-BEGIN
-  (* Set up some useful exports from standard procedures. *)
-  Halt   := PEImports.ExitProcess;
-
-  Kernel := PEImports.LoadLibraryA(SYSTEM.ADR("kernel32.dll"));
-  User   := PEImports.LoadLibraryA(SYSTEM.ADR("user32.dll"));
-  Shell  := PEImports.LoadLibraryA(SYSTEM.ADR("shell32.dll"));
-
-  (* Initialise exception/trap handling *)
-  SYSTEM.PUT(SYSTEM.ADR(MessageBoxW),
-             PEImports.GetProcAddress(User, SYSTEM.ADR("MessageBoxW")));
-
-  SYSTEM.PUT(SYSTEM.ADR(AddVectoredExceptionHandler),
-             PEImports.GetProcAddress(Kernel, SYSTEM.ADR("AddVectoredExceptionHandler")));
-
-  AddVectoredExceptionHandler(1, ExceptionHandler);
-
-  (* Initialise Heap and GC *)
-  SYSTEM.PUT(SYSTEM.ADR(VirtualAlloc),
-             PEImports.GetProcAddress(Kernel, SYSTEM.ADR("VirtualAlloc")));
-
-  InitHeap(80000000H, 80000H);  (* Reserve 2GB, commit 512KB *)
-  Collect0 := Collect;
-
-  (* Initialise command line access *)
-  SYSTEM.PUT(SYSTEM.ADR(GetCommandLineW),
-             PEImports.GetProcAddress(Kernel, SYSTEM.ADR("GetCommandLineW")));
-
-  SYSTEM.PUT(SYSTEM.ADR(CommandLineToArgvW),
-             PEImports.GetProcAddress(Shell, SYSTEM.ADR("CommandLineToArgvW")));
-
-  commandAdr := GetCommandLineW();
-  NumArgs    := 0;
-  ArgV       := CommandLineToArgvW(commandAdr, SYSTEM.ADR(NumArgs));
-
-  (* System time (precise) *)
-  SYSTEM.PUT(SYSTEM.ADR(GetSystemTimePreciseAsFileTime),
-             PEImports.GetProcAddress(Kernel, SYSTEM.ADR("GetSystemTimePreciseAsFileTime")))
-
-END InitialiseKernel;
-
-
-(* -------------------------------------------------------------------------- *)
 (* -------------------------- Windows command line -------------------------- *)
 (* -------------------------------------------------------------------------- *)
 
@@ -858,62 +678,38 @@ RETURN tick END Time;
 
 
 (* -------------------------------------------------------------------------- *)
-(* ----------- Kernel pre-initialisation code - Oberon bootstrap ------------ *)
+(* ------- Kernel initialisation code - called following kernel link -------- *)
 (* -------------------------------------------------------------------------- *)
 
-PROCEDURE Bootstrap;
-VAR
-  kernelBase:   ModuleBase;
-  kernelHeader: ModuleHeader;
-  module:       ModuleHeader;
-  nextModule:   ModuleHeader;
-  initialise:   PROCEDURE;
 BEGIN
-  (* Initialisation code for the first module - this is the first code that   *)
-  (* runs when the PE is loaded. It runs before it has been linked in and it  *)
-  (* is its responsibility to link (connect) in both itself and all modules   *)
-  (* that follow in the PE 'Oberon' section.                                  *)
+  (* Set up some useful exports from standard procedures. *)
+  Halt   := Boot.PEImports.ExitProcess;
 
-  (* The 128 byte pointers block is at the start of static data and is the    *)
-  (* base address used within the module code.                                *)
-  kernelBase := SYSTEM.VAL(ModuleBase, SYSTEM.ADR(oneByteBeforeBase) + 1);
+  Kernel := Boot.PEImports.LoadLibraryA(SYSTEM.ADR("kernel32.dll"));
+  User   := Boot.PEImports.LoadLibraryA(SYSTEM.ADR("user32.dll"));
+  Shell  := Boot.PEImports.LoadLibraryA(SYSTEM.ADR("shell32.dll"));
 
-  (* The kernelBase block includes the offset from the module header to the   *)
-  (* kernelBase block.                                                        *)
-  kernelHeader := SYSTEM.VAL(ModuleHeader,
-                            SYSTEM.ADR(kernelBase^) - kernelBase.ModHdrOffset);
+  (* Initialise exception/trap handling *)
+  SYSTEM.PUT(SYSTEM.ADR(MessageBoxW),                 Boot.PEImports.GetProcAddress(User,   SYSTEM.ADR("MessageBoxW")));
+  SYSTEM.PUT(SYSTEM.ADR(AddVectoredExceptionHandler), Boot.PEImports.GetProcAddress(Kernel, SYSTEM.ADR("AddVectoredExceptionHandler")));
 
-  (* A minimal set of Win32 function addresses sits just before the first     *)
-  (* module header.                                                           *)
-  PEImports := SYSTEM.VAL(PEImportTable,
-                          SYSTEM.ADR(kernelHeader^) - SYSTEM.SIZE(PEImportsDesc));
+  AddVectoredExceptionHandler(1, ExceptionHandler);
 
-  (* Link this module - the kernel *)
-  FirstModule := kernelHeader;
-  Link(kernelHeader);
-  InitialiseKernel;
+  (* Initialise Heap and GC *)
+  SYSTEM.PUT(SYSTEM.ADR(VirtualAlloc), Boot.PEImports.GetProcAddress(Kernel, SYSTEM.ADR("VirtualAlloc")));
 
-  (* Link remaining modules in EXE 'Oberon' section *)
-  module := SYSTEM.VAL(ModuleHeader,
-                          SYSTEM.ADR(kernelHeader^) + kernelHeader.length);
-  kernelHeader.next := module;
-  WHILE module # NIL DO
-    Link(module);  module.next := NIL;
+  InitHeap(80000000H, 80000H);  (* Reserve 2GB, commit 512KB *)
+  Collect0 := Collect;
 
-    IF module.init # 0 THEN
-      SYSTEM.PUT(SYSTEM.ADR(initialise), module.init);  initialise;
-    END;
+  (* Initialise command line access *)
+  SYSTEM.PUT(SYSTEM.ADR(GetCommandLineW), Boot.PEImports.GetProcAddress(Kernel, SYSTEM.ADR("GetCommandLineW")));
 
-    (* Set header next pointer to next header, if any. *)
-    nextModule := SYSTEM.VAL(ModuleHeader, module.length + SYSTEM.ADR(module^));
-    IF nextModule.length = 0 THEN nextModule := NIL END;
+  SYSTEM.PUT(SYSTEM.ADR(CommandLineToArgvW), Boot.PEImports.GetProcAddress(Shell, SYSTEM.ADR("CommandLineToArgvW")));
 
-    module.next := nextModule;
-    module      := nextModule
-  END
-END Bootstrap;
+  CommandAdr := GetCommandLineW();
+  NumArgs    := 0;
+  ArgV       := CommandLineToArgvW(CommandAdr, SYSTEM.ADR(NumArgs));
 
-BEGIN
-  Bootstrap;
-  Halt(4);
+  (* System time (precise) *)
+  SYSTEM.PUT(SYSTEM.ADR(GetSystemTimePreciseAsFileTime), Boot.PEImports.GetProcAddress(Kernel, SYSTEM.ADR("GetSystemTimePreciseAsFileTime")))
 END Kernel.
