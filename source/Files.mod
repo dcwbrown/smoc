@@ -265,7 +265,8 @@ BEGIN
   IF f.new THEN
     hFile2 := CreateFile(f.name, FileRegister);
     IF hFile2 = -1 THEN
-      w.s("..  CreateFile failed, last error: $"); w.h(GetLastError()); w.l;
+      w.s("CreateFile '"); w.s(f.name);
+      w.s("' failed, last error: $"); w.h(GetLastError()); w.l;
     END;
     ASSERT(hFile2 # -1); f.pos := 0;
     bRes := SetFilePointerEx(f.hFile, 0, 0, FILE_BEGIN);

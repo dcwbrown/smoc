@@ -41,7 +41,7 @@ VAR srcfile: Files.File;  modinit: B.Node;
     i, sym, startTime, endTime: INTEGER;
 BEGIN
   outFname(fname);
-  B.SetSrcPath(fname);  srcfile := Files.Old(fname);
+  B.SetSourcePathFromFilename(fname);  srcfile := Files.Old(fname);
   S.Init(srcfile);  S.Get(sym);
   B.SetObject(FALSE);
   startTime := Rtl.Time();

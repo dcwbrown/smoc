@@ -10,8 +10,9 @@ IMPORT
   SYSTEM, Rtl, Files, S := Scanner, B := Base, G := Generator, P := Parser, w := Writer;
 
 TYPE
-  ModuleName = ARRAY 64 OF CHAR;
+  ModuleName = ARRAY   64 OF CHAR;
   FileName   = ARRAY 1024 OF CHAR;
+  PathName   = ARRAY 4096 OF CHAR;
 
   Module     = POINTER TO ModuleDesc;
   Dependency = POINTER TO DependencyDesc;
@@ -31,12 +32,12 @@ TYPE
   END;
 
 VAR
-  Modulename: ModuleName;
-  Searchpath: ARRAY 2048 OF CHAR;
-  Object:     BOOLEAN;
-
-  Modules:    Module;
-
+  Modulename:      ModuleName;
+  SourcePath:      PathName;
+  BuildPath:       PathName;
+  OutputPath:      PathName;
+  Object:          BOOLEAN;
+  Modules:         Module;
   LongestModname:  INTEGER;
   LongestFilename: INTEGER;
 
@@ -45,9 +46,10 @@ VAR
 (* ---------------- File open with ';' delimited searchpath ----------------- *)
 (* -------------------------------------------------------------------------- *)
 
-PROCEDURE FindFile(    name,     searchpath: ARRAY OF CHAR;
-                   VAR file:     Files.File;
-                   VAR filename: FileName);
+PROCEDURE FindFile(    name:       ARRAY OF CHAR;
+                       searchpath: ARRAY OF CHAR;
+                   VAR file:       Files.File;
+                   VAR filename:   ARRAY OF CHAR);
 VAR
   path: ARRAY 2048 OF CHAR;
   i, j: INTEGER;
@@ -84,7 +86,7 @@ VAR mod: Module;  filename: ModuleName;
 BEGIN NEW(mod);
   mod.modname := modname;  mod.scanned := FALSE;
   filename := modname;  Rtl.Append(".mod", filename);
-  FindFile(filename, Searchpath, mod.file, mod.filename);
+  FindFile(filename, SourcePath, mod.file, mod.filename);
   IF mod.file = NIL THEN
     w.s("Could not find source file for module '"); w.s(modname); w.sl("'.");
     Rtl.Halt(99)
@@ -116,7 +118,7 @@ END Expected;
 PROCEDURE ScanModuleImports(module: Module);
 VAR sym: INTEGER;  impname: ARRAY 64 OF CHAR;
 BEGIN
-  B.SetSrcPath(module.filename);  S.Init(module.file);
+  S.Init(module.file);
   S.Get(sym);
   IF sym # S.module THEN Expected(module.filename, "does not start with MODULE.") END;
   S.Get(sym);
@@ -176,7 +178,10 @@ PROCEDURE Compile(module: Module);
 VAR sym, startTime, endTime: INTEGER;  modinit: B.Node;
 BEGIN
   w.sn(module.modname, LongestModname+1); w.sn(module.filename, LongestFilename+1);
-  B.SetSrcPath(module.filename);  B.SetSymPath(Searchpath);
+  B.SetSourcePath(SourcePath);
+  B.SetSymPath(BuildPath);
+  B.SetBuildPath(BuildPath);
+  B.SetOutputPath(OutputPath);
   S.Init(module.file);  S.Get(sym);
   B.SetObject(Object);  (* Temp hack during transition to objects *)
   startTime := Rtl.Time();
@@ -289,17 +294,19 @@ END ArgError;
 PROCEDURE ScanArguments;
 VAR i: INTEGER;  arg: ARRAY 1024 OF CHAR;
 BEGIN
-  Searchpath := "./";
+  SourcePath := "./";
+  BuildPath  := "";
+  OutputPath := "";
   Modulename := "";
 
   i := 1;
   WHILE i < Rtl.NumArgs DO
     Rtl.GetArg(i, arg);
     IF arg[0] = "/" THEN
-      IF arg = "/search" THEN
-        INC(i);  Rtl.GetArg(i, Searchpath)
-      ELSIF arg = "/object" THEN
-        Object := TRUE
+      IF    arg = "/source" THEN INC(i);  Rtl.GetArg(i, SourcePath)
+      ELSIF arg = "/build"  THEN INC(i);  Rtl.GetArg(i, BuildPath)
+      ELSIF arg = "/output" THEN INC(i);  Rtl.GetArg(i, OutputPath)
+      ELSIF arg = "/object" THEN Object := TRUE
       ELSE
         ArgError(i, arg, "unrecognised option.")
       END

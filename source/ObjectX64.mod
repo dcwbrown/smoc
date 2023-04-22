@@ -276,7 +276,9 @@ VAR
   export:   B.ObjList;
   i, adr:   INTEGER;
 BEGIN
-  filename := B.Modid;  B.Append(".x64", filename);
+  filename := B.BuildPath;
+  B.Append(B.Modid, filename);
+  B.Append(".x64",  filename);
   X64file := Files.New(filename);
 
   Header.base := Align(SYSTEM.SIZE(ModuleHeaderDesc), 16) + Align(varSize, 16);

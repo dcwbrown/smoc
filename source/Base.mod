@@ -142,8 +142,11 @@ VAR
   strBufSize*:  INTEGER;
   strBuf*:      ARRAY 1000H OF CHAR;
 
-  SymFilename:       ARRAY 1024 OF CHAR;
-  symPath, SrcPath*: ARRAY 1024 OF CHAR;
+  SymFilename:  ARRAY 1024 OF CHAR;
+  symPath:      ARRAY 1024 OF CHAR;
+  SrcPath*:     ARRAY 1024 OF CHAR;
+  BuildPath*:   ARRAY 1024 OF CHAR;
+  OutputPath*:  ARRAY 1024 OF CHAR;
 
   ExportType0: PROCEDURE(typ: Type);
   ImportType0: PROCEDURE(VAR typ: Type;  mod: Module);
@@ -920,18 +923,37 @@ PROCEDURE InitCompilerFlag;
 BEGIN Flag.main := FALSE;  Flag.console := FALSE;  Flag.rtl  := TRUE;
 END InitCompilerFlag;
 
-PROCEDURE SetSymPath*(path: ARRAY OF CHAR);
-BEGIN
-  symPath := path
-END SetSymPath;
-
-PROCEDURE SetSrcPath*(path: ARRAY OF CHAR);
+PROCEDURE SetSourcePathFromFilename*(path: ARRAY OF CHAR);
 VAR i: INTEGER;
 BEGIN
   SrcPath := path;  i := 0;  WHILE SrcPath[i] # 0X DO INC(i) END;
   WHILE (i >= 0) & (SrcPath[i] # '\') & (SrcPath[i] # '/') DO DEC(i) END;
   SrcPath[i+1] := 0X
-END SetSrcPath;
+END SetSourcePathFromFilename;
+
+PROCEDURE EnsureSeparator(VAR path: ARRAY OF CHAR);
+VAR i: INTEGER;
+BEGIN
+  i := 0;  WHILE (i < LEN(path)) & (path[i] # 0X) DO INC(i) END;
+  IF i > 0 THEN
+    IF (path[i-1] # '/') & (path[i-1] # '\') THEN
+      path[i] := '/';  path[i+1] := 0X
+    END
+  END
+END EnsureSeparator;
+
+PROCEDURE SetSourcePath*(path: ARRAY OF CHAR);
+BEGIN SrcPath := path;    EnsureSeparator(SrcPath)    END SetSourcePath;
+
+PROCEDURE SetSymPath*(path: ARRAY OF CHAR);
+BEGIN symPath := path;    EnsureSeparator(symPath)    END SetSymPath;
+
+PROCEDURE SetBuildPath*(path: ARRAY OF CHAR);
+BEGIN BuildPath := path;  EnsureSeparator(BuildPath)  END SetBuildPath;
+
+PROCEDURE SetOutputPath*(path: ARRAY OF CHAR);
+BEGIN OutputPath := path; EnsureSeparator(OutputPath) END SetOutputPath;
+
 
 (* -------------------------------------------------------------------------- *)
 (* -------------------------------------------------------------------------- *)
@@ -940,9 +962,13 @@ PROCEDURE Init*(modid: S.IdStr);
 VAR i, res: INTEGER;
 BEGIN
   Modid := modid;  i := 0;
-  Insert(SrcPath, SymFilename, i);
-  Insert(Modid,   SymFilename, i);
-  Insert(".sym",  SymFilename, i);
+  IF BuildPath # "" THEN
+    Insert(BuildPath, SymFilename, i)
+  ELSE
+    Insert(SrcPath, SymFilename, i)
+  END;
+  Insert(Modid,     SymFilename, i);
+  Insert(".sym",    SymFilename, i);
   Files.Delete(SymFilename, res);
 
   NEW(universe);     topScope := universe;  curLev := -1;

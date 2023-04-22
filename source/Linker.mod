@@ -703,11 +703,12 @@ VAR fpos, res: INTEGER;
 BEGIN
   EntryPoint         := entry;
   ModulePointerTable := modPtrTable;
-  FileName           := B.SrcPath;  B.Append(B.Modid, FileName);
+  FileName           := B.OutputPath;  B.Append(B.Modid, FileName);
   IF B.Flag.main THEN ImageBase := 400000H;    B.Append(".exe", FileName)
   ELSE                ImageBase := 10000000H;  B.Append(".dll", FileName)
   END;
 
+  w.s("Linker creating '"); w.s(FileName); w.sl("'.");
   Out := Files.New(FileName);
 
   IF varSize < 1 THEN varSize := 1 END;  (* Guarantee presence of a globals section *)
