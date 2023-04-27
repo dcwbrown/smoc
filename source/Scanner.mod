@@ -435,8 +435,7 @@ BEGIN
 END Init;
 
 PROCEDURE InstallSetCompilerFlag*(proc: SetCompilerFlagProc);
-BEGIN w.sl("Scanner - InstallSetCompilerFlag entered.");
-  SetCompilerFlag := proc
+BEGIN SetCompilerFlag := proc
 END InstallSetCompilerFlag;
 
 PROCEDURE InstallNotifyError*(proc: NotifyErrorProc);

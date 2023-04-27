@@ -24,12 +24,11 @@ VAR
   impmod:      B.Module;
   import:      B.Ident;
   impobj:      B.Object;
-  importCount: INTEGER;
   modno:       INTEGER;
   impadr:      INTEGER;
   expno:       INTEGER;
 BEGIN
-  importCount := 0;
+  Header.imports := 0;
   IF B.modList # NIL THEN
     impmod := B.modList;  modno := 0;
     WHILE impmod # NIL DO
@@ -47,14 +46,13 @@ BEGIN
         ASSERT(impadr >= 128);
         ASSERT(expno > 0);  (* Export indices are 1 based for GetProcAddress.      *)
         Files.Set(X64, X64file, Header.base + impadr);
-        Files.WriteInt(X64, modno * 100000000H + expno-1);
-        INC(importCount);
+        Files.WriteInt(X64, Header.imports + LSL(expno-1, 32) + LSL(modno, 48));
+        Header.imports := impadr;
         import := import.next
       END;
       impmod := impmod.next;  INC(modno)
     END
   END;
-  Header.importCount := importCount
 END WriteImportReferences;
 
 (* -------------------------------------------------------------------------- *)
@@ -360,7 +358,7 @@ BEGIN
   Header.key0 := B.modkey[0];  Header.key1 := B.modkey[1];
 
   (* Import names *)
-  IF Header.importCount = 0 THEN
+  IF Header.imports = 0 THEN
     Header.importNames := 0
   ELSE
     Header.importNames := Align(Files.Pos(X64), 16);

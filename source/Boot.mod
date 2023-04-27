@@ -18,7 +18,7 @@ TYPE
     trap*:        INTEGER;          (*  72                                *)
     key0*, key1*: INTEGER;          (*  80                                *)
     importNames*: INTEGER;          (*  88 list of import names and keys  *)
-    importCount*: INTEGER;          (*  96 number of imports at base+128  *)
+    imports*:     INTEGER;          (*  96 adr of start of import list    *)
     exports*:     INTEGER           (* 104 array of export addresses      *)
   END;
 
@@ -81,20 +81,22 @@ PROCEDURE Link(header: ModuleHeader);
 (* Lookup imported modules.                                    *)
 (* Convert import references to absolute addresses.            *)
 VAR
-  base:      ModuleBase;
-  export:    INTEGER;
-  exportadr: INTEGER;
-  i:         INTEGER;
-  importAdr: INTEGER;
-  imports:   ARRAY 64 OF INTEGER;
-  modno:     INTEGER;
-  expno:     INTEGER;
-  impadr:    INTEGER;
-  impname:   ARRAY 64 OF CHAR;
-  impheader: ModuleHeader;
-  hdrname:   ARRAY 64 OF CHAR;
-  impkey0:   INTEGER;
-  impkey1:   INTEGER;
+  base:         ModuleBase;
+  export:       INTEGER;
+  exportadr:    INTEGER;
+  i:            INTEGER;
+  importAdr:    INTEGER;
+  imports:      ARRAY 64 OF INTEGER;
+  modno:        INTEGER;
+  expno:        INTEGER;
+  impadr:       INTEGER;
+  impname:      ARRAY 64 OF CHAR;
+  impheader:    ModuleHeader;
+  hdrname:      ARRAY 64 OF CHAR;
+  impkey0:      INTEGER;
+  impkey1:      INTEGER;
+  importRefAdr: INTEGER;
+  importRef:    INTEGER;
 
 BEGIN
   (* Convert module header offsets to absolute addresses *)
@@ -143,12 +145,24 @@ BEGIN
   END;
 
   (* Link imports to exports *)
+  importRefAdr := header.imports;
+  WHILE importRefAdr # 0 DO
+    SYSTEM.GET(header.base + importRefAdr, importRef);
+    modno := ASR(importRef, 48);
+    expno := ASR(importRef, 32) MOD 10000H;
+    SYSTEM.GET(imports[modno] + expno * 8, impadr);
+    SYSTEM.PUT(header.base + importRefAdr, impadr);
+    importRefAdr := importRef MOD 100000000H;
+  END;
+
+  (*
   FOR i := 0 TO header.importCount-1 DO
     SYSTEM.GET(header.base + 128 + i*8, expno);
     modno := expno DIV 100000000H;  expno := expno MOD 100000000H;
     SYSTEM.GET(imports[modno] + expno * 8, impadr);
     SYSTEM.PUT(header.base + 128 + i*8, impadr)
   END
+  *)
 END Link;
 
 
