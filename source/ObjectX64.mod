@@ -1,48 +1,10 @@
 MODULE ObjectX64;  (* Write object file *)
-IMPORT SYSTEM, Files, B := Base, w := Writer, WritePE;
-
-TYPE
-  Win32Imports = POINTER [untraced] TO Win32ImportsDesc;
-  Win32ImportsDesc = RECORD
-    GetProcAddress: PROCEDURE(module, procname: INTEGER): INTEGER;
-    LoadLibraryA:   PROCEDURE(filename: INTEGER): INTEGER;
-    ExitProcess:    PROCEDURE(result: INTEGER);
-    New:            PROCEDURE()
-  END;
-
-  ModuleHeader = POINTER [untraced] TO ModuleHeaderDesc;
-  ModuleHeaderDesc = RECORD
-    length*:     INTEGER;          (*   0                                *)
-    next*:       ModuleHeader;     (*   8                                *)
-    name:        ARRAY 32 OF CHAR; (*  16                                *)
-    base:        INTEGER;          (*  48                                *)
-    code*:       INTEGER;          (*  56                                *)
-    init:        INTEGER;          (*  64                                *)
-    trap*:       INTEGER;          (*  72                                *)
-    key0, key1:  INTEGER;          (*  80                                *)
-    imports:     INTEGER;          (*  88 list of import names and keys  *)
-    importCount: INTEGER;          (*  96 number of imports at base+128  *)
-    exports:     INTEGER           (* 104 array of export addresses      *)
-  END;
-
-  ModulePointers = POINTER [untraced] TO ModulePointersDesc;
-  ModulePointersDesc = RECORD
-    (*   0 *) GetProcAddress: PROCEDURE(module, procname: INTEGER): INTEGER;
-    (*   8 *) LoadLibraryA:   PROCEDURE(filename: INTEGER): INTEGER;
-    (*  16 *) ExitProcess:    PROCEDURE(result: INTEGER);
-    (*  24 *) z1, z2, z3, z4: INTEGER;
-    (*  56 *) z5, z6, z7, z8: INTEGER;
-    (*  88 *) z9:             INTEGER;
-    (*  96 *) ModHdr:   INTEGER;
-    (* 104 *) StackPtrTable:  INTEGER;
-    (* 112 *) ModulePtrTable: INTEGER;
-    (* 120 *) New:            PROCEDURE()
-  END;
+IMPORT SYSTEM, Files, B := Base, w := Writer, WritePE, Boot;
 
 VAR
   X64file: Files.File;  (* Output file *)
   X64:     Files.Rider;
-  Header:  ModuleHeaderDesc;
+  Header:  Boot.ModuleHeaderDesc;
 
 (* -------------------------------------------------------------------------- *)
 
@@ -300,7 +262,7 @@ VAR
   impmod: B.Module;
   modno:  INTEGER;
 BEGIN
-  Files.Set(X64, X64file, Header.imports);
+  Files.Set(X64, X64file, Header.importNames);
   impmod := B.modList;  modno := 0;
   WHILE impmod # NIL DO
     Files.WriteString(X64, impmod.id);
@@ -358,10 +320,10 @@ BEGIN
   X64file := Files.New(filename);
   WritePE.AddObject(filename);
 
-  Header.base := Align(SYSTEM.SIZE(ModuleHeaderDesc), 16) + Align(varSize, 16);
+  Header.base := Align(SYSTEM.SIZE(Boot.ModuleHeaderDesc), 16) + Align(varSize, 16);
 
   (* Insert pointers into the first 128 bytes of static data. *)
-  Files.Set(X64, X64file, Header.base + 96);  Files.WriteInt(X64, Header.base);
+  Files.Set(X64, X64file, Header.base + 56);  Files.WriteInt(X64, Header.base);
   Files.Set(X64, X64file, Header.base + 112); Files.WriteInt(X64, modPtrTable);
 
   WriteImportReferences;
@@ -393,9 +355,9 @@ BEGIN
 
   (* Import names *)
   IF Header.importCount = 0 THEN
-    Header.imports := 0
+    Header.importNames := 0
   ELSE
-    Header.imports := Align(Files.Pos(X64), 16);
+    Header.importNames := Align(Files.Pos(X64), 16);
     WriteImportNames
   END;
 
@@ -418,7 +380,7 @@ BEGIN
 
   (* Write the header *)
   Files.Set(X64, X64file, 0);
-  Files.WriteBytes(X64, Header, SYSTEM.SIZE(ModuleHeaderDesc));
+  Files.WriteBytes(X64, Header, SYSTEM.SIZE(Boot.ModuleHeaderDesc));
 
   Files.Register(X64file)
 END Write;

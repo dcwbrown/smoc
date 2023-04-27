@@ -9,6 +9,7 @@ Scanner.mod
 Base.mod
 Linker.mod
 WritePE.mod
+Boot.mod
 ObjectX64.mod
 Generator.mod
 Parser.mod

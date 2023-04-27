@@ -1,4 +1,4 @@
-MODULE Boot;  (*$OBJECT*) (*$RTL-*)
+MODULE Boot;  (*$RTL-*)
 
 (* Bootstrap loader - loads the subsequent modules in a PE *)
 
@@ -8,18 +8,18 @@ CONST
 
 TYPE
   ModuleHeader* = POINTER [untraced] TO ModuleHeaderDesc;
-  ModuleHeaderDesc = RECORD
-    length*:     INTEGER;          (*   0                                *)
-    next*:       ModuleHeader;     (*   8                                *)
-    name*:       ARRAY 32 OF CHAR; (*  16                                *)
-    base*:       INTEGER;          (*  48                                *)
-    code*:       INTEGER;          (*  56                                *)
-    init:        INTEGER;          (*  64                                *)
-    trap*:       INTEGER;          (*  72                                *)
-    key0, key1:  INTEGER;          (*  80                                *)
-    imports:     INTEGER;          (*  88 list of import names and keys  *)
-    importCount: INTEGER;          (*  96 number of imports at base+128  *)
-    exports:     INTEGER           (* 104 array of export addresses      *)
+  ModuleHeaderDesc* = RECORD
+    length*:      INTEGER;          (*   0                                *)
+    next*:        ModuleHeader;     (*   8                                *)
+    name*:        ARRAY 32 OF CHAR; (*  16                                *)
+    base*:        INTEGER;          (*  48                                *)
+    code*:        INTEGER;          (*  56                                *)
+    init*:        INTEGER;          (*  64                                *)
+    trap*:        INTEGER;          (*  72                                *)
+    key0*, key1*: INTEGER;          (*  80                                *)
+    importNames*: INTEGER;          (*  88 list of import names and keys  *)
+    importCount*: INTEGER;          (*  96 number of imports at base+128  *)
+    exports*:     INTEGER           (* 104 array of export addresses      *)
   END;
 
   PEImportTable* = POINTER [untraced] TO PEImportsDesc;
@@ -37,17 +37,17 @@ TYPE
     (*   8 08 *) LoadLibraryA:   PROCEDURE(filename: INTEGER): INTEGER;
     (*  16 10 *) ExitProcess:    PROCEDURE(result: INTEGER);
     (*  24 18 *) z1, z2, z3, z4: INTEGER;
-    (*  56 38 *) z5, z6, z7, z8: INTEGER;
-    (*  88 58 *) z9:             INTEGER;
-    (*  96 60 *) ModHdrOffset:   INTEGER;
+    (*  56 38 *) ModHdrOffset:   INTEGER;
+    (*  64 40 *) z5, z6, z7, z8: INTEGER;
+    (*  96 60 *) z9:             INTEGER;
     (* 104 68 *) StackPtrTable:  INTEGER;
     (* 112 70 *) ModulePtrTable: INTEGER;
     (* 120 78 *) New:            PROCEDURE(VAR ptr: INTEGER;  tdAdr: INTEGER)
   END;
 
 VAR
-  oneByteBeforeBase: CHAR; (* MUST BE THE FIRST GLOBAL VARIABLE       *)
-                           (* - its address locates the kernel's base *)
+  oneByteBeforeBase: CHAR; (* MUST BE THE FIRST GLOBAL VARIABLE        *)
+                           (* - its address locates this module's base *)
 
   FirstModule*: ModuleHeader;
   PEImports*:   PEImportTable;
@@ -98,12 +98,12 @@ VAR
 
 BEGIN
   (* Convert module header offsets to absolute addresses *)
-  IF header.base    # 0 THEN INC(header.base,    SYSTEM.ADR(header^)) END;
-  IF header.code    # 0 THEN INC(header.code,    SYSTEM.ADR(header^)) END;
-  IF header.init    # 0 THEN INC(header.init,    SYSTEM.ADR(header^)) END;
-  IF header.trap    # 0 THEN INC(header.trap,    SYSTEM.ADR(header^)) END;
-  IF header.imports # 0 THEN INC(header.imports, SYSTEM.ADR(header^)) END;
-  IF header.exports # 0 THEN INC(header.exports, SYSTEM.ADR(header^)) END;
+  IF header.base        # 0 THEN INC(header.base,        SYSTEM.ADR(header^)) END;
+  IF header.code        # 0 THEN INC(header.code,        SYSTEM.ADR(header^)) END;
+  IF header.init        # 0 THEN INC(header.init,        SYSTEM.ADR(header^)) END;
+  IF header.trap        # 0 THEN INC(header.trap,        SYSTEM.ADR(header^)) END;
+  IF header.importNames # 0 THEN INC(header.importNames, SYSTEM.ADR(header^)) END;
+  IF header.exports     # 0 THEN INC(header.exports,     SYSTEM.ADR(header^)) END;
 
   (* Set standard procedure addresses into module static data *)
   base := SYSTEM.VAL(ModuleBase, header.base);
@@ -124,8 +124,8 @@ BEGIN
   END;
 
   (* Convert imported module names to module export table addresses *)
-  IF header.imports # 0 THEN
-    importAdr := header.imports;
+  IF header.importNames # 0 THEN
+    importAdr := header.importNames;
     INC(importAdr, GetString(importAdr, impname));
     i := 0;  imports[i] := 0;
     WHILE impname[0] # 0X DO
@@ -166,36 +166,39 @@ BEGIN
   (* base address used within the module code.                                *)
   WinBase := SYSTEM.VAL(ModuleBase, SYSTEM.ADR(oneByteBeforeBase) + 1);
 
-  (* The WinBase block includes the offset from the module header to the   *)
-  (* WinBase block.                                                        *)
-  WinHdr := SYSTEM.VAL(ModuleHeader, SYSTEM.ADR(WinBase^) - WinBase.ModHdrOffset);
+  IF WinBase.ModHdrOffset # 0 THEN  (* If loaded as PE bootstrap *)
 
-  (* A minimal set of Win32 function addresses sits just before the first     *)
-  (* module header.                                                           *)
-  PEImports := SYSTEM.VAL(PEImportTable, SYSTEM.ADR(WinHdr^) - SYSTEM.SIZE(PEImportsDesc));
+    (* The WinBase block includes the offset from the module header to the   *)
+    (* WinBase block.                                                        *)
+    WinHdr := SYSTEM.VAL(ModuleHeader, SYSTEM.ADR(WinBase^) - WinBase.ModHdrOffset);
 
-  (* Link this module - the Windows PE bootstrap *)
-  FirstModule := WinHdr;
-  Link(WinHdr);  (* Note - does not call WinHdr's init address as that is *)
-                 (* this code and we're already running.                  *)
+    (* A minimal set of Win32 function addresses sits just before the first     *)
+    (* module header.                                                           *)
+    PEImports := SYSTEM.VAL(PEImportTable, SYSTEM.ADR(WinHdr^) - SYSTEM.SIZE(PEImportsDesc));
 
-  (* Link remaining modules in EXE 'Oberon' section *)
-  module := SYSTEM.VAL(ModuleHeader, SYSTEM.ADR(WinHdr^) + WinHdr.length);
-  WinHdr.next := module;
-  WHILE module # NIL DO
-    Link(module);  module.next := NIL;
+    (* Link this module - the Windows PE bootstrap *)
+    FirstModule := WinHdr;
+    Link(WinHdr);  (* Note - does not call WinHdr's init address as that is *)
+                   (* this code and we're already running.                  *)
 
-    IF module.init # 0 THEN
-      SYSTEM.PUT(SYSTEM.ADR(initialise), module.init);  initialise;
+    (* Link remaining modules in EXE 'Oberon' section *)
+    module := SYSTEM.VAL(ModuleHeader, SYSTEM.ADR(WinHdr^) + WinHdr.length);
+    WinHdr.next := module;
+    WHILE module # NIL DO
+      Link(module);  module.next := NIL;
+
+      IF module.init # 0 THEN
+        SYSTEM.PUT(SYSTEM.ADR(initialise), module.init);  initialise;
+      END;
+
+      (* Set header next pointer to next header, if any. *)
+      nextModule := SYSTEM.VAL(ModuleHeader, module.length + SYSTEM.ADR(module^));
+      IF nextModule.length = 0 THEN nextModule := NIL END;
+
+      module.next := nextModule;
+      module      := nextModule
     END;
 
-    (* Set header next pointer to next header, if any. *)
-    nextModule := SYSTEM.VAL(ModuleHeader, module.length + SYSTEM.ADR(module^));
-    IF nextModule.length = 0 THEN nextModule := NIL END;
-
-    module.next := nextModule;
-    module      := nextModule
-  END;
-
-  PEImports.ExitProcess(4)
+    PEImports.ExitProcess(4)
+  END
 END Boot.
