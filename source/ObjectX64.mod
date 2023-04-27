@@ -1,8 +1,8 @@
 MODULE ObjectX64;  (* Write object file *)
-IMPORT SYSTEM, Files, B := Base, w := Writer;
+IMPORT SYSTEM, Files, B := Base, w := Writer, WritePE;
 
 TYPE
-  Win32Imports = POINTER TO Win32ImportsDesc;
+  Win32Imports = POINTER [untraced] TO Win32ImportsDesc;
   Win32ImportsDesc = RECORD
     GetProcAddress: PROCEDURE(module, procname: INTEGER): INTEGER;
     LoadLibraryA:   PROCEDURE(filename: INTEGER): INTEGER;
@@ -10,7 +10,7 @@ TYPE
     New:            PROCEDURE()
   END;
 
-  ModuleHeader = POINTER TO ModuleHeaderDesc;
+  ModuleHeader = POINTER [untraced] TO ModuleHeaderDesc;
   ModuleHeaderDesc = RECORD
     length*:     INTEGER;          (*   0                                *)
     next*:       ModuleHeader;     (*   8                                *)
@@ -25,7 +25,7 @@ TYPE
     exports:     INTEGER           (* 104 array of export addresses      *)
   END;
 
-  ModulePointers = POINTER TO ModulePointersDesc;
+  ModulePointers = POINTER [untraced] TO ModulePointersDesc;
   ModulePointersDesc = RECORD
     (*   0 *) GetProcAddress: PROCEDURE(module, procname: INTEGER): INTEGER;
     (*   8 *) LoadLibraryA:   PROCEDURE(filename: INTEGER): INTEGER;
@@ -67,24 +67,30 @@ VAR
   impadr:      INTEGER;
   expno:       INTEGER;
 BEGIN
-  impmod := B.modList;  modno := 0;  importCount := 0;
-  WHILE impmod # NIL DO
-    import := impmod.impList;
-    WHILE import # NIL DO
-      impobj := import.obj;
-      IF impobj.class = B.cType THEN ASSERT(impobj.type.form = B.tRec);
-                                  impadr := impobj.type.adr;    expno := impobj.type.expno
-      ELSIF impobj IS B.Var  THEN impadr := impobj(B.Var).adr;  expno := impobj(B.Var).expno
-      ELSIF impobj IS B.Proc THEN impadr := impobj(B.Proc).adr; expno := impobj(B.Proc).expno
+  importCount := 0;
+  IF B.modList # NIL THEN
+    impmod := B.modList;  modno := 0;
+    WHILE impmod # NIL DO
+      import := impmod.impList;
+      WHILE import # NIL DO
+        impobj := import.obj;
+        IF    impobj.class = B.cType THEN ASSERT(impobj.type.form = B.tRec);
+                                          impadr := impobj.type.adr;
+                                          expno  := impobj.type.expno
+        ELSIF impobj      IS B.Var   THEN impadr := impobj(B.Var).adr;
+                                          expno  := impobj(B.Var).expno
+        ELSIF impobj      IS B.Proc  THEN impadr := impobj(B.Proc).adr;
+                                          expno  := impobj(B.Proc).expno
+        END;
+        ASSERT(impadr >= 128);
+        ASSERT(expno > 0);  (* Export indices are 1 based for GetProcAddress.      *)
+        Files.Set(X64, X64file, Header.base + impadr);
+        Files.WriteInt(X64, modno * 100000000H + expno-1);
+        INC(importCount);
+        import := import.next
       END;
-      ASSERT(impadr >= 128);
-      ASSERT(expno > 0);  (* Export indices are 1 based for GetProcAddress.      *)
-      Files.Set(X64, X64file, Header.base + impadr);
-      Files.WriteInt(X64, modno * 100000000H + expno-1);
-      INC(importCount);
-      import := import.next
-    END;
-    impmod := impmod.next;  INC(modno)
+      impmod := impmod.next;  INC(modno)
+    END
   END;
   Header.importCount := importCount
 END WriteImportReferences;
@@ -142,10 +148,77 @@ BEGIN
   END
 END Write_pointer_offset;
 
+PROCEDURE WriteTypeName(t: B.Type);
+BEGIN
+  IF (t.obj # NIL) & (t.obj.ident # NIL) THEN
+    w.s(t.obj.ident.name)
+  ELSE
+    w.s("unnamed")
+  END
+END WriteTypeName;
+
+PROCEDURE DumpType(t: B.Type);
+BEGIN
+  WriteTypeName(t);
+  w.s(": ");  CASE t.form OF
+  |B.tInt:   w.s("INTEGER")
+  |B.tBool:  w.s("BOOLEAN")
+  |B.tSet:   w.s("SET")
+  |B.tChar:  w.s("CHAR")
+  |B.tReal:  w.s("REAL")
+  |B.tPtr:   w.s("POINTER")
+  |B.tProc:  w.s("PROCEDURE")
+  |B.tArray: w.s("ARRAY")
+  |B.tRec:   w.s("RECORD")
+  |B.tStr:   w.s("STRING")
+  |B.tNil:   w.s("NIL")
+  END;
+  IF t.obj # NIL THEN
+    w.s(", object class ");  CASE t.obj.class OF
+    |B.cNull:   w.s("Null")
+    |B.cModule: w.s("Module")
+    |B.cType:   w.s("Type")
+    |B.cNode:   w.s("Node")
+    |B.cVar:    w.s("Var")
+    |B.cConst:  w.s("Const")
+    |B.cProc:   w.s("Proc")
+    |B.cField:  w.s("Field")
+    |B.cSProc:  w.s("SProc")
+    |B.cSFunc:  w.s("SFunc")
+    END
+  END;
+  w.s(", adr $");  w.h(t.adr);
+  w.s(", expno "); w.i(t.expno);
+  w.s(", ref ");   w.i(t.ref);
+  w.s(", len ");   w.i(t.len);
+  w.s(", size ");  w.i(t.size);
+  w.s(", size0 "); w.i(t.size0);
+  IF t.mod # NIL THEN
+    w.s(" - in module "); w.s(t.mod.id)
+  END;
+  w.sl(".");
+  IF t.base # NIL THEN w.s("      extension of "); DumpType(t.base) END
+END DumpType;
+
+PROCEDURE DumpRecList;
+VAR reclist: B.TypeList;  type: B.Type;  i: INTEGER;
+BEGIN reclist := B.recList;  i := 0;
+  IF reclist # NIL THEN
+    w.l; w.sl("reclist:");
+    WHILE reclist # NIL DO
+      type := reclist.type;
+      w.s("  ["); w.i(i); w.s("] ");
+      DumpType(type);
+      reclist := reclist.next;  INC(i)
+    END
+  END
+END DumpRecList;
+
 
 PROCEDURE WriteRecordPointerTables;
 VAR typelist: B.TypeList;
 BEGIN
+  DumpRecList;
   typelist := B.recList;
   WHILE typelist # NIL DO
     Files.Set(X64, X64file, Header.base + typelist.type.adr);
@@ -244,10 +317,12 @@ PROCEDURE WriteExports;
 VAR
   export: B.ObjList;
   adr:    INTEGER;
+(*i:      INTEGER;*)
 BEGIN
   Files.Set(X64, X64file, Header.exports);
 
   export := B.expList;
+(*i := 0;  IF export # NIL THEN w.sl("Exports:") END;*)
   WHILE export # NIL DO
     IF export.obj.class = B.cType THEN adr := export.obj.type.adr;
     ELSIF export.obj IS B.Var     THEN adr := export.obj(B.Var).adr;
@@ -255,9 +330,10 @@ BEGIN
                                             + Header.code - Header.base;
     END;
     Files.WriteInt(X64, adr);
+  (*w.s("  ["); w.i(i); w.s("] $"); w.h(adr); w.sl(".");  INC(i);*)
     export := export.next
   END;
-  Files.WriteInt(X64, 0)
+  Files.WriteInt(X64, 8000000000000000H)
 END WriteExports;
 
 (* -------------------------------------------------------------------------- *)
@@ -280,6 +356,7 @@ BEGIN
   B.Append(B.Modid, filename);
   B.Append(".x64",  filename);
   X64file := Files.New(filename);
+  WritePE.AddObject(filename);
 
   Header.base := Align(SYSTEM.SIZE(ModuleHeaderDesc), 16) + Align(varSize, 16);
 
@@ -346,4 +423,5 @@ BEGIN
   Files.Register(X64file)
 END Write;
 
+BEGIN w.sl("ObjectX64 loaded.")
 END ObjectX64.

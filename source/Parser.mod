@@ -1339,7 +1339,7 @@ BEGIN
   RETURN modinit
 END Module;
 
-BEGIN
+BEGIN w.sl("Parser loaded.");
   type0 := type;  expression0 := expression;
   StatementSequence0 := StatementSequence
 END Parser.

@@ -1,4 +1,4 @@
-MODULE Boot;  (*$OBJECT*)
+MODULE Boot;  (*$OBJECT*) (*$RTL-*)
 
 (* Bootstrap loader - loads the subsequent modules in a PE *)
 
@@ -27,7 +27,7 @@ TYPE
     GetProcAddress*: PROCEDURE(module, procname: INTEGER): INTEGER;
     LoadLibraryA*:   PROCEDURE(filename: INTEGER): INTEGER;
     ExitProcess*:    PROCEDURE(result: INTEGER);
-    New:             PROCEDURE(VAR ptr: INTEGER;  tdAdr: INTEGER)
+    New*:            PROCEDURE(VAR ptr: INTEGER;  tdAdr: INTEGER)
                      (* Initially zero, kernel patches with impl of New *)
   END;
 
@@ -116,7 +116,7 @@ BEGIN
   (* Convert export offsets to absolute *)
   IF header.exports # 0 THEN
     export := header.exports;  SYSTEM.GET(export, exportadr);
-    WHILE exportadr # 0 DO
+    WHILE exportadr # 8000000000000000H DO
       SYSTEM.PUT(export, exportadr + header.base);
       INC(export, 8);
       SYSTEM.GET(export, exportadr)

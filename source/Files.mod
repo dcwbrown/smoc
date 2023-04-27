@@ -576,22 +576,22 @@ END FileAttributes;
 
 PROCEDURE InitWin32;
 BEGIN
-  SYSTEM.GetProcAddress(GetFileAttributesW,      Rtl.HKernel, SYSTEM.ADR("GetFileAttributesW"));      ASSERT(GetFileAttributesW      # NIL);
-  SYSTEM.GetProcAddress(CreateFileW,             Rtl.HKernel, SYSTEM.ADR("CreateFileW"));             ASSERT(CreateFileW             # NIL);
-  SYSTEM.GetProcAddress(CloseHandle,             Rtl.HKernel, SYSTEM.ADR("CloseHandle"));             ASSERT(CloseHandle             # NIL);
-  SYSTEM.GetProcAddress(MoveFileExW,             Rtl.HKernel, SYSTEM.ADR("MoveFileExW"));             ASSERT(MoveFileExW             # NIL);
-  SYSTEM.GetProcAddress(DeleteFileW,             Rtl.HKernel, SYSTEM.ADR("DeleteFileW"));             ASSERT(DeleteFileW             # NIL);
-  SYSTEM.GetProcAddress(ReadFile,                Rtl.HKernel, SYSTEM.ADR("ReadFile"));                ASSERT(ReadFile                # NIL);
-  SYSTEM.GetProcAddress(WriteFile,               Rtl.HKernel, SYSTEM.ADR("WriteFile"));               ASSERT(WriteFile               # NIL);
-  SYSTEM.GetProcAddress(SetFilePointerEx,        Rtl.HKernel, SYSTEM.ADR("SetFilePointerEx"));        ASSERT(SetFilePointerEx        # NIL);
-  SYSTEM.GetProcAddress(FlushFileBuffers,        Rtl.HKernel, SYSTEM.ADR("FlushFileBuffers"));        ASSERT(FlushFileBuffers        # NIL);
-  SYSTEM.GetProcAddress(SetEndOfFile,            Rtl.HKernel, SYSTEM.ADR("SetEndOfFile"));            ASSERT(SetEndOfFile            # NIL);
-  SYSTEM.GetProcAddress(GetFileSizeEx,           Rtl.HKernel, SYSTEM.ADR("GetFileSizeEx"));           ASSERT(GetFileSizeEx           # NIL);
-  SYSTEM.GetProcAddress(wsprintfW,               Rtl.HUser,   SYSTEM.ADR("wsprintfW"));               ASSERT(wsprintfW               # NIL);
-  SYSTEM.GetProcAddress(GetEnvironmentVariableW, Rtl.HKernel, SYSTEM.ADR("GetEnvironmentVariableW")); ASSERT(GetEnvironmentVariableW # NIL);
-  SYSTEM.GetProcAddress(GetCurrentProcessId,     Rtl.HKernel, SYSTEM.ADR("GetCurrentProcessId"));     ASSERT(GetCurrentProcessId     # NIL);
-  SYSTEM.GetProcAddress(GetFileAttributesExW,    Rtl.HKernel, SYSTEM.ADR("GetFileAttributesExW"));    ASSERT(GetFileAttributesExW    # NIL);
-  SYSTEM.GetProcAddress(GetLastError,            Rtl.HKernel, SYSTEM.ADR("GetLastError"));            ASSERT(GetLastError    # NIL);
+  SYSTEM.GetProcAddress(GetFileAttributesW,      Rtl.Kernel, SYSTEM.ADR("GetFileAttributesW"));      ASSERT(GetFileAttributesW      # NIL);
+  SYSTEM.GetProcAddress(CreateFileW,             Rtl.Kernel, SYSTEM.ADR("CreateFileW"));             ASSERT(CreateFileW             # NIL);
+  SYSTEM.GetProcAddress(CloseHandle,             Rtl.Kernel, SYSTEM.ADR("CloseHandle"));             ASSERT(CloseHandle             # NIL);
+  SYSTEM.GetProcAddress(MoveFileExW,             Rtl.Kernel, SYSTEM.ADR("MoveFileExW"));             ASSERT(MoveFileExW             # NIL);
+  SYSTEM.GetProcAddress(DeleteFileW,             Rtl.Kernel, SYSTEM.ADR("DeleteFileW"));             ASSERT(DeleteFileW             # NIL);
+  SYSTEM.GetProcAddress(ReadFile,                Rtl.Kernel, SYSTEM.ADR("ReadFile"));                ASSERT(ReadFile                # NIL);
+  SYSTEM.GetProcAddress(WriteFile,               Rtl.Kernel, SYSTEM.ADR("WriteFile"));               ASSERT(WriteFile               # NIL);
+  SYSTEM.GetProcAddress(SetFilePointerEx,        Rtl.Kernel, SYSTEM.ADR("SetFilePointerEx"));        ASSERT(SetFilePointerEx        # NIL);
+  SYSTEM.GetProcAddress(FlushFileBuffers,        Rtl.Kernel, SYSTEM.ADR("FlushFileBuffers"));        ASSERT(FlushFileBuffers        # NIL);
+  SYSTEM.GetProcAddress(SetEndOfFile,            Rtl.Kernel, SYSTEM.ADR("SetEndOfFile"));            ASSERT(SetEndOfFile            # NIL);
+  SYSTEM.GetProcAddress(GetFileSizeEx,           Rtl.Kernel, SYSTEM.ADR("GetFileSizeEx"));           ASSERT(GetFileSizeEx           # NIL);
+  SYSTEM.GetProcAddress(wsprintfW,               Rtl.User,   SYSTEM.ADR("wsprintfW"));               ASSERT(wsprintfW               # NIL);
+  SYSTEM.GetProcAddress(GetEnvironmentVariableW, Rtl.Kernel, SYSTEM.ADR("GetEnvironmentVariableW")); ASSERT(GetEnvironmentVariableW # NIL);
+  SYSTEM.GetProcAddress(GetCurrentProcessId,     Rtl.Kernel, SYSTEM.ADR("GetCurrentProcessId"));     ASSERT(GetCurrentProcessId     # NIL);
+  SYSTEM.GetProcAddress(GetFileAttributesExW,    Rtl.Kernel, SYSTEM.ADR("GetFileAttributesExW"));    ASSERT(GetFileAttributesExW    # NIL);
+  SYSTEM.GetProcAddress(GetLastError,            Rtl.Kernel, SYSTEM.ADR("GetLastError"));            ASSERT(GetLastError    # NIL);
 END InitWin32;
 
 BEGIN InitWin32

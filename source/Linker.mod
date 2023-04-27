@@ -708,7 +708,7 @@ BEGIN
   ELSE                ImageBase := 10000000H;  B.Append(".dll", FileName)
   END;
 
-  w.s("Linker creating '"); w.s(FileName); w.sl("'.");
+(*w.s("Linker creating '"); w.s(FileName); w.sl("'.");*)
   Out := Files.New(FileName);
 
   IF varSize < 1 THEN varSize := 1 END;  (* Guarantee presence of a globals section *)
@@ -748,4 +748,5 @@ BEGIN
   Files.Register(Out)
 END Link;
 
+BEGIN w.sl("Linker loaded.")
 END Linker.

@@ -1,5 +1,5 @@
 MODULE Base;
-IMPORT SYSTEM, Files, Crypt, S := Scanner;
+IMPORT SYSTEM, Files, Crypt, S := Scanner, w := Writer;
 
 CONST
   MaxExt*    = 7;    MaxRecTypes* = 512;
@@ -26,7 +26,11 @@ TYPE
   Node*   = POINTER TO NodeDesc;
   Ident*  = POINTER TO IdentDesc;
 
-  ObjDesc* = RECORD class*: INTEGER;  type*: Type;  ident*: Ident END;
+  ObjDesc* = RECORD
+               class*: INTEGER;
+               type*:  Type;
+               ident*: Ident
+             END;
 
   Const*   = POINTER TO RECORD (ObjDesc)  val*: INTEGER END;
   Field*   = POINTER TO RECORD (ObjDesc)  off*: INTEGER END;
@@ -863,12 +867,14 @@ BEGIN
   modident.obj := mod;  mod.ident := modident;  system := TRUE
 END NewSystemModule;
 
-PROCEDURE NewModule*(ident: Ident;  id: S.IdStr);
+(* Import module - ident has local name, id is real (defined) name *)
+PROCEDURE NewModule*(ident: Ident;  id0: S.IdStr);
 VAR
   path, symfname: ARRAY 512 OF CHAR;
   x, i:           INTEGER;
   found:          BOOLEAN;
   mod:            Module;
+  id:             S.IdStr;
 
   PROCEDURE GetPath(VAR path: ARRAY OF CHAR;  VAR i: INTEGER);
   VAR j: INTEGER;
@@ -882,6 +888,11 @@ VAR
   END GetPath;
 
 BEGIN (* NewModule *)
+  IF Flag.object & (id0 = "Rtl") THEN
+    id := "Kernel"
+  ELSE
+    id := id0
+  END;  (* Object hack *)
   mod := FindMod(id);  IF (mod # NIL) & ~mod.import THEN mod := NIL END;
   IF id = Modid THEN S.Mark("Cannot import self")
   ELSIF mod = NIL THEN
@@ -1042,6 +1053,7 @@ BEGIN
   S.InstallSetCompilerFlag(SetCompilerFlag);
 
   preTypeNo := 0;  curLev := -1;
+
   NewPredefinedType(intType,    tInt);
   NewPredefinedType(byteType,   tInt);
   NewPredefinedType(boolType,   tBool);

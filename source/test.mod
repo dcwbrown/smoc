@@ -1,16 +1,19 @@
 MODULE test;  (*$CONSOLE*)
 
-IMPORT SYSTEM, Dumper, w := Writer;
+IMPORT SYSTEM, Dumper, w := Writer, Classy;
 
 CONST
   cs8 = "8 bit string";
 
 VAR
-  c: CHAR;
-  i: INTEGER;
-  s: ARRAY 10 OF CHAR;
-  t: ARRAY 10 OF CHAR;
-  b: BOOLEAN;
+  c:   CHAR;
+  i:   INTEGER;
+  s:   ARRAY 10 OF CHAR;
+  t:   ARRAY 10 OF CHAR;
+  b:   BOOLEAN;
+  cr:  Classy.root;
+  cb1: Classy.branch1;
+
 
 PROCEDURE assignvarstring(VAR s: ARRAY OF CHAR);
 BEGIN
@@ -69,4 +72,28 @@ BEGIN
 
   IF FALSE THEN i := 50;  s[i] := " " END;
   IF FALSE THEN ASSERT(FALSE)         END;
+
+  w.s("Classy.b1.thing1 = "); w.i(Classy.b1.thing1); w.sl(".");
+  w.s("Classy.b2.thing2 = "); w.i(Classy.b2.thing2); w.sl(".");
+
+  CASE Classy.r OF
+  | Classy.branch1:  w.sl("Classy.r IS Classy.branch1.");
+  | Classy.branch2:  w.sl("Classy.r IS Classy.branch2.");
+  | Classy.root:     w.sl("Classy.r IS Classy.root.");
+  END;
+
+  cr := Classy.b2;
+  CASE cr OF
+  | Classy.branch1:  w.sl("cr IS Classy.branch1.");
+  | Classy.branch2:  w.sl("cr IS Classy.branch2.");
+  | Classy.root:     w.sl("cr IS Classy.root.");
+  END;
+
+  NEW(cb1);  cr := cb1;
+  CASE cr OF
+  | Classy.branch1:  w.sl("cr IS Classy.branch1.");
+  | Classy.branch2:  w.sl("cr IS Classy.branch2.");
+  | Classy.root:     w.sl("cr IS Classy.root.");
+  END;
+
 END test.

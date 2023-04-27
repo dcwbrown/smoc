@@ -1,4 +1,4 @@
-MODULE Kernel;  (*$OBJECT*)
+MODULE Kernel;  (*$RTL-*)
 
 IMPORT SYSTEM, Boot;
 
@@ -676,6 +676,10 @@ VAR tick: INTEGER;
 BEGIN GetSystemTimePreciseAsFileTime(SYSTEM.ADR(tick));
 RETURN tick END Time;
 
+PROCEDURE TimeToMSecs*(time: INTEGER): INTEGER;
+  RETURN time DIV 10000
+END TimeToMSecs;
+
 
 (* -------------------------------------------------------------------------- *)
 (* ------- Kernel initialisation code - called following kernel link -------- *)
@@ -711,5 +715,8 @@ BEGIN
   ArgV       := CommandLineToArgvW(CommandAdr, SYSTEM.ADR(NumArgs));
 
   (* System time (precise) *)
-  SYSTEM.PUT(SYSTEM.ADR(GetSystemTimePreciseAsFileTime), Boot.PEImports.GetProcAddress(Kernel, SYSTEM.ADR("GetSystemTimePreciseAsFileTime")))
+  SYSTEM.PUT(SYSTEM.ADR(GetSystemTimePreciseAsFileTime), Boot.PEImports.GetProcAddress(Kernel, SYSTEM.ADR("GetSystemTimePreciseAsFileTime")));
+
+  (* Install New *)
+  SYSTEM.PUT(SYSTEM.ADR(Boot.PEImports.New), New)
 END Kernel.

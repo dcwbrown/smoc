@@ -8,8 +8,8 @@ VAR
                lpNumberOfBytesWritten, lpOverlapped: INTEGER
              ): SYSTEM.CARD32;
 
-  hOut: INTEGER;
-  crlf: ARRAY 2 OF BYTE;
+  hOut:  INTEGER;
+  crlf*: ARRAY 2 OF BYTE;
 
 PROCEDURE writebuf(adr, len: INTEGER);
 VAR written, result: INTEGER;

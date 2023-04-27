@@ -20,7 +20,8 @@
 *)
 
 MODULE Scanner;  (* Modified from ORS module in Project Oberon *)
-IMPORT SYSTEM, Rtl, Files, BigNums;
+
+IMPORT SYSTEM, Rtl, Files, BigNums, w := Writer;
 
 CONST
   TAB = 9;
@@ -434,7 +435,8 @@ BEGIN
 END Init;
 
 PROCEDURE InstallSetCompilerFlag*(proc: SetCompilerFlagProc);
-BEGIN SetCompilerFlag := proc
+BEGIN w.sl("Scanner - InstallSetCompilerFlag entered.");
+  SetCompilerFlag := proc
 END InstallSetCompilerFlag;
 
 PROCEDURE InstallNotifyError*(proc: NotifyErrorProc);

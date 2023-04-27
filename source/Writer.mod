@@ -8,8 +8,8 @@ VAR
                lpNumberOfBytesWritten, lpOverlapped: INTEGER
              ): SYSTEM.CARD32;
 
-  hOut: INTEGER;
-  crlf: ARRAY 2 OF BYTE;
+  hOut:  INTEGER;
+  crlf*: ARRAY 2 OF BYTE;
 
 PROCEDURE writebuf(adr, len: INTEGER);
 VAR written, result: INTEGER;
@@ -140,9 +140,9 @@ VAR
   SetConsoleOutputCP: PROCEDURE(codepage:   INTEGER):       INTEGER;
   res: INTEGER;
 BEGIN
-  SYSTEM.GetProcAddress(GetStdHandle,       Rtl.HKernel, SYSTEM.ADR("GetStdHandle"));       ASSERT(GetStdHandle       # NIL);
-  SYSTEM.GetProcAddress(SetConsoleOutputCP, Rtl.HKernel, SYSTEM.ADR("SetConsoleOutputCP")); ASSERT(SetConsoleOutputCP # NIL);
-  SYSTEM.GetProcAddress(WriteFile,          Rtl.HKernel, SYSTEM.ADR("WriteFile"));          ASSERT(WriteFile          # NIL);
+  SYSTEM.GetProcAddress(GetStdHandle,       Rtl.Kernel, SYSTEM.ADR("GetStdHandle"));       ASSERT(GetStdHandle       # NIL);
+  SYSTEM.GetProcAddress(SetConsoleOutputCP, Rtl.Kernel, SYSTEM.ADR("SetConsoleOutputCP")); ASSERT(SetConsoleOutputCP # NIL);
+  SYSTEM.GetProcAddress(WriteFile,          Rtl.Kernel, SYSTEM.ADR("WriteFile"));          ASSERT(WriteFile          # NIL);
 
   hOut := GetStdHandle(STD_OUTPUT_HANDLE);
   res  := SetConsoleOutputCP(UTF8);

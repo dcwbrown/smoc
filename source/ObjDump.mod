@@ -29,16 +29,17 @@ TYPE
 
 PROCEDURE DumpX64;
 VAR
-  filename:   ARRAY 256 OF CHAR;
-  header:     ModuleHeaderDesc;
-  name:       ARRAY 1024 OF CHAR;
-  nameOffset: INTEGER;
-  i:          INTEGER;
-  key:        INTEGER;
-  export:     INTEGER;
-  adr:        INTEGER;
-  trap:       INTEGER;
-  line, col:  INTEGER;
+  filename:     ARRAY 256 OF CHAR;
+  header:       ModuleHeaderDesc;
+  name:         ARRAY 1024 OF CHAR;
+  nameOffset:   INTEGER;
+  i:            INTEGER;
+  key:          INTEGER;
+  export:       INTEGER;
+  adr:          INTEGER;
+  trap:         INTEGER;
+  line, col:    INTEGER;
+  modno, expno: INTEGER;
 BEGIN
   Rtl.GetArg(1, filename);
   IF filename[0] = 0X THEN
@@ -77,12 +78,14 @@ BEGIN
         w.sl("Imported modules:");
         Files.Set(X64, X64file, header.imports);
         Files.ReadString(X64, name);
+        i := 0;
         WHILE name[0] # 0X DO
           w.s("  ");  w.in(i, 3);  w.s(": "); w.s(name);
           Files.ReadInt(X64, key); w.s(" $"); w.h(key);
           Files.ReadInt(X64, key); w.s(" $"); w.h(key);
           w.sl(".");
-          Files.ReadString(X64, name)
+          Files.ReadString(X64, name);
+          INC(i)
         END
       END;
 
@@ -93,9 +96,19 @@ BEGIN
         w.sl("Exported addresses:");
         Files.Set(X64, X64file, header.exports);
         Files.ReadInt(X64, export);  i := 0;
-        WHILE export # 0 DO
+        WHILE export # 8000000000000000H DO
           w.s("  "); w.in(i, 3); w.s(": $"); w.h(export); w.sl(".");
           Files.ReadInt(X64, export);  INC(i);
+        END
+      END;
+
+      IF header.importCount > 0 THEN
+        w.sl("Imports.");
+        Files.Set(X64, X64file, header.base + 128);
+        FOR i := 0 TO header.importCount-1 DO
+          Files.ReadInt(X64, expno);
+          modno := expno DIV 100000000H;  expno := expno MOD 100000000H;
+          w.s(" modno "); w.i(modno); w.s(", expno "); w.i(expno); w.sl(".");
         END
       END;
 
@@ -118,6 +131,8 @@ BEGIN
         | 6: w.s("  divide trap  at $");
         | 7: w.s("  assert trap  at $");
         | 8: w.s("  rtl trap     at $");
+        | 9: w.s("  GET trap     at $");
+        |10: w.s("  PUT trap     at $");
         END;
         w.hn(adr,12); w.s(" "); w.i(line); w.s(":"); w.i(col); w.sl(".");
         Files.ReadInt(X64, adr)

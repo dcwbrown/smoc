@@ -7,7 +7,7 @@ MODULE ORB;  (*$CONSOLE*)
 
 
 IMPORT
-  SYSTEM, Rtl, Files, S := Scanner, B := Base, G := Generator, P := Parser, w := Writer;
+  SYSTEM, Rtl, Files, S := Scanner, B := Base, G := Generator, P := Parser, w := Writer, WritePE;
 
 TYPE
   ModuleName = ARRAY   64 OF CHAR;
@@ -142,10 +142,15 @@ BEGIN
         IF sym # S.ident THEN Expected(module.filename, "expected id (2).") END;
         impname := S.id; S.Get(sym)
       END;
-      IF (impname # "SYSTEM") & (impname # "Rtl") THEN AddImport(module, impname) END
+      IF (impname # "SYSTEM") & (impname # "Rtl") & (impname # "Boot") & (impname # "Kernel") THEN
+        AddImport(module, impname)
+      END
     UNTIL sym # S.comma
   END;
-  IF B.Flag.rtl THEN AddImport(module, "Rtl") END;
+  IF Object & (module.modname # "Boot") THEN AddImport(module, "Boot") END;
+  IF B.Flag.rtl THEN
+    IF Object THEN AddImport(module, "Kernel") ELSE AddImport(module, "Rtl") END
+  END;
   module.scanned := TRUE
 END ScanModuleImports;
 
@@ -243,7 +248,7 @@ END ReportDependencies;
 
 
 PROCEDURE Build();
-VAR mod, prev: Module;  allscanned: BOOLEAN;
+VAR mod, prev: Module;  allscanned: BOOLEAN;  PEname: ARRAY 1024 OF CHAR;
 BEGIN
   AddModule(Modulename);
 
@@ -277,7 +282,12 @@ BEGIN
       w.sl("Cannot resolve circular dependency order in:");
       ReportDependencies; Rtl.Halt(99)
     END
-  UNTIL Modules = NIL
+  UNTIL Modules = NIL;
+
+  IF Object THEN
+    PEname := B.OutputPath;  Rtl.Append(Modulename, PEname);  Rtl.Append(".exe", PEname);
+    WritePE.Generate(PEname)
+  END
 END Build;
 
 
@@ -321,8 +331,8 @@ BEGIN
   END;
 
   IF Modulename = "" THEN
-    w.sl("ORB - small Oberon-07 executable builder.");
-    w.sl("Expected name of module to build.");
+    w.sl("ORB - Oberon-recursive builder.");
+    w.sl("No parameters. Expected at least name of module to build.");
     Rtl.Halt(99);
   END
 END ScanArguments;
