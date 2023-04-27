@@ -313,6 +313,8 @@ VAR
   impmod:   B.Module;
   export:   B.ObjList;
   i, adr:   INTEGER;
+  base:     Boot.ModuleBaseDesc;
+
 BEGIN
   filename := B.BuildPath;
   B.Append(B.Modid, filename);
@@ -323,8 +325,12 @@ BEGIN
   Header.base := Align(SYSTEM.SIZE(Boot.ModuleHeaderDesc), 16) + Align(varSize, 16);
 
   (* Insert pointers into the first 128 bytes of static data. *)
-  Files.Set(X64, X64file, Header.base + 56);  Files.WriteInt(X64, Header.base);
-  Files.Set(X64, X64file, Header.base + 112); Files.WriteInt(X64, modPtrTable);
+
+  Files.Set(X64, X64file, Header.base + SYSTEM.ADR(base.ModHdrOffset) - SYSTEM.ADR(base));
+  Files.WriteInt(X64, Header.base);
+
+  Files.Set(X64, X64file, Header.base + SYSTEM.ADR(base.ModulePtrTable) - SYSTEM.ADR(base));
+  Files.WriteInt(X64, modPtrTable);
 
   WriteImportReferences;
   WriteLiteralStrings;

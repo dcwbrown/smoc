@@ -32,17 +32,17 @@ TYPE
   END;
 
   ModuleBase = POINTER [untraced] TO ModuleBaseDesc;
-  ModuleBaseDesc = RECORD
-    (*   0 00 *) GetProcAddress: PROCEDURE(module, procname: INTEGER): INTEGER;
-    (*   8 08 *) LoadLibraryA:   PROCEDURE(filename: INTEGER): INTEGER;
-    (*  16 10 *) ExitProcess:    PROCEDURE(result: INTEGER);
-    (*  24 18 *) z1, z2, z3, z4: INTEGER;
-    (*  56 38 *) ModHdrOffset:   INTEGER;
-    (*  64 40 *) z5, z6, z7, z8: INTEGER;
-    (*  96 60 *) z9:             INTEGER;
-    (* 104 68 *) StackPtrTable:  INTEGER;
-    (* 112 70 *) ModulePtrTable: INTEGER;
-    (* 120 78 *) New:            PROCEDURE(VAR ptr: INTEGER;  tdAdr: INTEGER)
+  ModuleBaseDesc* = RECORD
+    (*   0 00 *) GetProcAddress:  PROCEDURE(module, procname: INTEGER): INTEGER;
+    (*   8 08 *) LoadLibraryA:    PROCEDURE(filename: INTEGER): INTEGER;
+    (*  16 10 *) ExitProcess:     PROCEDURE(result: INTEGER);
+    (*  24 18 *) z1, z2, z3, z4:  INTEGER;
+    (*  56 38 *) ModHdrOffset*:   INTEGER;
+    (*  64 40 *) z5, z6, z7, z8:  INTEGER;
+    (*  96 60 *) z9:              INTEGER;
+    (* 104 68 *) StackPtrTable:   INTEGER;
+    (* 112 70 *) ModulePtrTable*: INTEGER;
+    (* 120 78 *) New:             PROCEDURE(VAR ptr: INTEGER;  tdAdr: INTEGER)
   END;
 
 VAR
