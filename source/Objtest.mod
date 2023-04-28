@@ -18,6 +18,20 @@ VAR
   cb1:    Classy.branch1;
   cb3:    branch3;
 
+
+PROCEDURE dump(r: Classy.root);
+VAR
+  radr: INTEGER;
+  tadr: INTEGER;
+BEGIN
+  SYSTEM.GET(SYSTEM.ADR(r), radr);
+  w.s("r points to  $"); w.h(radr); w.sl(".");
+  SYSTEM.GET(radr-10H, tadr);
+  w.s("type info at $"); w.h(tadr); w.sl(" contains:");
+  w.DumpMem(2, tadr, 0, 80);
+END dump;
+
+
 BEGIN
   w.sl("Objtest starting.");
 
@@ -53,28 +67,29 @@ BEGIN
   | Classy.root:     w.sl("Classy.r IS Classy.root.");
   END;
 
-  cr := Classy.b2;
+  cr := Classy.b2;      w.s("cr should be Classy.b2. ");
   CASE cr OF
   | Classy.branch1:  w.sl("cr IS Classy.branch1.");
   | Classy.branch2:  w.sl("cr IS Classy.branch2.");
   | Classy.root:     w.sl("cr IS Classy.root.");
   END;
 
-  NEW(cb1);  cr := cb1;
+  NEW(cb1);  cr := cb1; w.s("cr should be cb1. ");
   CASE cr OF
   | Classy.branch1:  w.sl("cr IS Classy.branch1.");
   | Classy.branch2:  w.sl("cr IS Classy.branch2.");
   | Classy.root:     w.sl("cr IS Classy.root.");
   END;
 
-  NEW(cb3);  cr := cb3;
+  NEW(cb3);  cr := cb3; w.s("cr should be cb3. ");
   CASE cr OF
+  | branch3:         w.sl("cr IS branch3.");
   | Classy.branch1:  w.sl("cr IS Classy.branch1.");
   | Classy.branch2:  w.sl("cr IS Classy.branch2.");
   | Classy.root:     w.sl("cr IS Classy.root.");
   END;
 
-
+  dump(cr);
 
 (*
   i := 20;

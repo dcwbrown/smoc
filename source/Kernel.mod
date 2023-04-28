@@ -343,7 +343,7 @@ PROCEDURE InitHeap(reserve, commit: INTEGER);
 CONST MEM_RESERVE = 2000H;  MEM_COMMIT = 1000H;  PAGE_READWRITE = 4;
 VAR i, p: INTEGER;
 BEGIN
-  (* Reserve 2GB of address space for later use as heap space *)
+  (* Reserve address space for later use as heap space *)
   HeapBase := VirtualAlloc(0, reserve, MEM_RESERVE, PAGE_READWRITE);
   ASSERT(HeapBase # 0);
   HeapMax  := reserve;
@@ -592,9 +592,7 @@ VAR
                      (* modBase.                                              *)
   stkDesc, stkBase, ptrTable, off, ptr: INTEGER;
 BEGIN
-(*
-  IF HeapTracer # NIL THEN HeapTracer(0) END;  (* Trace collect call *)
-*)
+(*IF HeapTracer # NIL THEN HeapTracer(0) END;*)  (* Trace collect call *)
   module := Boot.FirstModule;
   WHILE module # NIL DO
     modBase := module.base;
@@ -702,7 +700,8 @@ BEGIN
   (* Initialise Heap and GC *)
   SYSTEM.PUT(SYSTEM.ADR(VirtualAlloc), Boot.PEImports.GetProcAddress(Kernel, SYSTEM.ADR("VirtualAlloc")));
 
-  InitHeap(80000000H, 80000H);  (* Reserve 2GB, commit 512KB *)
+(*InitHeap(80000000H, 80000H);*)(* Reserve 2GB, commit 512KB *)
+  InitHeap(80000000H, 2000000H);  (* Reserve 2GB, commit 32MB *)
   Collect0 := Collect;
 
   (* Initialise command line access *)

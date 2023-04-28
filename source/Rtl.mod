@@ -531,9 +531,11 @@ VAR i, p: INTEGER;
 BEGIN
   (* Reserve 2GB of address space for later use as heap space *)
   HeapBase := VirtualAlloc(0, HeapMax, MEM_RESERVE, PAGE_READWRITE);
+  ASSERT(HeapBase # 0);
 
   (* Allocate first 512KB for initial heap *)
-  HeapSize := 80000H; ASSERT(HeapBase # 0);
+(*HeapSize := 80000H;*)
+  HeapSize := 2000000H;  (* 32MB *)
   HeapBase := VirtualAlloc(HeapBase, HeapSize, MEM_COMMIT, PAGE_READWRITE);
   ASSERT(HeapBase # 0);
 

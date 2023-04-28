@@ -18,7 +18,7 @@ BEGIN
   NEW(b2);  b2.thing := 0;  b2.thing2 := 2;
 
   r := b1;
-
+  w.s("r should be branch1. ");
   CASE r OF
   | branch1:  w.sl("r IS branch1.");
   | branch2:  w.sl("r IS branch2.");

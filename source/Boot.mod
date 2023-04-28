@@ -148,10 +148,14 @@ BEGIN
   importRefAdr := header.imports;
   WHILE importRefAdr # 0 DO
     SYSTEM.GET(header.base + importRefAdr, importRef);
-    modno := ASR(importRef, 48);
-    expno := ASR(importRef, 32) MOD 10000H;
-    SYSTEM.GET(imports[modno] + expno * 8, impadr);
-    SYSTEM.PUT(header.base + importRefAdr, impadr);
+    IF importRef < 0 THEN (* Local relocation *)
+      SYSTEM.PUT(header.base + importRefAdr, header.base + ASR(importRef, 32) MOD 80000000H)
+    ELSE
+      modno := ASR(importRef, 48);
+      expno := ASR(importRef, 32) MOD 10000H;
+      SYSTEM.GET(imports[modno] + expno * 8, impadr);
+      SYSTEM.PUT(header.base + importRefAdr, impadr)
+    END;
     importRefAdr := importRef MOD 100000000H;
   END;
 

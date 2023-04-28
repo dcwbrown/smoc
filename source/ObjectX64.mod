@@ -19,6 +19,15 @@ RETURN result END Align;
 
 (* -------------------------------------------------------------------------- *)
 
+PROCEDURE AddImport(adr, modno, expno: INTEGER);
+BEGIN
+  ASSERT((modno >= 0) & (modno < 8000H));
+  ASSERT(expno > 0);
+  Files.Set(X64, X64file, Header.base + adr);
+  Files.WriteInt(X64, Header.imports + LSL(expno - 1, 32) + LSL(modno, 48));
+  Header.imports := adr;
+END AddImport;
+
 PROCEDURE WriteImportReferences;
 VAR
   impmod:      B.Module;
@@ -45,9 +54,7 @@ BEGIN
         END;
         ASSERT(impadr >= 128);
         ASSERT(expno > 0);  (* Export indices are 1 based for GetProcAddress.      *)
-        Files.Set(X64, X64file, Header.base + impadr);
-        Files.WriteInt(X64, Header.imports + LSL(expno-1, 32) + LSL(modno, 48));
-        Header.imports := impadr;
+        AddImport(impadr, modno, expno);
         import := import.next
       END;
       impmod := impmod.next;  INC(modno)
@@ -154,7 +161,7 @@ BEGIN
   w.s(", size ");  w.i(t.size);
   w.s(", size0 "); w.i(t.size0);
   IF t.mod # NIL THEN
-    w.s(" - in module "); w.s(t.mod.id)
+    w.s(" - in module "); w.s(t.mod.id); w.s(", no. "); w.i(t.mod.no)
   END;
   w.sl(".");
   IF t.base # NIL THEN w.s("      extension of "); DumpType(t.base) END
@@ -175,20 +182,52 @@ BEGIN reclist := B.recList;  i := 0;
 END DumpRecList;
 
 
+PROCEDURE AddRelocation(adr, val: INTEGER);
+BEGIN
+  w.s("Add relocation at $"); w.h(adr); w.s(" value $"); w.h(val); w.sl(".");
+  Files.Set(X64, X64file, Header.base + adr);
+  Files.WriteInt(X64, 8000000000000000H + LSL(val, 32) + Header.imports);
+  Header.imports := adr;
+END AddRelocation;
+
+
+PROCEDURE GetModNo(mod: B.Module): INTEGER;
+VAR modno: INTEGER;  m: B.Module;
+BEGIN modno := 0;  m := B.modList;
+  WHILE (m # NIL) & (m # mod) DO INC(modno); m := m.next END
+RETURN modno END GetModNo;
+
+
 PROCEDURE WriteRecordPointerTables;
-VAR typelist: B.TypeList;
+VAR recType: B.TypeList;  type: B.Type;  typeadr: INTEGER;
 BEGIN
   DumpRecList;
-  typelist := B.recList;
-  WHILE typelist # NIL DO
-    Files.Set(X64, X64file, Header.base + typelist.type.adr);
-    Files.WriteInt(X64, typelist.type.size);
+  recType := B.recList;
+  WHILE recType # NIL DO
+    type := recType.type;  typeadr := type.adr;
+    Files.Set(X64, X64file, Header.base + typeadr);
+    Files.WriteInt(X64, type.size);
 
-    Files.Set(X64, X64file, Header.base + typelist.type.adr + 8 + B.MaxExt*8);
-    IF typelist.type.nTraced > 0 THEN Write_pointer_offset(0, typelist.type) END;
+    (* Write extensions for extended record types *)
+    WHILE type.len >= 1 DO
+      IF type.mod = NIL THEN (* local *)
+        w.s("Type extension ptr, typeadr $"); w.h(typeadr);
+        w.s(", type.len ");                   w.i(type.len);
+        w.s(", ext type adr $");              w.h(type.adr);
+        w.s(", Header.base $");               w.h(Header.base);
+        w.sl(".");
+        AddRelocation(typeadr + type.len*8, type.adr)
+      ELSE (* import *)
+        AddImport(typeadr + type.len*8, GetModNo(type.mod), type.expno)
+      END;
+      type := type.base
+    END;
+
+    Files.Set(X64, X64file, Header.base + typeadr + 8 + B.MaxExt*8);
+    IF type.nTraced > 0 THEN Write_pointer_offset(0, recType.type) END;
     Files.WriteInt(X64, -1);
 
-    typelist := typelist.next
+    recType := recType.next
   END;
 
 END WriteRecordPointerTables;
