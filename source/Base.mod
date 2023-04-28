@@ -867,13 +867,12 @@ BEGIN
 END NewSystemModule;
 
 (* Import module - ident has local name, id is real (defined) name *)
-PROCEDURE NewModule*(ident: Ident;  id0: S.IdStr);
+PROCEDURE NewModule*(ident: Ident;  id: S.IdStr);
 VAR
   path, symfname: ARRAY 512 OF CHAR;
   x, i:           INTEGER;
   found:          BOOLEAN;
   mod:            Module;
-  id:             S.IdStr;
 
   PROCEDURE GetPath(VAR path: ARRAY OF CHAR;  VAR i: INTEGER);
   VAR j: INTEGER;
@@ -887,7 +886,6 @@ VAR
   END GetPath;
 
 BEGIN (* NewModule *)
-  IF id0 = "Rtl" THEN id := "Kernel" ELSE id := id0 END;  (* Object hack *)
   mod := FindMod(id);  IF (mod # NIL) & ~mod.import THEN mod := NIL END;
   IF id = Modid THEN S.Mark("Cannot import self")
   ELSIF mod = NIL THEN

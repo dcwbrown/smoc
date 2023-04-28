@@ -21,7 +21,7 @@
 
 MODULE Scanner;  (* Modified from ORS module in Project Oberon *)
 
-IMPORT SYSTEM, Rtl, Files, BigNums, w := Writer;
+IMPORT SYSTEM, K := Kernel, Files, BigNums, w := Writer;
 
 CONST
   TAB = 9;
@@ -118,7 +118,7 @@ PROCEDURE Read;
 VAR n: INTEGER;
 BEGIN
   IF bufPos < bufSize THEN
-    ch := Rtl.GetUtf8(buffer, bufPos);
+    ch := K.GetUtf8(buffer, bufPos);
     IF ch = LF THEN linePos := bufPos;  INC(lineNumber) END;
   ELSE eof := TRUE;  ch := 0
   END
@@ -134,7 +134,7 @@ BEGIN sym := ident;  id[0] := c1;  i := 1;
                           OR (ch >= ORD("A")) & (ch <= ORD("Z"))
                           OR (ch >= ORD("a")) & (ch <= ORD("z"))
                           OR (ch =  ORD("_"))) DO
-    Rtl.PutUtf8 (ch, id, i);
+    K.PutUtf8 (ch, id, i);
     Read
   END;
   id[i] := 0X;
@@ -151,7 +151,7 @@ PROCEDURE String(quoteCh: CHAR): INTEGER;
 BEGIN
   slen := 0;
   WHILE ~eof & (slen < MaxStrLen) & (ch # ORD(quoteCh)) DO
-    Rtl.PutUtf8(ch, str, slen); Read
+    K.PutUtf8(ch, str, slen); Read
   END;
   Read;  str[slen] := 0X;  INC(slen);
   IF slen >= MaxStrLen THEN Mark("String too long") END;
@@ -335,7 +335,7 @@ VAR exit: BOOLEAN;
   VAR pragma: Str;  i: INTEGER;
   BEGIN Read;  i := 0;
     WHILE (i < LEN(pragma) - 1) & (ch # ORD("*")) & ~eof DO
-      Rtl.PutUtf8(ch, pragma, i);  Read
+      K.PutUtf8(ch, pragma, i);  Read
     END;
     pragma[i] := 0X;
     IF ch = ORD("*") THEN SetCompilerFlag(pragma)

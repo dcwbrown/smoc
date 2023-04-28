@@ -1,5 +1,5 @@
 MODULE In;
-IMPORT SYSTEM, Rtl;
+IMPORT SYSTEM, K := Kernel.
 VAR
   GetStdHandle: PROCEDURE(nStdHandle: SYSTEM.CARD32): INTEGER;
   ReadConsoleA: PROCEDURE(
@@ -107,8 +107,8 @@ END Int;
 
 PROCEDURE Init;
 BEGIN (* Init *)
-  SYSTEM.GetProcAddress(GetStdHandle, Rtl.Kernel, SYSTEM.ADR("GetStdHandle")); ASSERT(GetStdHandle # NIL);
-  SYSTEM.GetProcAddress(ReadConsoleA, Rtl.Kernel, SYSTEM.ADR("ReadConsoleA")); ASSERT(ReadConsoleA # NIL);
+  SYSTEM.GetProcAddress(GetStdHandle, K.Kernel, SYSTEM.ADR("GetStdHandle")); ASSERT(GetStdHandle # NIL);
+  SYSTEM.GetProcAddress(ReadConsoleA, K.Kernel, SYSTEM.ADR("ReadConsoleA")); ASSERT(ReadConsoleA # NIL);
 END Init;
 
 BEGIN Init; Open

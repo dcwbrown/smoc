@@ -1,5 +1,5 @@
 MODULE ObjDump;  (*$CONSOLE*)  (* Dump content od .x64 object file *)
-IMPORT SYSTEM, Files, Rtl, w := Writer, Boot;
+IMPORT SYSTEM, Files, K := Kernel, w := Writer, Boot;
 
 VAR
   X64file: Files.File;  (* Input file *)
@@ -27,7 +27,7 @@ VAR
   importRefAdr: INTEGER;
   importRef:    INTEGER;
 BEGIN
-  Rtl.GetArg(1, filename);
+  K.GetArg(1, filename);
   IF filename[0] = 0X THEN
     w.sl("Expected filename.")
   ELSE

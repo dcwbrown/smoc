@@ -1,6 +1,6 @@
 MODULE Writer;  (* Character output convenience functions *)
 
-IMPORT SYSTEM, Rtl;
+IMPORT SYSTEM, K := Kernel;
 
 VAR
   WriteFile: PROCEDURE(
@@ -140,9 +140,9 @@ VAR
   SetConsoleOutputCP: PROCEDURE(codepage:   INTEGER):       INTEGER;
   res: INTEGER;
 BEGIN
-  SYSTEM.GetProcAddress(GetStdHandle,       Rtl.Kernel, SYSTEM.ADR("GetStdHandle"));       ASSERT(GetStdHandle       # NIL);
-  SYSTEM.GetProcAddress(SetConsoleOutputCP, Rtl.Kernel, SYSTEM.ADR("SetConsoleOutputCP")); ASSERT(SetConsoleOutputCP # NIL);
-  SYSTEM.GetProcAddress(WriteFile,          Rtl.Kernel, SYSTEM.ADR("WriteFile"));          ASSERT(WriteFile          # NIL);
+  SYSTEM.GetProcAddress(GetStdHandle,       K.Kernel, SYSTEM.ADR("GetStdHandle"));       ASSERT(GetStdHandle       # NIL);
+  SYSTEM.GetProcAddress(SetConsoleOutputCP, K.Kernel, SYSTEM.ADR("SetConsoleOutputCP")); ASSERT(SetConsoleOutputCP # NIL);
+  SYSTEM.GetProcAddress(WriteFile,          K.Kernel, SYSTEM.ADR("WriteFile"));          ASSERT(WriteFile          # NIL);
 
   hOut := GetStdHandle(STD_OUTPUT_HANDLE);
   res  := SetConsoleOutputCP(UTF8);

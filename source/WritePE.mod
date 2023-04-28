@@ -1,5 +1,5 @@
 MODULE WritePE;  (* Create exe from a list of compiled Oberon modules *)
-IMPORT SYSTEM, Rtl, Files, B := Base, w := Writer;
+IMPORT SYSTEM, K := Kernel, Files, B := Base, w := Writer;
 
 
 CONST
@@ -98,7 +98,7 @@ VAR  f: Files.File;  r: Files.Rider;  buf: ARRAY 1000H OF BYTE;
 BEGIN
   f := Files.Old(name);
   IF f = NIL THEN
-    w.s("Couldn't copy '"); w.s(name); w.sl("'."); Rtl.Halt(99)
+    w.s("Couldn't copy '"); w.s(name); w.sl("'."); K.Halt(99)
   END;
   Files.Set(r, f, 0);
   WHILE ~r.eof DO

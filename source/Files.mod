@@ -1,5 +1,5 @@
 MODULE Files;
-IMPORT SYSTEM, Rtl, w := Writer;
+IMPORT SYSTEM, K := Kernel, w := Writer;
 
 CONST
   (* Win32 Const *)
@@ -46,7 +46,7 @@ TYPE
   PathStr   = ARRAY MAX_PATH+1 OF CHAR;
 
   File*    = POINTER TO FileDesc;
-  FileDesc = RECORD (Rtl.Finalised)
+  FileDesc = RECORD (K.Finalised)
                new:    BOOLEAN;
                ronly:  BOOLEAN;
                hFile:  Handle;
@@ -108,7 +108,7 @@ VAR
                                      lpFileInformation:     INTEGER): Dword;
   GetLastError:            PROCEDURE(): INTEGER;
 
-PROCEDURE Finalise(ptr: Rtl.Finalised);
+PROCEDURE Finalise(ptr: K.Finalised);
 VAR bRes: Bool; f: File;
 BEGIN
   f := ptr(File); bRes := CloseHandle(f.hFile); ASSERT(bRes # 0);
@@ -137,21 +137,21 @@ BEGIN
     access      := ORD(GENERIC_READ+GENERIC_WRITE);
     mode        := ORD(FILE_SHARE_READ+FILE_SHARE_WRITE+FILE_SHARE_DELETE);
   END;
-  len := Rtl.Utf8ToUtf16(name, name16);
+  len := K.Utf8ToUtf16(name, name16);
   hFile := CreateFileW(name16, access, mode, 0, disposition, flags, 0);
 RETURN hFile END CreateFile;
 
 PROCEDURE GetFileAttributes(name: ARRAY OF CHAR): INTEGER;
 VAR name16: PathStr16;  len, attr: INTEGER;
 BEGIN
-  len  := Rtl.Utf8ToUtf16(name, name16);
+  len  := K.Utf8ToUtf16(name, name16);
   attr := GetFileAttributesW(name16);
 RETURN attr END GetFileAttributes;
 
 PROCEDURE NewFile(VAR file: File; hFile: Handle);
 BEGIN
   NEW(file); file.hFile := hFile;
-  Rtl.RegisterFinalised(file, Finalise)
+  K.RegisterFinalised(file, Finalise)
 END NewFile;
 
 PROCEDURE Old*(name: ARRAY OF CHAR): File;
@@ -181,14 +181,14 @@ END Old;
 
 PROCEDURE SetWString(s: ARRAY OF CHAR; VAR d: ARRAY OF SYSTEM.CARD16);
 VAR len: INTEGER;
-BEGIN len := Rtl.Utf8ToUtf16(s, d) END SetWString;
+BEGIN len := K.Utf8ToUtf16(s, d) END SetWString;
 
 PROCEDURE GetUserProfile(VAR dir: ARRAY OF CHAR; VAR len: INTEGER);
 VAR s, userprofile: PathStr16;
 BEGIN
   SetWString("USERPROFILE", s);
   len := GetEnvironmentVariableW(s, SYSTEM.ADR(userprofile), LEN(userprofile));
-  len := Rtl.Utf16ToUtf8(userprofile, dir);
+  len := K.Utf16ToUtf8(userprofile, dir);
 (*w.s("Got user profile as '"); w.s(dir); w.sl("'.");*)
 END GetUserProfile;
 
@@ -226,7 +226,7 @@ VAR
 pid, time, len: INTEGER;
 BEGIN
   pid  := GetCurrentProcessId();
-  time := Rtl.Time();
+  time := K.Time();
   GetUserProfile(name, len);
   IF len < MAX_PATH-60 THEN
     Append("\.smoctmp", name); AppendHex(pid, name);
@@ -305,7 +305,7 @@ END Purge;
 PROCEDURE Delete*(name: ARRAY OF CHAR;  VAR res: INTEGER);
 VAR bRes: Bool;  name16: PathStr16;  len: INTEGER;
 BEGIN
-  len := Rtl.Utf8ToUtf16(name, name16);
+  len := K.Utf8ToUtf16(name, name16);
   bRes := DeleteFileW(name16);
   IF bRes # 0 THEN res := 0 ELSE res := -1 END
 END Delete;
@@ -559,7 +559,7 @@ VAR
   END;
   res: INTEGER;
 BEGIN
-  res := Rtl.Utf8ToUtf16(name, name16);
+  res := K.Utf8ToUtf16(name, name16);
   res := GetFileAttributesExW(name16, 0, SYSTEM.ADR(attributes));
   IF res = 0  THEN
     length := -1;
@@ -576,22 +576,22 @@ END FileAttributes;
 
 PROCEDURE InitWin32;
 BEGIN
-  SYSTEM.GetProcAddress(GetFileAttributesW,      Rtl.Kernel, SYSTEM.ADR("GetFileAttributesW"));      ASSERT(GetFileAttributesW      # NIL);
-  SYSTEM.GetProcAddress(CreateFileW,             Rtl.Kernel, SYSTEM.ADR("CreateFileW"));             ASSERT(CreateFileW             # NIL);
-  SYSTEM.GetProcAddress(CloseHandle,             Rtl.Kernel, SYSTEM.ADR("CloseHandle"));             ASSERT(CloseHandle             # NIL);
-  SYSTEM.GetProcAddress(MoveFileExW,             Rtl.Kernel, SYSTEM.ADR("MoveFileExW"));             ASSERT(MoveFileExW             # NIL);
-  SYSTEM.GetProcAddress(DeleteFileW,             Rtl.Kernel, SYSTEM.ADR("DeleteFileW"));             ASSERT(DeleteFileW             # NIL);
-  SYSTEM.GetProcAddress(ReadFile,                Rtl.Kernel, SYSTEM.ADR("ReadFile"));                ASSERT(ReadFile                # NIL);
-  SYSTEM.GetProcAddress(WriteFile,               Rtl.Kernel, SYSTEM.ADR("WriteFile"));               ASSERT(WriteFile               # NIL);
-  SYSTEM.GetProcAddress(SetFilePointerEx,        Rtl.Kernel, SYSTEM.ADR("SetFilePointerEx"));        ASSERT(SetFilePointerEx        # NIL);
-  SYSTEM.GetProcAddress(FlushFileBuffers,        Rtl.Kernel, SYSTEM.ADR("FlushFileBuffers"));        ASSERT(FlushFileBuffers        # NIL);
-  SYSTEM.GetProcAddress(SetEndOfFile,            Rtl.Kernel, SYSTEM.ADR("SetEndOfFile"));            ASSERT(SetEndOfFile            # NIL);
-  SYSTEM.GetProcAddress(GetFileSizeEx,           Rtl.Kernel, SYSTEM.ADR("GetFileSizeEx"));           ASSERT(GetFileSizeEx           # NIL);
-  SYSTEM.GetProcAddress(wsprintfW,               Rtl.User,   SYSTEM.ADR("wsprintfW"));               ASSERT(wsprintfW               # NIL);
-  SYSTEM.GetProcAddress(GetEnvironmentVariableW, Rtl.Kernel, SYSTEM.ADR("GetEnvironmentVariableW")); ASSERT(GetEnvironmentVariableW # NIL);
-  SYSTEM.GetProcAddress(GetCurrentProcessId,     Rtl.Kernel, SYSTEM.ADR("GetCurrentProcessId"));     ASSERT(GetCurrentProcessId     # NIL);
-  SYSTEM.GetProcAddress(GetFileAttributesExW,    Rtl.Kernel, SYSTEM.ADR("GetFileAttributesExW"));    ASSERT(GetFileAttributesExW    # NIL);
-  SYSTEM.GetProcAddress(GetLastError,            Rtl.Kernel, SYSTEM.ADR("GetLastError"));            ASSERT(GetLastError    # NIL);
+  SYSTEM.GetProcAddress(GetFileAttributesW,      K.Kernel, SYSTEM.ADR("GetFileAttributesW"));      ASSERT(GetFileAttributesW      # NIL);
+  SYSTEM.GetProcAddress(CreateFileW,             K.Kernel, SYSTEM.ADR("CreateFileW"));             ASSERT(CreateFileW             # NIL);
+  SYSTEM.GetProcAddress(CloseHandle,             K.Kernel, SYSTEM.ADR("CloseHandle"));             ASSERT(CloseHandle             # NIL);
+  SYSTEM.GetProcAddress(MoveFileExW,             K.Kernel, SYSTEM.ADR("MoveFileExW"));             ASSERT(MoveFileExW             # NIL);
+  SYSTEM.GetProcAddress(DeleteFileW,             K.Kernel, SYSTEM.ADR("DeleteFileW"));             ASSERT(DeleteFileW             # NIL);
+  SYSTEM.GetProcAddress(ReadFile,                K.Kernel, SYSTEM.ADR("ReadFile"));                ASSERT(ReadFile                # NIL);
+  SYSTEM.GetProcAddress(WriteFile,               K.Kernel, SYSTEM.ADR("WriteFile"));               ASSERT(WriteFile               # NIL);
+  SYSTEM.GetProcAddress(SetFilePointerEx,        K.Kernel, SYSTEM.ADR("SetFilePointerEx"));        ASSERT(SetFilePointerEx        # NIL);
+  SYSTEM.GetProcAddress(FlushFileBuffers,        K.Kernel, SYSTEM.ADR("FlushFileBuffers"));        ASSERT(FlushFileBuffers        # NIL);
+  SYSTEM.GetProcAddress(SetEndOfFile,            K.Kernel, SYSTEM.ADR("SetEndOfFile"));            ASSERT(SetEndOfFile            # NIL);
+  SYSTEM.GetProcAddress(GetFileSizeEx,           K.Kernel, SYSTEM.ADR("GetFileSizeEx"));           ASSERT(GetFileSizeEx           # NIL);
+  SYSTEM.GetProcAddress(wsprintfW,               K.User,   SYSTEM.ADR("wsprintfW"));               ASSERT(wsprintfW               # NIL);
+  SYSTEM.GetProcAddress(GetEnvironmentVariableW, K.Kernel, SYSTEM.ADR("GetEnvironmentVariableW")); ASSERT(GetEnvironmentVariableW # NIL);
+  SYSTEM.GetProcAddress(GetCurrentProcessId,     K.Kernel, SYSTEM.ADR("GetCurrentProcessId"));     ASSERT(GetCurrentProcessId     # NIL);
+  SYSTEM.GetProcAddress(GetFileAttributesExW,    K.Kernel, SYSTEM.ADR("GetFileAttributesExW"));    ASSERT(GetFileAttributesExW    # NIL);
+  SYSTEM.GetProcAddress(GetLastError,            K.Kernel, SYSTEM.ADR("GetLastError"));            ASSERT(GetLastError    # NIL);
 END InitWin32;
 
 BEGIN InitWin32

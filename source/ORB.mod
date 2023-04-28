@@ -7,7 +7,7 @@ MODULE ORB;  (*$CONSOLE*)
 
 
 IMPORT
-  SYSTEM, Rtl, Files, S := Scanner, B := Base, G := Generator, P := Parser, w := Writer, WritePE;
+  SYSTEM, K := Kernel, Files, S := Scanner, B := Base, G := Generator, P := Parser, w := Writer, WritePE;
 
 TYPE
   ModuleName = ARRAY   64 OF CHAR;
@@ -60,7 +60,7 @@ BEGIN
       path[j] := searchpath[i];  INC(i);  INC(j);
     END;
     IF (path[j-1] # "/") & (path[j-1] # '\') THEN path[j] := '\'; INC(j) END;
-    path[j] := 0X;  Rtl.Append(name, path);
+    path[j] := 0X;  K.Append(name, path);
     file := Files.Old(path);
     WHILE searchpath[i] = ";" DO INC(i) END;
   END;
@@ -84,14 +84,14 @@ PROCEDURE AddModule(modname: ARRAY OF CHAR);
 VAR mod: Module;  filename: ModuleName;
 BEGIN NEW(mod);
   mod.modname := modname;  mod.scanned := FALSE;
-  filename := modname;  Rtl.Append(".mod", filename);
+  filename := modname;  K.Append(".mod", filename);
   FindFile(filename, SourcePath, mod.file, mod.filename);
   IF mod.file = NIL THEN
     w.s("Could not find source file for module '"); w.s(modname); w.sl("'.");
-    Rtl.Halt(99)
+    K.Halt(99)
   END;
-  IF Rtl.Length(modname)      > LongestModname  THEN LongestModname  := Rtl.Length(modname) END;
-  IF Rtl.Length(mod.filename) > LongestFilename THEN LongestFilename := Rtl.Length(mod.filename) END;
+  IF K.Length(modname)      > LongestModname  THEN LongestModname  := K.Length(modname) END;
+  IF K.Length(mod.filename) > LongestFilename THEN LongestFilename := K.Length(mod.filename) END;
   mod.next := Modules;  Modules := mod
 END AddModule;
 
@@ -111,7 +111,7 @@ END WriteFilepos;
 
 PROCEDURE Expected(filename, message: ARRAY OF CHAR);
 BEGIN
-  w.s("File '"); w.s(filename); WriteFilepos; w.s("': "); w.sl(message); Rtl.Halt(99)
+  w.s("File '"); w.s(filename); WriteFilepos; w.s("': "); w.sl(message); K.Halt(99)
 END Expected;
 
 PROCEDURE ScanModuleImports(module: Module);
@@ -126,7 +126,7 @@ BEGIN
     w.s("File "); w.s(module.filename); WriteFilepos; w.s(" module id '");
     w.s(S.id); w.s("' does not match expected id '");
     w.s(module.modname); w.sl("'.");
-    Rtl.Halt(99)
+    K.Halt(99)
   END;
   B.Init(S.id);  S.Get(sym);
   IF sym # S.semicolon THEN Expected(module.filename, "expected semicolon from module id.") END;
@@ -141,7 +141,7 @@ BEGIN
         IF sym # S.ident THEN Expected(module.filename, "expected id (2).") END;
         impname := S.id; S.Get(sym)
       END;
-      IF (impname # "SYSTEM") & (impname # "Rtl") & (impname # "Boot") & (impname # "Kernel") THEN
+      IF (impname # "SYSTEM") & (impname # "K") & (impname # "Boot") & (impname # "Kernel") THEN
         AddImport(module, impname)
       END
     UNTIL sym # S.comma
@@ -184,15 +184,15 @@ BEGIN
   B.SetSymPath(BuildPath);
   B.SetBuildPath(BuildPath);
   S.Init(module.file);  S.Get(sym);
-  startTime := Rtl.Time();
+  startTime := K.Time();
   IF sym = S.module THEN modinit := P.Module() ELSE S.Mark("Expected 'MODULE'") END;
   IF S.errCnt = 0 THEN
     B.WriteSymfile;
     G.Generate(modinit);
     B.Cleanup;
-    G.Cleanup;  endTime := Rtl.Time();
+    G.Cleanup;  endTime := K.Time();
     intSep(G.pc,      10);   intSep(G.staticSize,  10);
-    intSep(G.varSize, 10);   intSep(Rtl.TimeToMSecs(endTime - startTime), 5);
+    intSep(G.varSize, 10);   intSep(K.TimeToMSecs(endTime - startTime), 5);
     w.s("ms");  w.l
   END
 END Compile;
@@ -270,16 +270,16 @@ BEGIN
     END;
     IF mod # NIL THEN
       Compile(mod);
-      IF S.errCnt # 0 THEN Rtl.Halt(99) END;
+      IF S.errCnt # 0 THEN K.Halt(99) END;
       RemoveDependencies(mod);
       IF prev = NIL THEN Modules := mod.next ELSE prev.next := mod.next END
     ELSE
       w.sl("Cannot resolve circular dependency order in:");
-      ReportDependencies; Rtl.Halt(99)
+      ReportDependencies; K.Halt(99)
     END
   UNTIL Modules = NIL;
 
-  PEname := B.BuildPath;  Rtl.Append(Modulename, PEname);  Rtl.Append(".exe", PEname);
+  PEname := B.BuildPath;  K.Append(Modulename, PEname);  K.Append(".exe", PEname);
   WritePE.Generate(PEname)
 END Build;
 
@@ -291,7 +291,7 @@ END Build;
 PROCEDURE ArgError(n: INTEGER; arg, msg: ARRAY OF CHAR);
 BEGIN
   w.s("Argument "); w.i(n); w.s(" '"); w.s(arg); w.s("': "); w.sl(msg);
-  Rtl.Halt(99);
+  K.Halt(99);
 END ArgError;
 
 PROCEDURE ScanArguments;
@@ -302,13 +302,13 @@ BEGIN
   Modulename := "";
 
   i := 1;
-  WHILE i < Rtl.NumArgs DO
-    Rtl.GetArg(i, arg);
+  WHILE i < K.NumArgs DO
+    K.GetArg(i, arg);
     IF arg[0] = "/" THEN
-      IF    arg = "/source" THEN INC(i);  Rtl.GetArg(i, SourcePath)
-      ELSIF arg = "/s"      THEN INC(i);  Rtl.GetArg(i, SourcePath)
-      ELSIF arg = "/build"  THEN INC(i);  Rtl.GetArg(i, BuildPath)
-      ELSIF arg = "/b"      THEN INC(i);  Rtl.GetArg(i, BuildPath)
+      IF    arg = "/source" THEN INC(i);  K.GetArg(i, SourcePath)
+      ELSIF arg = "/s"      THEN INC(i);  K.GetArg(i, SourcePath)
+      ELSIF arg = "/build"  THEN INC(i);  K.GetArg(i, BuildPath)
+      ELSIF arg = "/b"      THEN INC(i);  K.GetArg(i, BuildPath)
       ELSIF arg = "/v"      THEN Verbose := TRUE
       ELSE
         ArgError(i, arg, "unrecognised option.")
@@ -325,8 +325,8 @@ BEGIN
 
   IF Modulename = "" THEN
     w.sl("ORB - Oberon-recursive builder.");
-    w.sl("No parameters. Expected at least name of module to build.");
-    Rtl.Halt(99);
+    w.sl("No parameters. Expected name of module to build.");
+    K.Halt(99);
   END
 END ScanArguments;
 

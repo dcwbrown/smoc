@@ -24,8 +24,6 @@ VAR
   User*:         INTEGER;
   Shell*:        INTEGER;
 
-  Halt*:         PROCEDURE(returnCode: INTEGER);
-
   MessageBoxW:   PROCEDURE(hWnd, lpText, lpCaption, uType: INTEGER): INTEGER;
   AddVectoredExceptionHandler: PROCEDURE(first: INTEGER; filter: ExceptionHandlerProc);
   GetSystemTimePreciseAsFileTime: PROCEDURE(tickAdr: INTEGER);
@@ -291,7 +289,6 @@ BEGIN
     END;
     IF (adr = address) & (trap <= 10) THEN
       CASE trap OF
-      |  0: report := "GET/PUT access violation in module "
       |  1: report := "Array index out of range in module "
       |  2: report := "Type trap in module "
       |  3: report := "String size error in module "
@@ -299,7 +296,6 @@ BEGIN
       |  5: report := "NIL procedure call in module "
       |  6: report := "Divide by zero in module "
       |  7: report := "Assertion FALSE in module "
-      |  8: report := "Rtl trap in module "
       |  9: report := "SYSTEM.GET access violation in module "
       | 10: report := "SYSTEM.PUT access violation in module "
       END;
@@ -680,13 +676,18 @@ END TimeToMSecs;
 
 
 (* -------------------------------------------------------------------------- *)
+(* -------------------------------------------------------------------------- *)
+
+PROCEDURE Halt*(exitCode: INTEGER);
+BEGIN  Finalise;  Boot.PEImports.ExitProcess(exitCode)
+END Halt;
+
+(* -------------------------------------------------------------------------- *)
 (* ------- Kernel initialisation code - called following kernel link -------- *)
 (* -------------------------------------------------------------------------- *)
 
 BEGIN
   (* Set up some useful exports from standard procedures. *)
-  Halt   := Boot.PEImports.ExitProcess;
-
   Kernel := Boot.PEImports.LoadLibraryA(SYSTEM.ADR("kernel32.dll"));
   User   := Boot.PEImports.LoadLibraryA(SYSTEM.ADR("user32.dll"));
   Shell  := Boot.PEImports.LoadLibraryA(SYSTEM.ADR("shell32.dll"));

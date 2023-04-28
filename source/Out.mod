@@ -1,8 +1,7 @@
 MODULE Out;
-(*$RTL-*)
 
 IMPORT
-  SYSTEM, Rtl, BigNums;
+  SYSTEM, K := Kernel, BigNums;
 
 TYPE
   Handle = INTEGER;
@@ -10,8 +9,8 @@ TYPE
   Bool   = SYSTEM.CARD32;
 
 VAR
-  WriteFile:    PROCEDURE(hFile, lpBuffer, nNumberOfBytesToWrite,
-                          lpNumberOfBytesWrite, lpOverlapped: INTEGER): Bool;
+  WriteFile: PROCEDURE(hFile, lpBuffer, nNumberOfBytesToWrite,
+                       lpNumberOfBytesWrite, lpOverlapped: INTEGER): Bool;
   hOut: Handle;
 
 PROCEDURE Open*;
@@ -24,13 +23,13 @@ VAR
   AllocConsole:       PROCEDURE(): Bool;
     res: INTEGER;
 BEGIN
-  SYSTEM.GetProcAddress(GetStdHandle,       Rtl.Kernel, SYSTEM.ADR("GetStdHandle"));       ASSERT(GetStdHandle       # NIL);
-  SYSTEM.GetProcAddress(SetConsoleOutputCP, Rtl.Kernel, SYSTEM.ADR("SetConsoleOutputCP")); ASSERT(SetConsoleOutputCP # NIL);
-  SYSTEM.GetProcAddress(WriteFile,          Rtl.Kernel, SYSTEM.ADR("WriteFile"));          ASSERT(WriteFile          # NIL);
+  SYSTEM.GetProcAddress(GetStdHandle,       K.Kernel, SYSTEM.ADR("GetStdHandle"));       ASSERT(GetStdHandle       # NIL);
+  SYSTEM.GetProcAddress(SetConsoleOutputCP, K.Kernel, SYSTEM.ADR("SetConsoleOutputCP")); ASSERT(SetConsoleOutputCP # NIL);
+  SYSTEM.GetProcAddress(WriteFile,          K.Kernel, SYSTEM.ADR("WriteFile"));          ASSERT(WriteFile          # NIL);
   hOut := GetStdHandle(STD_OUTPUT_HANDLE);
   res  := SetConsoleOutputCP(UTF8);
   IF hOut = 0 THEN
-    SYSTEM.GetProcAddress(AllocConsole, Rtl.Kernel, SYSTEM.ADR("AllocConsole"));
+    SYSTEM.GetProcAddress(AllocConsole, K.Kernel, SYSTEM.ADR("AllocConsole"));
     ASSERT(AllocConsole # NIL);
     ASSERT(AllocConsole() # 0)
   END

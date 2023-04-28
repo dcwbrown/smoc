@@ -1,6 +1,6 @@
 MODULE Generator;
 IMPORT
-  SYSTEM, Files, S := Scanner, B := Base, ObjectX64, Rtl, w := Writer;
+  SYSTEM, Files, S := Scanner, B := Base, ObjectX64, w := Writer;
 
 
 (*    Windows x64 subroutine register conventions
@@ -78,7 +78,6 @@ CONST
   mCond = 7;  mProc = 8;  mType = 9;  mBX   = 10;  mNothing = 11;
 
   (* Trap code *)
-  modkeyTrap  = 0;  (* Not referenced anywhere *)
   arrayTrap   = 1;
   typeTrap    = 2;
   stringTrap  = 3;
@@ -86,7 +85,6 @@ CONST
   nilProcTrap = 5;
   divideTrap  = 6;
   assertTrap  = 7;
-  rtlTrap     = 8;  (* Used by dll code, not by object code *)
   GetTrap     = 9;  (* SYSTEM.GET access violation *)
   PutTrap     = 10; (* SYSTEM.PUT access violation *)
 
