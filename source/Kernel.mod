@@ -4,6 +4,9 @@ IMPORT SYSTEM, Boot;
 
 CONST
   MarkedListSentinel = 2;  (* Used to mark end of list of marked heap blocks during GC *)
+  HeapReserve = 80000000H; (* 2GB   *)
+  HeapCommit  = 80000H;    (* 512KB *)
+(*HeapCommit  = 2000000H;  (* 32MB *) *)
 
 TYPE
   ExceptionHandlerProc = PROCEDURE(p: INTEGER): INTEGER;
@@ -335,15 +338,17 @@ PROCEDURE InstallHeapTraceHandler*(tracer: HeapTraceHandler);
 BEGIN HeapTracer := tracer END InstallHeapTraceHandler;
 *)
 
-PROCEDURE InitHeap(reserve, commit: INTEGER);
+
+PROCEDURE InitHeap;
 CONST MEM_RESERVE = 2000H;  MEM_COMMIT = 1000H;  PAGE_READWRITE = 4;
 VAR i, p: INTEGER;
 BEGIN
   (* Reserve address space for later use as heap space *)
-  HeapBase := VirtualAlloc(0, reserve, MEM_RESERVE, PAGE_READWRITE);
+  HeapMax  := HeapReserve;
+  HeapBase := VirtualAlloc(0, HeapMax, MEM_RESERVE, PAGE_READWRITE);
   ASSERT(HeapBase # 0);
-  HeapMax  := reserve;
-  HeapSize := commit;
+
+  HeapSize := HeapCommit;
   HeapBase := VirtualAlloc(HeapBase, HeapSize, MEM_COMMIT, PAGE_READWRITE);
   ASSERT(HeapBase # 0);
 
@@ -671,16 +676,16 @@ BEGIN GetSystemTimePreciseAsFileTime(SYSTEM.ADR(tick));
 RETURN tick END Time;
 
 PROCEDURE TimeToMSecs*(time: INTEGER): INTEGER;
-  RETURN time DIV 10000
-END TimeToMSecs;
+RETURN time DIV 10000 END TimeToMSecs;
 
 
 (* -------------------------------------------------------------------------- *)
+(* ------------------------ Halt - finalise and exit ------------------------ *)
 (* -------------------------------------------------------------------------- *)
 
 PROCEDURE Halt*(exitCode: INTEGER);
-BEGIN  Finalise;  Boot.PEImports.ExitProcess(exitCode)
-END Halt;
+BEGIN  Finalise;  Boot.PEImports.ExitProcess(exitCode) END Halt;
+
 
 (* -------------------------------------------------------------------------- *)
 (* ------- Kernel initialisation code - called following kernel link -------- *)
@@ -701,9 +706,8 @@ BEGIN
   (* Initialise Heap and GC *)
   SYSTEM.PUT(SYSTEM.ADR(VirtualAlloc), Boot.PEImports.GetProcAddress(Kernel, SYSTEM.ADR("VirtualAlloc")));
 
-(*InitHeap(80000000H, 80000H);*)(* Reserve 2GB, commit 512KB *)
-  InitHeap(80000000H, 2000000H);  (* Reserve 2GB, commit 32MB *)
   Collect0 := Collect;
+  InitHeap;
 
   (* Initialise command line access *)
   SYSTEM.PUT(SYSTEM.ADR(GetCommandLineW), Boot.PEImports.GetProcAddress(Kernel, SYSTEM.ADR("GetCommandLineW")));
