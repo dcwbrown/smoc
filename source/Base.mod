@@ -132,7 +132,7 @@ VAR
 
   predefTypes: TypeList;
 
-  Flag*: RECORD main*, console*, rtl*, object*: BOOLEAN END;
+  Flag*: RECORD main*, console*, rtl*: BOOLEAN END;
 
   imod:     Module;
   modList*: Module;  (* List of imported modules *)
@@ -887,11 +887,7 @@ VAR
   END GetPath;
 
 BEGIN (* NewModule *)
-  IF Flag.object & (id0 = "Rtl") THEN
-    id := "Kernel"
-  ELSE
-    id := id0
-  END;  (* Object hack *)
+  IF id0 = "Rtl" THEN id := "Kernel" ELSE id := id0 END;  (* Object hack *)
   mod := FindMod(id);  IF (mod # NIL) & ~mod.import THEN mod := NIL END;
   IF id = Modid THEN S.Mark("Cannot import self")
   ELSIF mod = NIL THEN
@@ -923,11 +919,8 @@ BEGIN
   IF    pragma = "MAIN"    THEN Flag.main   := TRUE
   ELSIF pragma = "CONSOLE" THEN Flag.main   := TRUE;  Flag.console := TRUE
   ELSIF pragma = "RTL-"    THEN Flag.rtl    := FALSE
-  ELSIF pragma = "OBJECT"  THEN Flag.object := TRUE
   END
 END SetCompilerFlag;
-
-PROCEDURE SetObject*(o: BOOLEAN); BEGIN Flag.object := o END SetObject;
 
 PROCEDURE InitCompilerFlag;
 BEGIN Flag.main := FALSE;  Flag.console := FALSE;  Flag.rtl  := TRUE;

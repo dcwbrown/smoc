@@ -35,7 +35,6 @@ VAR
   Modulename:      ModuleName;
   SourcePath:      PathName;
   BuildPath:       PathName;
-  Object:          BOOLEAN;
   Verbose:         BOOLEAN;
   Modules:         Module;
   LongestModname:  INTEGER;
@@ -147,10 +146,8 @@ BEGIN
       END
     UNTIL sym # S.comma
   END;
-  IF Object & (module.modname # "Boot") THEN AddImport(module, "Boot") END;
-  IF B.Flag.rtl THEN
-    IF Object THEN AddImport(module, "Kernel") ELSE AddImport(module, "Rtl") END
-  END;
+  IF module.modname # "Boot" THEN AddImport(module, "Boot") END;
+  IF B.Flag.rtl THEN AddImport(module, "Kernel") END;
   module.scanned := TRUE
 END ScanModuleImports;
 
@@ -187,7 +184,6 @@ BEGIN
   B.SetSymPath(BuildPath);
   B.SetBuildPath(BuildPath);
   S.Init(module.file);  S.Get(sym);
-  B.SetObject(Object);  (* Temp hack during transition to objects *)
   startTime := Rtl.Time();
   IF sym = S.module THEN modinit := P.Module() ELSE S.Mark("Expected 'MODULE'") END;
   IF S.errCnt = 0 THEN
@@ -283,10 +279,8 @@ BEGIN
     END
   UNTIL Modules = NIL;
 
-  IF Object THEN
-    PEname := B.BuildPath;  Rtl.Append(Modulename, PEname);  Rtl.Append(".exe", PEname);
-    WritePE.Generate(PEname)
-  END
+  PEname := B.BuildPath;  Rtl.Append(Modulename, PEname);  Rtl.Append(".exe", PEname);
+  WritePE.Generate(PEname)
 END Build;
 
 
@@ -305,9 +299,7 @@ VAR i: INTEGER;  arg: ARRAY 1024 OF CHAR;
 BEGIN
   SourcePath := "./";
   BuildPath  := "";
-  BuildPath := "";
   Modulename := "";
-  Object     := TRUE;
 
   i := 1;
   WHILE i < Rtl.NumArgs DO
@@ -317,7 +309,6 @@ BEGIN
       ELSIF arg = "/s"      THEN INC(i);  Rtl.GetArg(i, SourcePath)
       ELSIF arg = "/build"  THEN INC(i);  Rtl.GetArg(i, BuildPath)
       ELSIF arg = "/b"      THEN INC(i);  Rtl.GetArg(i, BuildPath)
-      ELSIF arg = "/dll"    THEN Object := FALSE
       ELSIF arg = "/v"      THEN Verbose := TRUE
       ELSE
         ArgError(i, arg, "unrecognised option.")
@@ -340,7 +331,6 @@ BEGIN
 END ScanArguments;
 
 BEGIN
-  Object          := TRUE;
   Verbose         := FALSE;
   LongestModname  := 0;
   LongestFilename := 0;

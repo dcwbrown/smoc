@@ -1,5 +1,6 @@
 *.sym
 *.dll
+*.x64
 *.exe
 build/*/*
 !build/boot0/*.dll
