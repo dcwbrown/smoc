@@ -703,7 +703,7 @@ VAR fpos, res: INTEGER;
 BEGIN
   EntryPoint         := entry;
   ModulePointerTable := modPtrTable;
-  FileName           := B.OutputPath;  B.Append(B.Modid, FileName);
+  FileName           := B.BuildPath;  B.Append(B.Modid, FileName);
   IF B.Flag.main THEN ImageBase := 400000H;    B.Append(".exe", FileName)
   ELSE                ImageBase := 10000000H;  B.Append(".dll", FileName)
   END;
@@ -748,5 +748,5 @@ BEGIN
   Files.Register(Out)
 END Link;
 
-BEGIN w.sl("Linker loaded.")
+BEGIN (* w.sl("Linker loaded.") *)
 END Linker.

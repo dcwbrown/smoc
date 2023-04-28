@@ -350,5 +350,5 @@ BEGIN
   Files.Register(ExeFile)
 END Generate;
 
-BEGIN w.sl("WritePe loaded.")
+BEGIN (* w.sl("WritePe loaded.") *)
 END WritePE.

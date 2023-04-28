@@ -3132,6 +3132,6 @@ BEGIN
   rtlName    := NIL;  trapDesc    := NIL;  user32name  := NIL;
 END Cleanup;
 
-BEGIN w.sl("Generator loaded.");
+BEGIN (* w.sl("Generator loaded."); *)
   MakeItem0 := MakeItem
 END Generator.

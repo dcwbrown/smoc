@@ -184,7 +184,7 @@ END DumpRecList;
 
 PROCEDURE AddRelocation(adr, val: INTEGER);
 BEGIN
-  w.s("Add relocation at $"); w.h(adr); w.s(" value $"); w.h(val); w.sl(".");
+  (*w.s("Add relocation at $"); w.h(adr); w.s(" value $"); w.h(val); w.sl(".");*)
   Files.Set(X64, X64file, Header.base + adr);
   Files.WriteInt(X64, 8000000000000000H + LSL(val, 32) + Header.imports);
   Header.imports := adr;
@@ -201,7 +201,7 @@ RETURN modno END GetModNo;
 PROCEDURE WriteRecordPointerTables;
 VAR recType: B.TypeList;  type: B.Type;  typeadr: INTEGER;
 BEGIN
-  DumpRecList;
+  (*DumpRecList;*)
   recType := B.recList;
   WHILE recType # NIL DO
     type := recType.type;  typeadr := type.adr;
@@ -211,11 +211,13 @@ BEGIN
     (* Write extensions for extended record types *)
     WHILE type.len >= 1 DO
       IF type.mod = NIL THEN (* local *)
+        (*
         w.s("Type extension ptr, typeadr $"); w.h(typeadr);
         w.s(", type.len ");                   w.i(type.len);
         w.s(", ext type adr $");              w.h(type.adr);
         w.s(", Header.base $");               w.h(Header.base);
         w.sl(".");
+        *)
         AddRelocation(typeadr + type.len*8, type.adr)
       ELSE (* import *)
         AddImport(typeadr + type.len*8, GetModNo(type.mod), type.expno)
@@ -428,5 +430,5 @@ BEGIN
   Files.Register(X64file)
 END Write;
 
-BEGIN w.sl("ObjectX64 loaded.")
+BEGIN (* w.sl("ObjectX64 loaded.") *)
 END ObjectX64.

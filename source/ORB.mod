@@ -35,8 +35,8 @@ VAR
   Modulename:      ModuleName;
   SourcePath:      PathName;
   BuildPath:       PathName;
-  OutputPath:      PathName;
   Object:          BOOLEAN;
+  Verbose:         BOOLEAN;
   Modules:         Module;
   LongestModname:  INTEGER;
   LongestFilename: INTEGER;
@@ -186,7 +186,6 @@ BEGIN
   B.SetSourcePath(SourcePath);
   B.SetSymPath(BuildPath);
   B.SetBuildPath(BuildPath);
-  B.SetOutputPath(OutputPath);
   S.Init(module.file);  S.Get(sym);
   B.SetObject(Object);  (* Temp hack during transition to objects *)
   startTime := Rtl.Time();
@@ -263,7 +262,7 @@ BEGIN
     END;
   UNTIL allscanned;
 
-  w.sl("Modules and dependencies:");  ReportDependencies;
+  IF Verbose THEN w.sl("Modules and dependencies:");  ReportDependencies END;
 
   (* Compile dependentless modules until all modules compiled. *)
   w.sn("Module", LongestModname+1);  w.sn("File", LongestFilename+1);
@@ -285,7 +284,7 @@ BEGIN
   UNTIL Modules = NIL;
 
   IF Object THEN
-    PEname := B.OutputPath;  Rtl.Append(Modulename, PEname);  Rtl.Append(".exe", PEname);
+    PEname := B.BuildPath;  Rtl.Append(Modulename, PEname);  Rtl.Append(".exe", PEname);
     WritePE.Generate(PEname)
   END
 END Build;
@@ -306,17 +305,20 @@ VAR i: INTEGER;  arg: ARRAY 1024 OF CHAR;
 BEGIN
   SourcePath := "./";
   BuildPath  := "";
-  OutputPath := "";
+  BuildPath := "";
   Modulename := "";
+  Object     := TRUE;
 
   i := 1;
   WHILE i < Rtl.NumArgs DO
     Rtl.GetArg(i, arg);
     IF arg[0] = "/" THEN
       IF    arg = "/source" THEN INC(i);  Rtl.GetArg(i, SourcePath)
+      ELSIF arg = "/s"      THEN INC(i);  Rtl.GetArg(i, SourcePath)
       ELSIF arg = "/build"  THEN INC(i);  Rtl.GetArg(i, BuildPath)
-      ELSIF arg = "/output" THEN INC(i);  Rtl.GetArg(i, OutputPath)
-      ELSIF arg = "/object" THEN Object := TRUE
+      ELSIF arg = "/b"      THEN INC(i);  Rtl.GetArg(i, BuildPath)
+      ELSIF arg = "/dll"    THEN Object := FALSE
+      ELSIF arg = "/v"      THEN Verbose := TRUE
       ELSE
         ArgError(i, arg, "unrecognised option.")
       END
@@ -338,7 +340,8 @@ BEGIN
 END ScanArguments;
 
 BEGIN
-  Object := FALSE;
+  Object          := TRUE;
+  Verbose         := FALSE;
   LongestModname  := 0;
   LongestFilename := 0;
   S.InstallNotifyError(NotifyError);

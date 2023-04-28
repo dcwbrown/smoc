@@ -150,7 +150,6 @@ VAR
   symPath:      ARRAY 1024 OF CHAR;
   SrcPath*:     ARRAY 1024 OF CHAR;
   BuildPath*:   ARRAY 1024 OF CHAR;
-  OutputPath*:  ARRAY 1024 OF CHAR;
 
   ExportType0: PROCEDURE(typ: Type);
   ImportType0: PROCEDURE(VAR typ: Type;  mod: Module);
@@ -961,9 +960,6 @@ BEGIN symPath := path;    EnsureSeparator(symPath)    END SetSymPath;
 
 PROCEDURE SetBuildPath*(path: ARRAY OF CHAR);
 BEGIN BuildPath := path;  EnsureSeparator(BuildPath)  END SetBuildPath;
-
-PROCEDURE SetOutputPath*(path: ARRAY OF CHAR);
-BEGIN OutputPath := path; EnsureSeparator(OutputPath) END SetOutputPath;
 
 
 (* -------------------------------------------------------------------------- *)
