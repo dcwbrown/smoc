@@ -2,7 +2,7 @@ MODULE Dumper;
 
 (* Include this module to get a trace of every garbage collection. *)
 
-IMPORT Out, SYSTEM, Rtl;
+IMPORT Out, SYSTEM, Boot, K := Kernel;
 
 VAR memstart, memlimit: INTEGER;
 
@@ -45,7 +45,7 @@ PROCEDURE InitialiseMemoryRange;
 VAR stackvar: INTEGER;
 BEGIN
   memstart := SYSTEM.ADR(stackvar) - 1000H;  (* 1000H is stack reserve in PE header *)
-  memlimit := Rtl.HeapBase + Rtl.HeapSize;
+  memlimit := K.HeapBase + K.HeapSize;
 END InitialiseMemoryRange;
 
 PROCEDURE CheckAddress(adr: INTEGER);
@@ -54,7 +54,7 @@ BEGIN
     ws("SYSTEM.GET address $"); wh(adr);
     IF adr < memstart THEN ws(" below") ELSE ws(" above") END;
     wsl(" program memory.");
-    Rtl.Halt(4)
+    K.Halt(4)
   END
 END CheckAddress;
 
@@ -162,7 +162,7 @@ BEGIN
       ws(" = $"); wh(base+offset);
       ptr := getint(base + offset) - 16;
       ws(", target metadata at $");  wh(ptr);
-      IF ptr < Rtl.HeapBase THEN wsl(": not in heap.")
+      IF ptr < K.HeapBase THEN wsl(": not in heap.")
       ELSE
         descriptor := getint(ptr);  ws(", type $");  wh(descriptor);
         ws(", size $");  wh(getint(descriptor));
@@ -175,52 +175,39 @@ BEGIN
 END DumpPointerTable;
 
 
-PROCEDURE WriteModuleName(baseadr: INTEGER);
-VAR loadadr, exports, nameadr: INTEGER;
-BEGIN
-  loadadr := baseadr - getint(baseadr + 80);
-  exports := loadadr + getint(loadadr + 3D8H);
-  nameadr := loadadr + getdword(exports + 12);
-  WriteAnsiName(nameadr)
-END WriteModuleName;
-
-
 PROCEDURE HeapTrace*(reason: INTEGER);
-VAR i, modBase, ptrTable, offset, ptr, typedesc, stkDesc, stkBase: INTEGER;
+VAR
+  i, modBase, ptrTable, offset, ptr, typedesc, stkDesc, stkBase: INTEGER;
+  module: Boot.ModuleHeader;
 BEGIN
-  IF Rtl.nMod # 0 THEN
-    wl; ws("Heap trace callback, reason "); wi(reason);
-    ws(". modList: $"); wh(Rtl.modList);
-    ws(", nMod: "); wi(Rtl.nMod); wsl(".");
+  wl; ws("Heap trace callback, reason ");  wi(reason);  wsl(".");
 
-    FOR i := 0 TO Rtl.nMod-1 DO
-      modBase := getint(Rtl.modList+8*i);
-      ws("  module [");    wi(i);
-      ws("] loadaddr $");  wh(modBase - getint(modBase+80));
-      ws(", baseaddr $");  wh(modBase);
-      ws(" '");            WriteModuleName(modBase);
-      wsl("'.");
+  module := Boot.FirstModule;
+  WHILE module # NIL DO
+    modBase := module.base;
+    ws("  module base at $");  wh(modBase);
+    ws(" '");                  ws(module.name);
+    wsl("'.");
 
-      ptrTable := getint(modBase + 112);
-      IF getint(ptrTable) # -1 THEN DumpPointerTable("Pointers in global VARs:", 4, modBase, ptrTable) END;
+    ptrTable := getint(modBase + 112);
+    IF getint(ptrTable) # -1 THEN DumpPointerTable("Pointers in global VARs:", 4, modBase, ptrTable) END;
 
-      stkDesc := getint(modBase+104);
-      WHILE stkDesc # 0 DO
-        ws("    Stack descriptor at $"); wh(stkDesc);
-        stkBase  := getint(stkDesc);   ws(", base at $");     wh(stkBase);
-        ptrTable := getint(stkDesc+8); ws(", ptrtable at $"); wh(ptrTable);
-        wsl(".");
-        DumpPointerTable("Pointers in stack frame:", 6, stkBase, ptrTable);
+    stkDesc := getint(modBase+104);
+    WHILE stkDesc # 0 DO
+      ws("    Stack descriptor at $"); wh(stkDesc);
+      stkBase  := getint(stkDesc);   ws(", base at $");     wh(stkBase);
+      ptrTable := getint(stkDesc+8); ws(", ptrtable at $"); wh(ptrTable);
+      wsl(".");
+      DumpPointerTable("Pointers in stack frame:", 6, stkBase, ptrTable);
 
-        stkDesc := getint(stkDesc+16)
-      END;
-      wl
-    END
+      stkDesc := getint(stkDesc+16)
+    END;
+    wl; module := module.next
   END
 END HeapTrace;
 
-PROCEDURE EnableHeapTrace*();
-BEGIN Rtl.InstallHeapTraceHandler(HeapTrace) END EnableHeapTrace;
+PROCEDURE EnableHeapTrace*;
+BEGIN K.InstallHeapTraceHandler(HeapTrace) END EnableHeapTrace;
 
 (* -------------------------------------------------------------------------- *)
 

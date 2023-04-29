@@ -139,7 +139,7 @@ VAR
 
   good: BOOLEAN;
 
-  symfile: Files.File;  rider: Files.Rider;
+  Symfile: Files.File;  rider: Files.Rider;
 
   refno, preTypeNo, expno*, modno*: INTEGER;
 
@@ -147,7 +147,6 @@ VAR
   strBuf*:      ARRAY 1000H OF CHAR;
 
   SymFilename:  ARRAY 1024 OF CHAR;
-  symPath:      ARRAY 1024 OF CHAR;
   SrcPath*:     ARRAY 1024 OF CHAR;
   BuildPath*:   ARRAY 1024 OF CHAR;
 
@@ -535,8 +534,8 @@ VAR
   chunk:         ARRAY 64 OF BYTE;
 BEGIN
   refno := 0;  expno := 0;  i := 0;
-  symfile := Files.New(SymFilename);
-  Files.Set(rider, symfile, 16);
+  Symfile := Files.New(SymFilename);
+  Files.Set(rider, Symfile, 16);
   Files.WriteNum(rider, modlev);
 
   imod := modList;
@@ -582,7 +581,7 @@ BEGIN
   END;
   Files.WriteNum(rider, cNull);
 
-  size := Files.Pos(rider);  Files.Set(rider, symfile, 0);
+  size := Files.Pos(rider);  Files.Set(rider, Symfile, 0);
   Crypt.InitMD5Hash(hash);  i := 0;
   REPEAT
     Files.ReadBytes(rider, chunk, LEN(chunk));
@@ -590,12 +589,12 @@ BEGIN
     Crypt.MD5ComputeChunk(hash, SYSTEM.ADR(chunk), k)
   UNTIL i = size;
 
-  Files.Set(rider, symfile, 0);
+  Files.Set(rider, Symfile, 0);
   modkey[0] := Crypt.MD5GetLowResult(hash);
   modkey[1] := Crypt.MD5GetHighResult(hash);
   WriteModkey(modkey);
 
-  IF S.errCnt = 0 THEN Files.Register(symfile) END
+  IF S.errCnt = 0 THEN Files.Register(Symfile) END
 END WriteSymfile;
 
 (* -------------------------------------------------------------------------- *)
@@ -779,7 +778,7 @@ VAR dep:       Module;
     name:      S.IdStr;
     msg:       ARRAY 512 OF CHAR;
 BEGIN
-  Files.Set(rider, symfile, 0);
+  Files.Set(rider, Symfile, 0);
   imod := FindMod(imodid);
   ReadModkey(key);
   Files.ReadNum(rider, lev);
@@ -866,46 +865,26 @@ BEGIN
   modident.obj := mod;  mod.ident := modident;  system := TRUE
 END NewSystemModule;
 
+
 (* Import module - ident has local name, id is real (defined) name *)
 PROCEDURE NewModule*(ident: Ident;  id: S.IdStr);
-VAR
-  path, symfname: ARRAY 512 OF CHAR;
-  x, i:           INTEGER;
-  found:          BOOLEAN;
-  mod:            Module;
-
-  PROCEDURE GetPath(VAR path: ARRAY OF CHAR;  VAR i: INTEGER);
-  VAR j: INTEGER;
-  BEGIN j := 0;
-    WHILE (symPath[i] # 0X) & (symPath[i] # ";") DO
-      path[j] := symPath[i];  INC(i);  INC(j)
-    END;
-    IF symPath[i] = ";" THEN INC(i) END;
-    IF path[j-1] # '\' THEN path[j] := '\';  INC(j) END;
-    path[j] := 0X
-  END GetPath;
-
+VAR mod: Module;  filename: ARRAY 1024 OF CHAR;
 BEGIN (* NewModule *)
   mod := FindMod(id);  IF (mod # NIL) & ~mod.import THEN mod := NIL END;
   IF id = Modid THEN S.Mark("Cannot import self")
   ELSIF mod = NIL THEN
-    i := 0;  Insert(id, symfname, i);  Insert(".sym", symfname, i);
-    symfile := Files.Old(symfname);  found := symfile # NIL;  i := 0;
-    WHILE (symPath[i] # 0X) & ~found DO
-      GetPath(path, i);
-      IF path # 0X THEN
-        Append(symfname, path);
-        symfile := Files.Old(path);
-        found := symfile # NIL;
-     END
-    END;
-    IF found THEN ident.obj := Import(id)
+    filename := BuildPath;  Append(id, filename);  Append(".sym", filename);
+    Symfile := Files.Old(filename);
+    IF Symfile # NIL THEN
+      ident.obj := Import(id)
     ELSE
-      path := "Symbol file not found: ";  Append(symfname, path);
-      S.Mark(path)
+      filename := "Symbol file not found: ";
+      Append(BuildPath, filename);  Append(id, filename);  Append(".sym", filename);
+      S.Mark(filename)
     END
   END
 END NewModule;
+
 
 (* -------------------------------------------------------------------------- *)
 (* -------------------------------------------------------------------------- *)
@@ -946,9 +925,6 @@ END EnsureSeparator;
 PROCEDURE SetSourcePath*(path: ARRAY OF CHAR);
 BEGIN SrcPath := path;    EnsureSeparator(SrcPath)    END SetSourcePath;
 
-PROCEDURE SetSymPath*(path: ARRAY OF CHAR);
-BEGIN symPath := path;    EnsureSeparator(symPath)    END SetSymPath;
-
 PROCEDURE SetBuildPath*(path: ARRAY OF CHAR);
 BEGIN BuildPath := path;  EnsureSeparator(BuildPath)  END SetBuildPath;
 
@@ -960,11 +936,7 @@ PROCEDURE Init*(modid: S.IdStr);
 VAR i, res: INTEGER;
 BEGIN
   Modid := modid;  i := 0;
-  IF BuildPath # "" THEN
-    Insert(BuildPath, SymFilename, i)
-  ELSE
-    Insert(SrcPath, SymFilename, i)
-  END;
+  Insert(BuildPath, SymFilename, i);
   Insert(Modid,     SymFilename, i);
   Insert(".sym",    SymFilename, i);
   Files.Delete(SymFilename, res);

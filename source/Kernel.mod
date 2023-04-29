@@ -12,12 +12,13 @@ TYPE
   ExceptionHandlerProc = PROCEDURE(p: INTEGER): INTEGER;
 
   (* Finalisation during garbage collection *)
-  Finalised*     = POINTER [untraced] TO FinalisedDesc;
-  FinaliseProc*  = PROCEDURE(ptr: Finalised);
-  FinalisedDesc* = RECORD
-                     Finalise: FinaliseProc;
-                     next:     Finalised
-                   END;
+  Finalised*       = POINTER [untraced] TO FinalisedDesc;
+  FinaliseProc*    = PROCEDURE(ptr: Finalised);
+  FinalisedDesc*   = RECORD
+                       Finalise: FinaliseProc;
+                       next:     Finalised
+                     END;
+  HeapTraceHandler = PROCEDURE(reason: INTEGER);
 
 VAR
   oneByteBeforeBase: CHAR; (* MUST BE THE FIRST GLOBAL VARIABLE       *)
@@ -33,8 +34,8 @@ VAR
 
   (* Heap allocation *)
   VirtualAlloc:  PROCEDURE(lpAddress, dwSize, flAllocationType, flProtect: INTEGER): INTEGER;
-  HeapBase:      INTEGER;
-  HeapSize:      INTEGER;            (* Committed heap memory                        *)
+  HeapBase*:     INTEGER;
+  HeapSize*:     INTEGER;            (* Committed heap memory                        *)
   HeapMax:       INTEGER;            (* HeapSize to HeapMax reserved, not committed  *)
   FreeList:      ARRAY 4 OF INTEGER; (* Free lists for 32, 64, 128 & 256 byte blocks *)
   LargeFreeList: INTEGER;            (* Free list for 512 byte and larger blocks     *)
@@ -45,6 +46,7 @@ VAR
   Collect0:      PROCEDURE;
   JustCollected: BOOLEAN;
   FinalisedList: Finalised;
+  HeapTracer:    HeapTraceHandler;
 
   (* Windows command line *)
   GetCommandLineW:    PROCEDURE(): INTEGER;
@@ -333,10 +335,9 @@ BEGIN
   END
 RETURN result END Align;
 
-(*
+
 PROCEDURE InstallHeapTraceHandler*(tracer: HeapTraceHandler);
 BEGIN HeapTracer := tracer END InstallHeapTraceHandler;
-*)
 
 
 PROCEDURE InitHeap;
@@ -593,7 +594,7 @@ VAR
                      (* modBase.                                              *)
   stkDesc, stkBase, ptrTable, off, ptr: INTEGER;
 BEGIN
-(*IF HeapTracer # NIL THEN HeapTracer(0) END;*)  (* Trace collect call *)
+  IF HeapTracer # NIL THEN HeapTracer(0) END;  (* Trace collect call *)
   module := Boot.FirstModule;
   WHILE module # NIL DO
     modBase := module.base;

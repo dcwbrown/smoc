@@ -104,6 +104,7 @@ BEGIN
   dependency.next := from.dependencies;  from.dependencies := dependency;
 END AddImport;
 
+
 PROCEDURE WriteFilepos;
 BEGIN
   w.c("["); w.i(S.LastLine); w.c(":"); w.i(S.LastColumn); w.c("]")
@@ -113,6 +114,7 @@ PROCEDURE Expected(filename, message: ARRAY OF CHAR);
 BEGIN
   w.s("File '"); w.s(filename); WriteFilepos; w.s("': "); w.sl(message); K.Halt(99)
 END Expected;
+
 
 PROCEDURE ScanModuleImports(module: Module);
 VAR sym: INTEGER;  impname: ARRAY 64 OF CHAR;
@@ -141,13 +143,18 @@ BEGIN
         IF sym # S.ident THEN Expected(module.filename, "expected id (2).") END;
         impname := S.id; S.Get(sym)
       END;
-      IF (impname # "SYSTEM") & (impname # "K") & (impname # "Boot") & (impname # "Kernel") THEN
+      IF (impname # "SYSTEM") & (impname # "Boot") & (impname # "Kernel") THEN
         AddImport(module, impname)
       END
     UNTIL sym # S.comma
   END;
+
+  (* All modules need boot, excepting boot itself *)
   IF module.modname # "Boot" THEN AddImport(module, "Boot") END;
+
+  (* All modules need kernel excepting those marked RTL- *)
   IF B.Flag.rtl THEN AddImport(module, "Kernel") END;
+
   module.scanned := TRUE
 END ScanModuleImports;
 
@@ -181,7 +188,6 @@ VAR sym, startTime, endTime: INTEGER;  modinit: B.Node;
 BEGIN
   w.sn(module.modname, LongestModname+1); w.sn(module.filename, LongestFilename+1);
   B.SetSourcePath(SourcePath);
-  B.SetSymPath(BuildPath);
   B.SetBuildPath(BuildPath);
   S.Init(module.file);  S.Get(sym);
   startTime := K.Time();
@@ -243,7 +249,15 @@ END ReportDependencies;
 
 
 PROCEDURE Build();
-VAR mod, prev: Module;  allscanned: BOOLEAN;  PEname: ARRAY 1024 OF CHAR;
+VAR
+  mod, prev:  Module;
+  allscanned: BOOLEAN;
+  PEname:     ARRAY 1024 OF CHAR;
+  codesize:   INTEGER;
+  staticsize: INTEGER;
+  varsize:    INTEGER;
+  start, end: INTEGER;  (* Times *)
+
 BEGIN
   AddModule(Modulename);
 
@@ -263,6 +277,7 @@ BEGIN
   (* Compile dependentless modules until all modules compiled. *)
   w.sn("Module", LongestModname+1);  w.sn("File", LongestFilename+1);
   w.sl("      code    static       VAR   time");
+  codesize := 0;  staticsize := 0;  varsize := 0;  start := K.Time();
   REPEAT
     mod := Modules;  prev := NIL;
     WHILE (mod # NIL) & (mod.dependencies # NIL) DO
@@ -271,6 +286,7 @@ BEGIN
     IF mod # NIL THEN
       Compile(mod);
       IF S.errCnt # 0 THEN K.Halt(99) END;
+      INC(codesize, G.pc);  INC(staticsize, G.staticSize);  INC(varsize, G.varSize);
       RemoveDependencies(mod);
       IF prev = NIL THEN Modules := mod.next ELSE prev.next := mod.next END
     ELSE
@@ -280,7 +296,14 @@ BEGIN
   UNTIL Modules = NIL;
 
   PEname := B.BuildPath;  K.Append(Modulename, PEname);  K.Append(".exe", PEname);
-  WritePE.Generate(PEname)
+  WritePE.Generate(PEname);
+
+  end := K.Time();
+  w.sn("Total", LongestModname + LongestFilename + 2);
+  intSep(codesize, 10);   intSep(staticsize,  10);
+  intSep(varsize,  10);   intSep(K.TimeToMSecs(end-start), 5);
+  w.s("ms");       w.l
+
 END Build;
 
 

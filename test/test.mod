@@ -1,6 +1,6 @@
 MODULE test;  (*$CONSOLE*)
 
-IMPORT SYSTEM, Dumper, w := Writer, Classy;
+IMPORT SYSTEM, Dumper, w := Writer, Classy, K := Kernel;
 
 CONST
   cs8 = "8 bit string";
