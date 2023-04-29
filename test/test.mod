@@ -24,6 +24,7 @@ BEGIN
   Dumper.EnableHeapTrace;
 
   w.sl("Hello teapots.");
+  w.s("Executable path: ");  w.s(K.ExecutablePath);  w.sl(".");
 
   w.s("w.i(12345):      "); w.i(12345);      w.l;
   w.s("w.h(12345):      "); w.h(12345);      w.l;

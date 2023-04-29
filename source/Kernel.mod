@@ -31,6 +31,7 @@ VAR
   MessageBoxW:   PROCEDURE(hWnd, lpText, lpCaption, uType: INTEGER): INTEGER;
   AddVectoredExceptionHandler: PROCEDURE(first: INTEGER; filter: ExceptionHandlerProc);
   GetSystemTimePreciseAsFileTime: PROCEDURE(tickAdr: INTEGER);
+  GetModuleFileNameW: PROCEDURE(hModule, lpFilename, nSize: INTEGER);
 
   (* Heap allocation *)
   VirtualAlloc:  PROCEDURE(lpAddress, dwSize, flAllocationType, flProtect: INTEGER): INTEGER;
@@ -54,6 +55,7 @@ VAR
   ArgV:               INTEGER;
   NumArgs*:           INTEGER;
   CommandAdr:         INTEGER;
+  ExecutablePath*:    ARRAY 1024 OF CHAR;
 
 
 
@@ -365,7 +367,6 @@ BEGIN
 
   MarkedList := MarkedListSentinel;
 END InitHeap;
-
 
 PROCEDURE ExtendHeap;
 CONST MEM_COMMIT = 1000H;  PAGE_READWRITE = 4;
@@ -697,6 +698,13 @@ BEGIN
   SYSTEM.PUT(SYSTEM.ADR(proc), Boot.PEImports.GetProcAddress(dll, SYSTEM.ADR(name)))
 END GetProc;
 
+PROCEDURE GetExecutablePath;
+VAR fnw: ARRAY 1024 OF SYSTEM.CARD16;  n: INTEGER;
+BEGIN
+  GetModuleFileNameW(0, SYSTEM.ADR(fnw), LEN(fnw));
+  n := Utf16ToUtf8(fnw, ExecutablePath)
+END GetExecutablePath;
+
 BEGIN
   (* Set up some useful exports from standard procedures. *)
   Kernel := Boot.PEImports.LoadLibraryA(SYSTEM.ADR("kernel32.dll"));
@@ -709,6 +717,7 @@ BEGIN
   GetProc(Kernel, "GetCommandLineW",                GetCommandLineW);
   GetProc(Shell,  "CommandLineToArgvW",             CommandLineToArgvW);
   GetProc(Kernel, "GetSystemTimePreciseAsFileTime", GetSystemTimePreciseAsFileTime);
+  GetProc(Kernel, "GetModuleFileNameW",             GetModuleFileNameW);
 
   (* Initialise exception/trap handling *)
   AddVectoredExceptionHandler(1, ExceptionHandler);
@@ -722,6 +731,7 @@ BEGIN
   CommandAdr := GetCommandLineW();
   NumArgs    := 0;
   ArgV       := CommandLineToArgvW(CommandAdr, SYSTEM.ADR(NumArgs));
+  GetExecutablePath;
 
   (* Install New *)
   SYSTEM.PUT(SYSTEM.ADR(Boot.PEImports.New), New)

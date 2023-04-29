@@ -302,9 +302,39 @@ BEGIN
   w.sn("Total", LongestModname + LongestFilename + 2);
   intSep(codesize, 10);   intSep(staticsize,  10);
   intSep(varsize,  10);   intSep(K.TimeToMSecs(end-start), 5);
-  w.s("ms");       w.l
-
+  w.sl("ms")
 END Build;
+
+
+PROCEDURE AddExecutableDirToSourceSearchpath;
+VAR i, j, k: INTEGER;
+BEGIN i := 0;  j := -1;
+  (* Find end of path componenet of executable filename *)
+  WHILE (i < LEN(K.ExecutablePath)) & (K.ExecutablePath[i] # 0X) DO
+    IF (K.ExecutablePath[i] = "/") OR (K.ExecutablePath[i] = '\') THEN j := i END;
+    INC(i)
+  END;
+
+  IF j >= 0 THEN
+    (* Find end of source searchpath *)
+    k := 0;
+    WHILE (k < LEN(SourcePath)) & (SourcePath[k] # 0X) DO INC(k) END;
+
+    (* Add path separator to source searchpath if none already present *)
+    IF k < LEN(SourcePath) - 1 THEN
+      IF (k > 0) & (SourcePath[k-1] # "/") & (SourcePath[k-1] # '\') THEN
+        SourcePath[k] := "/";  INC(k);
+      END
+    END;
+
+    (* Add executable path to source search path *)
+    IF k + j + 2 < LEN(SourcePath) THEN
+      SourcePath[k] := ";";  INC(k);  i := 0;
+      WHILE i < j DO SourcePath[k] := K.ExecutablePath[i];  INC(i);  INC(k) END;
+      SourcePath[k] := 0X
+    END
+  END
+END AddExecutableDirToSourceSearchpath;
 
 
 (* -------------------------------------------------------------------------- *)
@@ -359,5 +389,8 @@ BEGIN
   LongestFilename := 0;
   S.InstallNotifyError(NotifyError);
   ScanArguments;
+  AddExecutableDirToSourceSearchpath;
+  w.s("SourcePath: '");    w.s(SourcePath);
+  w.s("', BuildPath: '");  w.s(BuildPath);  w.sl("'.");
   Build
 END ORB.
