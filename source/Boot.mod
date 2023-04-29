@@ -217,6 +217,6 @@ BEGIN
       module      := nextModule
     END;
 
-    PEImports.ExitProcess(4)
+    PEImports.ExitProcess(0)
   END
 END Boot.

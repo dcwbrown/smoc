@@ -692,35 +692,36 @@ BEGIN  Finalise;  Boot.PEImports.ExitProcess(exitCode) END Halt;
 (* ------- Kernel initialisation code - called following kernel link -------- *)
 (* -------------------------------------------------------------------------- *)
 
+PROCEDURE GetProc(dll: INTEGER; name: ARRAY [untagged] OF CHAR; VAR proc: ARRAY OF BYTE);
+BEGIN
+  SYSTEM.PUT(SYSTEM.ADR(proc), Boot.PEImports.GetProcAddress(dll, SYSTEM.ADR(name)))
+END GetProc;
+
 BEGIN
   (* Set up some useful exports from standard procedures. *)
   Kernel := Boot.PEImports.LoadLibraryA(SYSTEM.ADR("kernel32.dll"));
   User   := Boot.PEImports.LoadLibraryA(SYSTEM.ADR("user32.dll"));
   Shell  := Boot.PEImports.LoadLibraryA(SYSTEM.ADR("shell32.dll"));
 
-  (* Initialise exception/trap handling *)
-  SYSTEM.PUT(SYSTEM.ADR(MessageBoxW),                 Boot.PEImports.GetProcAddress(User,   SYSTEM.ADR("MessageBoxW")));
-  SYSTEM.PUT(SYSTEM.ADR(AddVectoredExceptionHandler), Boot.PEImports.GetProcAddress(Kernel, SYSTEM.ADR("AddVectoredExceptionHandler")));
+  GetProc(User,   "MessageBoxW",                    MessageBoxW);
+  GetProc(Kernel, "AddVectoredExceptionHandler",    AddVectoredExceptionHandler);
+  GetProc(Kernel, "VirtualAlloc",                   VirtualAlloc);
+  GetProc(Kernel, "GetCommandLineW",                GetCommandLineW);
+  GetProc(Shell,  "CommandLineToArgvW",             CommandLineToArgvW);
+  GetProc(Kernel, "GetSystemTimePreciseAsFileTime", GetSystemTimePreciseAsFileTime);
 
+  (* Initialise exception/trap handling *)
   AddVectoredExceptionHandler(1, ExceptionHandler);
 
   (* Initialise Heap and GC *)
-  SYSTEM.PUT(SYSTEM.ADR(VirtualAlloc), Boot.PEImports.GetProcAddress(Kernel, SYSTEM.ADR("VirtualAlloc")));
 
   Collect0 := Collect;
   InitHeap;
 
   (* Initialise command line access *)
-  SYSTEM.PUT(SYSTEM.ADR(GetCommandLineW), Boot.PEImports.GetProcAddress(Kernel, SYSTEM.ADR("GetCommandLineW")));
-
-  SYSTEM.PUT(SYSTEM.ADR(CommandLineToArgvW), Boot.PEImports.GetProcAddress(Shell, SYSTEM.ADR("CommandLineToArgvW")));
-
   CommandAdr := GetCommandLineW();
   NumArgs    := 0;
   ArgV       := CommandLineToArgvW(CommandAdr, SYSTEM.ADR(NumArgs));
-
-  (* System time (precise) *)
-  SYSTEM.PUT(SYSTEM.ADR(GetSystemTimePreciseAsFileTime), Boot.PEImports.GetProcAddress(Kernel, SYSTEM.ADR("GetSystemTimePreciseAsFileTime")));
 
   (* Install New *)
   SYSTEM.PUT(SYSTEM.ADR(Boot.PEImports.New), New)
