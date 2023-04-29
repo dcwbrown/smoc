@@ -36,10 +36,15 @@ PROCEDURE b*(n: INTEGER);
 BEGIN WHILE n > 0 DO writebyte(ORD(" ")); DEC(n) END END b;
 
 PROCEDURE sn*(s: ARRAY OF CHAR; n: INTEGER);
-VAR l: INTEGER;
+VAR l, w: INTEGER;
 BEGIN l := 0;
-  WHILE (l < LEN(s)) & (l < n) & (s[l] # 0X) DO INC(l) END;
-  writebuf(SYSTEM.ADR(s), l);  b(n-l)
+  IF n < 0 THEN w := -n ELSE w := n END;
+  WHILE (l < LEN(s)) & (l < w) & (s[l] # 0X) DO INC(l) END;
+  IF n < 0 THEN
+    b(w-l);  writebuf(SYSTEM.ADR(s), l)
+  ELSE
+    writebuf(SYSTEM.ADR(s), l);  b(w-l)
+  END
 END sn;
 
 PROCEDURE h1*(i: INTEGER);
