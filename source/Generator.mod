@@ -118,12 +118,10 @@ VAR
   pass, varSize*, staticSize*: INTEGER;
   baseOffset: INTEGER;  (* Base address of initialsed data section *)
 
-  procList, curProc:           B.ProcList;
-  modInitProc:                 Proc;
+  procList, curProc: B.ProcList;
+  modInitProc:       Proc;
 
-  mem: RECORD
-         mod, rm, bas, idx, scl, disp: INTEGER
-       END;
+  mem: RECORD mod, rm, bas, idx, scl, disp: INTEGER END;
 
   allocReg, allocXReg: SET;
   MkItmStat: MakeItemState;  (* State for MakeItem procedures in Pass 2 *)
@@ -2164,20 +2162,21 @@ BEGIN
   END
 END StdProc;
 
-PROCEDURE MakeItem(VAR x: Item;  obj: B.Object);
+PROCEDURE MakeItem(VAR x: Item;  obj: B.Object);  (* x receives result value, if any *)
 VAR objv: B.Var;  node: Node;  size, form: INTEGER;
 BEGIN
   x.type := obj.type;  x.ref := FALSE;  x.a := 0;  x.b := 0;  x.c := 0;
-  IF obj IS B.Const THEN x.mode := mImm;  x.a := obj(B.Const).val
-  ELSIF obj IS B.Var THEN x.obj := obj;
+  IF    obj IS B.Const THEN x.mode := mImm;  x.a := obj(B.Const).val;
+  ELSIF obj IS B.Var   THEN x.obj  := obj;
     objv := obj(B.Var);  x.a := objv.adr;  form := objv.type.form;
     IF objv.lev <= 0 THEN x.mode := mBX ELSE x.mode := mBP END;
-    IF objv.lev < 0 THEN x.ref := TRUE END;
+    IF objv.lev < 0  THEN x.ref  := TRUE END;
     IF    objv IS B.Str  THEN x.mode := mBX;  x.strlen := objv(B.Str).len
     ELSIF objv IS B.Par THEN
       size := objv.type.size;
-      x.ref := objv(B.Par).varpar OR (form = B.tArray)
-        OR (form = B.tRec) & ((size > 8) OR (size IN {3, 5, 6, 7}))
+      x.ref := objv(B.Par).varpar
+            OR (form = B.tArray)
+            OR (form = B.tRec) & ((size > 8) OR (size IN {3, 5, 6, 7}))
     ELSIF objv IS B.TempVar THEN x.mode := mBP
     END;
     IF x.mode = mBX THEN SetAlloc(rBX) END
@@ -2189,50 +2188,63 @@ BEGIN
   ELSIF obj.class = B.cType THEN ASSERT(FALSE)
   ELSIF obj IS Node THEN
     node := obj(Node);  sourcePos := node.sourcePos;  x.mode := mNothing;
-    IF    node.op = S.plus   THEN Op2(x, node)
-    ELSIF node.op = S.minus  THEN
-      IF node.right # NIL    THEN Op2(x, node) ELSE Negate(x, node) END
-    ELSIF node.op = S.times  THEN Op2(x, node)
-    ELSIF (node.op = S.div) OR (node.op = S.mod) THEN IntDiv(x, node)
-    ELSIF node.op = S.rdiv   THEN Op2(x, node)
-    ELSIF node.op = S.and    THEN And(x, node)
-    ELSIF node.op = S.or     THEN Or(x, node)
-    ELSIF node.op = S.not    THEN Not(x, node)
-    ELSIF (node.op >= S.eql) & (node.op <= S.geq) THEN Compare(x, node)
-    ELSIF node.op = S.in     THEN MemberTest(x, node)
-    ELSIF node.op = S.is     THEN TypeTest(x, node)
-    ELSIF node.op = S.arrow  THEN Deref(x, node)
-    ELSIF node.op = S.period THEN Field(x, node)
-    ELSIF node.op = S.lparen THEN TypeCheck(x, node)
-    ELSIF node.op = S.lbrak  THEN Index(x, node)
-    ELSIF node.op = S.lbrace THEN RecordCast(x, node)
-    ELSIF node.op = S.bitset THEN SingletonSet(x, node)
-    ELSIF node.op = S.upto   THEN RangeSet(x, node)
-    ELSIF node.op = S.call   THEN Call(x, node)
-    ELSIF (node.op >= S.begSf) & (node.op <= S.endSf) THEN StdFunc(x, node)
-    ELSIF (node.op = S.becomes)
-    OR    (node.op >= S.if) & (node.op <= S.for)
-    OR    (node.op >= S.begSp) & (node.op <= S.endSp) THEN
-      ResetMkItmStat;  allocReg := {};  allocXReg := {};
-      IF node.op = S.becomes THEN Becomes(node)
-      ELSIF node.op = S.if     THEN If(node)
-      ELSIF node.op = S.while  THEN While(node, -1)
-      ELSIF node.op = S.repeat THEN Repeat(node)
-      ELSIF node.op = S.for    THEN For(node)
-      ELSIF node.op = S.case   THEN Case(node)
-      ELSE StdProc(node)
-      END;
-      ResetMkItmStat;  allocReg := {};  allocXReg := {}
-    ELSIF node.op = S.semicolon THEN
-      IF node.left # NIL THEN MakeItem(x, node.left) END;
-      IF node.right # NIL THEN MakeItem(x, node.right) END
-    ELSE ASSERT(FALSE)
+
+    ASSERT((node.op >= S.times) & (node.op <= S.period)
+       OR  (node.op >= S.not)   & (node.op <= S.lbrace)
+       OR  (node.op >= S.if)    & (node.op <= S.for)
+       OR  (node.op =  S.becomes)
+       OR  (node.op =  S.upto)
+       OR  (node.op =  S.semicolon)
+       OR  (node.op =  S.call)
+       OR  (node.op =  S.bitset)
+       OR  (node.op >= S.begSf) & (node.op <= S.endSf)
+       OR  (node.op >= S.begSp) & (node.op <= S.endSp));
+
+    CASE node.op OF
+      S.becomes, S.if.. S.for, S.begSp.. S.endSp: ResetMkItmStat;  allocReg := {};  allocXReg := {}
     END;
-    IF x.mode # mNothing THEN x.type := node.type;
-      IF (x.mode IN {mReg, mRegI}) & (x.r IN MkItmStat.avoid) THEN
-        RelocReg(x.r, AllocReg())
-      ELSIF (x.mode = mXReg) & (x.r IN MkItmStat.xAvoid) THEN
-        RelocReg(x.r, AllocXReg())
+
+    CASE node.op OF
+    | S.times:          Op2(x, node)
+    | S.rdiv:           Op2(x, node)
+    | S.div:            IntDiv(x, node)
+    | S.mod:            IntDiv(x, node)
+    | S.and:            And(x, node)
+    | S.plus:           Op2(x, node)
+    | S.minus:          IF node.right # NIL THEN Op2(x, node) ELSE Negate(x, node) END
+    | S.or:             Or(x, node)
+    | S.eql..S.geq:     Compare(x, node)
+    | S.in:             MemberTest(x, node)
+    | S.is:             TypeTest(x, node)
+    | S.arrow:          Deref(x, node)
+    | S.period:         Field(x, node)
+    | S.not:            Not(x, node)
+    | S.lparen:         TypeCheck(x, node)
+    | S.lbrak:          Index(x, node)
+    | S.lbrace:         RecordCast(x, node)
+    | S.if:             If(node)
+    | S.while:          While(node, -1)
+    | S.repeat:         Repeat(node)
+    | S.case:           Case(node)
+    | S.for:            For(node)
+    | S.becomes:        Becomes(node)
+    | S.upto:           RangeSet(x, node)
+    | S.semicolon:      IF node.left  # NIL THEN MakeItem(x, node.left)  END;
+                        IF node.right # NIL THEN MakeItem(x, node.right) END
+    | S.call:           Call(x, node)
+    | S.bitset:         SingletonSet(x, node)
+    | S.begSf..S.endSf: StdFunc(x, node)
+    | S.begSp..S.endSp: StdProc(node)
+    END;
+
+    CASE node.op OF
+      S.becomes, S.if.. S.for, S.begSp.. S.endSp: ResetMkItmStat;  allocReg := {};  allocXReg := {}
+    END;
+
+    IF x.mode # mNothing THEN
+      x.type := node.type;
+      IF    (x.mode IN {mReg, mRegI}) & (x.r IN MkItmStat.avoid)  THEN RelocReg(x.r, AllocReg())
+      ELSIF (x.mode = mXReg)          & (x.r IN MkItmStat.xAvoid) THEN RelocReg(x.r, AllocXReg())
       END
     END
   ELSE ASSERT(FALSE)
