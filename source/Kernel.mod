@@ -63,12 +63,13 @@ VAR
 (* ------------ Unicode Transformation Formats UTF-8 and UTF-16 ------------- *)
 (* -------------------------------------------------------------------------- *)
 
-(* UTF8:                                                                                           *)
+(* UTF8:                                                                                            *)
 (* -------------- codepoint --------------    ----------------------- bytes ----------------------- *)
 (* 0000 0000 0000 0000 0000 0000 0zzz zzzz    0zzzzzzz                                              *)
 (* 0000 0000 0000 0000 0000 0yyy yyzz zzzz    110yyyyy 10zzzzzz                                     *)
 (* 0000 0000 0000 0000 xxxx yyyy yyzz zzzz    1110xxxx 10yyyyyy 10zzzzzz                            *)
 (* 0000 0000 000w wwxx xxxx yyyy yyzz zzzz    11110www 10xxxxxx 10yyyyyy 10zzzzzz                   *)
+(* The below are beyond the range of valid Unicode codepoints                                       *)
 (* 0000 00vv wwww wwxx xxxx yyyy yyzz zzzz    111110vv 10wwwwww 10xxxxxx 10yyyyyy 10zzzzzz          *)
 (* 0uvv vvvv wwww wwxx xxxx yyyy yyzz zzzz    1111110u 10vvvvvv 10wwwwww 10xxxxxx 10yyyyyy 10zzzzzz *)
 
@@ -113,6 +114,12 @@ BEGIN
   END
 END PutUtf8;
 
+
+(* UTF16:                                                                       *)
+(* -------------- codepoint --------------    ------------- words ------------- *)
+(* 0000 0000 0000 0000 zzzz zzzz zzzz zzzz    zzzzzzzzzzzzzzzz                  *)
+(* 0000 0000 000x xxxx yyyy yyzz zzzz zzzz    110110wwwwyyyyyy 110111zzzzzzzzzz *)
+(* Where xxxxx is 1-16, and wwww is xxxxx-1 (0-15).                             *)
 
 PROCEDURE GetUtf16*(src: ARRAY OF SYSTEM.CARD16; VAR i: INTEGER): INTEGER;
 VAR result: INTEGER;
