@@ -32,6 +32,7 @@ VAR
   AddVectoredExceptionHandler: PROCEDURE(first: INTEGER; filter: ExceptionHandlerProc);
   GetSystemTimePreciseAsFileTime: PROCEDURE(tickAdr: INTEGER);
   GetModuleFileNameW: PROCEDURE(hModule, lpFilename, nSize: INTEGER);
+  GetCurrentDirectoryW: PROCEDURE(nsize, pbuffer: INTEGER): INTEGER;
 
   (* Heap allocation *)
   VirtualAlloc:  PROCEDURE(lpAddress, dwSize, flAllocationType, flProtect: INTEGER): INTEGER;
@@ -56,6 +57,7 @@ VAR
   NumArgs*:           INTEGER;
   CommandAdr:         INTEGER;
   ExecutablePath*:    ARRAY 1024 OF CHAR;
+  InitialDirectory*:  ARRAY 1024 OF CHAR;
 
 
 
@@ -705,12 +707,17 @@ BEGIN
   SYSTEM.PUT(SYSTEM.ADR(proc), Boot.PEImports.GetProcAddress(dll, SYSTEM.ADR(name)))
 END GetProc;
 
-PROCEDURE GetExecutablePath;
-VAR fnw: ARRAY 1024 OF SYSTEM.CARD16;  n: INTEGER;
+PROCEDURE GetWindowsPaths;
+VAR path: ARRAY 1024 OF SYSTEM.CARD16;  n: INTEGER;
 BEGIN
-  GetModuleFileNameW(0, SYSTEM.ADR(fnw), LEN(fnw));
-  n := Utf16ToUtf8(fnw, ExecutablePath)
-END GetExecutablePath;
+  GetModuleFileNameW(0, SYSTEM.ADR(path), LEN(path));
+  n := Utf16ToUtf8(path, ExecutablePath);
+
+  InitialDirectory := "";
+  IF GetCurrentDirectoryW(LEN(path), SYSTEM.ADR(path)) > 0 THEN
+    n := Utf16ToUtf8(path, InitialDirectory)
+  END;
+END GetWindowsPaths;
 
 BEGIN
   (* Set up some useful exports from standard procedures. *)
@@ -725,6 +732,7 @@ BEGIN
   GetProc(Shell,  "CommandLineToArgvW",             CommandLineToArgvW);
   GetProc(Kernel, "GetSystemTimePreciseAsFileTime", GetSystemTimePreciseAsFileTime);
   GetProc(Kernel, "GetModuleFileNameW",             GetModuleFileNameW);
+  GetProc(Kernel, "GetCurrentDirectoryW",           GetCurrentDirectoryW);
 
   (* Initialise exception/trap handling *)
   AddVectoredExceptionHandler(1, ExceptionHandler);
@@ -738,7 +746,7 @@ BEGIN
   CommandAdr := GetCommandLineW();
   NumArgs    := 0;
   ArgV       := CommandLineToArgvW(CommandAdr, SYSTEM.ADR(NumArgs));
-  GetExecutablePath;
+  GetWindowsPaths;
 
   (* Install New *)
   SYSTEM.PUT(SYSTEM.ADR(Boot.PEImports.New), New)

@@ -308,14 +308,30 @@ END Build;
 
 PROCEDURE AddExecutableDirToSourceSearchpath;
 VAR i, j, k: INTEGER;
-BEGIN i := 0;  j := -1;
+BEGIN
+  (*
+  w.s("Initial directory: '"); w.s(K.InitialDirectory); w.sl("'.");
+  w.s("Executable file:   '"); w.s(K.ExecutablePath);   w.sl("'.");
+  *)
+  (* See if executable path starts with current working directory and omit if so *)
+  i := 0;
+  WHILE (i < LEN(K.InitialDirectory))
+      & (i < LEN(K.ExecutablePath))
+      & (K.InitialDirectory[i] # 0X)
+      & (K.InitialDirectory[i] = K.ExecutablePath[i]) DO INC(i) END;
+  IF (i > 0) & (K.InitialDirectory[i] = 0X)
+   & ((K.ExecutablePath[i] = '/') OR (K.ExecutablePath[i] = '\')) THEN INC(i) ELSE i := 0 END;
+
+  (* 'i' is start of executable directory *)
   (* Find end of path componenet of executable filename *)
-  WHILE (i < LEN(K.ExecutablePath)) & (K.ExecutablePath[i] # 0X) DO
-    IF (K.ExecutablePath[i] = "/") OR (K.ExecutablePath[i] = '\') THEN j := i END;
-    INC(i)
+  j := -1;  k := i;
+  WHILE (k < LEN(K.ExecutablePath)) & (K.ExecutablePath[k] # 0X) DO
+    IF (K.ExecutablePath[k] = "/") OR (K.ExecutablePath[k] = '\') THEN j := k END;
+    INC(k)
   END;
 
   IF j >= 0 THEN
+    (* 'i'and 'j' are first and limit character of executable directory *)
     (* Find end of source searchpath *)
     k := 0;
     WHILE (k < LEN(SourcePath)) & (SourcePath[k] # 0X) DO INC(k) END;
@@ -328,10 +344,11 @@ BEGIN i := 0;  j := -1;
     END;
 
     (* Add executable path to source search path *)
-    IF k + j + 2 < LEN(SourcePath) THEN
-      SourcePath[k] := ";";  INC(k);  i := 0;
+    IF k + j-i + 3 < LEN(SourcePath) THEN
+      SourcePath[k] := ";";  INC(k);
       WHILE i < j DO SourcePath[k] := K.ExecutablePath[i];  INC(i);  INC(k) END;
-      SourcePath[k] := 0X
+      SourcePath[k] := '/';  INC(k);
+      SourcePath[k] := 0X;
     END
   END
 END AddExecutableDirToSourceSearchpath;
