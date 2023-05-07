@@ -48,10 +48,7 @@ BEGIN l := 0;
 END sn;
 
 PROCEDURE h1*(i: INTEGER);
-BEGIN
-  IF i<10 THEN writebyte(i + 48)
-          ELSE writebyte(i + 87) END
-END h1;
+BEGIN IF i<10 THEN writebyte(i + 48) ELSE writebyte(i + 55) END END h1;
 
 PROCEDURE hn*(i, n: INTEGER);
 BEGIN

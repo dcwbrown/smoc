@@ -297,7 +297,11 @@ BEGIN
                                + Align(OberonSize, SectionAlignment)
                                + 4096;   (* import section *)
   hdr.sizeOfHeaders           := HeaderSize;
-  hdr.subsystem               := 3;      (* Console (or 2 for GUI) *)
+  IF B.Flag.console THEN
+    hdr.subsystem             := 3
+  ELSE
+    hdr.subsystem             := 2
+  END;
   hdr.dllCharacteristics      := 400H;   (* No SEH *)
   hdr.sizeOfStackReserve      := 1000H;
   hdr.sizeOfStackCommit       := 1000H;

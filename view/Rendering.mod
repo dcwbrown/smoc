@@ -2,7 +2,7 @@ MODULE Rendering;
 
 IMPORT SYSTEM, Fonts, w := Writer;
 
-TYPE UINT32 = SYSTEM.CARD32;
+TYPE ARGB = SYSTEM.CARD32;
 
 PROCEDURE u8sqrt(x: INTEGER): INTEGER;
 VAR c, d: INTEGER;
@@ -47,8 +47,8 @@ BEGIN
 END BlendChannel;
 
 
-PROCEDURE BlendPixel(fg, bg: UINT32; alpha: BYTE): UINT32;
-VAR result: UINT32;
+PROCEDURE BlendPixel(fg, bg: ARGB; alpha: BYTE): ARGB;
+VAR result: ARGB;
 BEGIN
   IF    bg    = 0   THEN result := AlphaMultiplyPixel(fg, alpha)
   ELSIF alpha = 255 THEN result := fg
@@ -62,69 +62,113 @@ RETURN result END BlendPixel;
 
 
 
-PROCEDURE RenderAlphaMap(x, y, width, height, mapadr, paint: INTEGER; bitmapadr, stride: INTEGER);
+PROCEDURE RenderAlphaMap(
+  x:         INTEGER;  (* In 1/4 pixels   *)
+  y:         INTEGER;  (* In whole pixels *)
+  width:     INTEGER;  (* In 1/4 pixels   *)
+  height:    INTEGER;  (* In whole pixels *)
+  mapadr:    INTEGER;
+  paint:     ARGB;
+  bitmapadr: INTEGER;
+  stride:    INTEGER
+);
 VAR
-  alpha, len:    BYTE;
-  sp,    lp:     INTEGER;
-  pixel:         SYSTEM.CARD32;
+  alpha, len: BYTE;
+  sp,    mp:  INTEGER;
+  pixel:      ARGB;
+  subpixel:   INTEGER;
+  alphasum:   INTEGER;
 BEGIN
   (*
-  w.s("RenderAlphaMap width "); w.i(width);
-  w.s(", height ");             w.i(height);
-  w.s(", mapadr $");            w.h(mapadr);  w.sl(".");
+  w.s("RenderAlphaMap, x "); w.i(x);
+  w.s(", width ");           w.i(width);
+  w.s(", height ");          w.i(height);
+  w.s(", mapadr $");         w.h(mapadr);  w.sl(".");
+
   w.DumpMem(2, mapadr, 0, 323);
   *)
 
-  sp := bitmapadr + 4 * (stride * y + x);
-  lp := sp + 4 * width;
+  mp       := bitmapadr + 4 * (stride * y + x DIV 4);
+  subpixel := x MOD 4;
+  alphasum := 0;
+  sp       := 0;
 
   SYSTEM.GET(mapadr, len);  INC(mapadr);
   WHILE len # 0 DO
     CASE len DIV 64 OF
-    | 0: alpha := len * 4;    len := 1
+    | 0: alpha := len;        len := 1
     | 1: len := len MOD 40H;  alpha := 0;
-    | 2: len := len MOD 40H;  alpha := 0FFH;
+    | 2: len := len MOD 40H;  alpha := 40H;
     | 3: len := len MOD 40H;  SYSTEM.GET(mapadr, alpha);  INC(mapadr);
-                              IF alpha < 40H THEN alpha := alpha * 4 ELSE alpha := 0FFH END;
     END;
+
     WHILE len > 0 DO
-      SYSTEM.GET(sp, pixel);
-      SYSTEM.PUT(sp, BlendPixel(paint, pixel, alpha));
-      INC(sp, 4);
-      IF sp >= lp THEN
+      INC(alphasum, alpha); INC(subpixel);
+      IF subpixel > 3 THEN
+        IF alphasum > 0 THEN
+          IF alphasum >= 255 THEN
+            SYSTEM.PUT(mp, paint);
+          ELSE
+            SYSTEM.GET(mp, pixel);
+            SYSTEM.PUT(mp, BlendPixel(paint, pixel, alphasum));
+          END
+        END;
+        subpixel := 0;
+        alphasum := 0;
+        INC(mp, 4);
+      END;
+      INC(sp);
+      IF sp >= width THEN
+        IF alphasum > 0 THEN  (* write remaining partial pixel *)
+          SYSTEM.GET(mp, pixel);
+          SYSTEM.PUT(mp, BlendPixel(paint, pixel, alphasum));
+        END;
         INC(y);
-        sp := bitmapadr + 4 * (stride * y + x);
-        lp := sp + 4 * width;
+        mp := bitmapadr + 4 * (stride * y + x DIV 4);
+        sp := 0;
+        alphasum := 0;
+        subpixel := x MOD 4;
       END;
       DEC(len)
     END;
-
     SYSTEM.GET(mapadr, len);  INC(mapadr);
   END
 END RenderAlphaMap;
 
 
-PROCEDURE TestRenderLowerCaseA*(x, y: INTEGER; str: ARRAY OF CHAR; address, stride: INTEGER);
-VAR glyph: Fonts.Glyph;  i: INTEGER;
+PROCEDURE RenderString*(
+  VAR x:       INTEGER;        (* In 1/256ths of a pixel *)
+      y:       INTEGER;        (* In whole pixels        *)
+      name:    ARRAY OF CHAR;
+      size:    INTEGER;
+      colour:  INTEGER;
+      str:     ARRAY OF CHAR;
+      address: INTEGER;
+      stride:  INTEGER);
+VAR font: Fonts.Font;  glyph: Fonts.Glyph;  i: INTEGER;
 BEGIN
-  x := x * 4;  (* work horizontally in 1/4 pixels *)
+  (*font := Fonts.GetFont("Fira Code Retina", size);*)
+  (*font := Fonts.GetFont("blackadder itc", size);*)
+  (*font := Fonts.GetFont("sitka text", size);*)
+  (*font := Fonts.GetFont("arial", size);*)
+  font := Fonts.GetFont(name, size);
   i := 0;
   WHILE (i < LEN(str)) & (str[i] # 0X)  DO
-    glyph := Fonts.GetGlyph(ORD(str[i]), 24, x MOD 4);
-    IF glyph.map[x MOD 4] # 0 THEN
+    glyph := Fonts.GetGlyph(font, ORD(str[i]));
+    IF glyph.map # 0 THEN
       RenderAlphaMap(
-        x DIV 4,
+        x DIV 64 + glyph.originX,
         y - glyph.baseline,
         glyph.mapWidth, glyph.mapHeight,
-        glyph.map[x MOD 4],
-        0FFFFFFH,  (* Paint *)
+        glyph.map,
+        colour,
         address, stride
       )
     END;
-    INC(x, glyph.advance);
+    INC(x, Fonts.GetAdvance(font, ORD(str[i])));
     INC(i)
   END
-END TestRenderLowerCaseA;
+END RenderString;
 
 
 BEGIN

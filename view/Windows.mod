@@ -30,6 +30,7 @@ TYPE
     y*:      INTEGER;
     width*:  INTEGER;
     height*: INTEGER;
+    DPI*:    INTEGER;
     highch:  INTEGER;  (* Leading/high surrogate codepoint of a pair *)
     dochar:  CharacterHandler;
     dodraw:  DrawHandler;
@@ -38,28 +39,31 @@ TYPE
   END;
 
 VAR
-  CreateDIBSection:       PROCEDURE(hdc, pbmi, usage, ppvbits, hsection, offset: INTEGER): INTEGER;
-  SelectObject:           PROCEDURE(hdc, hobject: INTEGER): INTEGER;
-  DeleteObject:           PROCEDURE(hobject: INTEGER): INTEGER;
-  CreateCompatibleDC:     PROCEDURE(hdc: INTEGER): INTEGER;
-  LoadCursorW:            PROCEDURE(hinstance, lpcursorname: INTEGER): INTEGER;
-  RegisterClassExW:       PROCEDURE(wndclassexw: INTEGER): INTEGER;
-  CreateWindowExW:        PROCEDURE(dwExStyle, lpClassName, lpWindowName,
-                                    dwStyle, X, Y, nWidth, nHeight,
-                                    hWndParent, hMenu, hInstance, lpParam: INTEGER): INTEGER;
-  GetMessageW:            PROCEDURE(lpmsg, hwnd, filtermin, filtermax: INTEGER): INTEGER;
-  TranslateMessage:       PROCEDURE(msg: INTEGER): INTEGER;
-  DispatchMessageW:       PROCEDURE(msg: INTEGER): INTEGER;
-  DefWindowProcW:         PROCEDURE(hwnd, umsg, wparam, lparam: INTEGER): INTEGER;
-  GetLastError:           PROCEDURE(): INTEGER;
-  PostQuitMessage:        PROCEDURE(retcode: INTEGER);
-  BeginPaint:             PROCEDURE(hwnd, paintstruct: INTEGER): INTEGER;
-  EndPaint:               PROCEDURE(hwnd, paintstruct: INTEGER): INTEGER;
-  BitBlt:                 PROCEDURE(hdc, x, y, cx, cy, hdcSrc, x1, y1, rop: INTEGER): INTEGER;
-  SetProcessDpiAwareness: PROCEDURE(awareness: INTEGER);
-  SetCapture:             PROCEDURE(hwnd: INTEGER);
-  ReleaseCapture:         PROCEDURE;
-  MoveWindow:             PROCEDURE(hwnd, x, y, w, h, repaint: INTEGER);
+  CreateDIBSection:   PROCEDURE(hdc, pbmi, usage, ppvbits, hsection, offset: INTEGER): INTEGER;
+  SelectObject:       PROCEDURE(hdc, hobject: INTEGER): INTEGER;
+  DeleteObject:       PROCEDURE(hobject: INTEGER): INTEGER;
+  CreateCompatibleDC: PROCEDURE(hdc: INTEGER): INTEGER;
+  LoadCursorW:        PROCEDURE(hinstance, lpcursorname: INTEGER): INTEGER;
+  RegisterClassExW:   PROCEDURE(wndclassexw: INTEGER): INTEGER;
+  CreateWindowExW:    PROCEDURE(dwExStyle, lpClassName, lpWindowName,
+                                dwStyle, X, Y, nWidth, nHeight,
+                                hWndParent, hMenu, hInstance, lpParam: INTEGER): INTEGER;
+  GetMessageW:        PROCEDURE(lpmsg, hwnd, filtermin, filtermax: INTEGER): INTEGER;
+  TranslateMessage:   PROCEDURE(msg: INTEGER): INTEGER;
+  DispatchMessageW:   PROCEDURE(msg: INTEGER): INTEGER;
+  DefWindowProcW:     PROCEDURE(hwnd, umsg, wparam, lparam: INTEGER): INTEGER;
+  GetLastError:       PROCEDURE(): INTEGER;
+  PostQuitMessage:    PROCEDURE(retcode: INTEGER);
+  BeginPaint:         PROCEDURE(hwnd, paintstruct: INTEGER): INTEGER;
+  EndPaint:           PROCEDURE(hwnd, paintstruct: INTEGER): INTEGER;
+  BitBlt:             PROCEDURE(hdc, x, y, cx, cy, hdcSrc, x1, y1, rop: INTEGER): INTEGER;
+  SetCapture:         PROCEDURE(hwnd: INTEGER);
+  ReleaseCapture:     PROCEDURE;
+  MoveWindow:         PROCEDURE(hwnd, x, y, w, h, repaint: INTEGER);
+  GetDpiForWindow:    PROCEDURE(hwnd: INTEGER): INTEGER;
+  ShowWindow:         PROCEDURE(hwnd, cmd: INTEGER);
+
+  SetProcessDpiAwarenessContext: PROCEDURE(context: INTEGER): INTEGER;
 
   FirstWindow: Window;
 
@@ -176,6 +180,11 @@ END Resize;
 PROCEDURE FindWindow(hwnd: INTEGER): Window;
 VAR window: Window;
 BEGIN window := FirstWindow;
+  (*
+  w.s("Find window $"); w.h(hwnd);
+  IF window = NIL THEN w.sl(", no windows!")
+  ELSE w.s(", starting with $"); w.h(window.hwnd); w.sl(".") END;
+  *)
   WHILE (window # NIL) & (hwnd # window.hwnd) DO window := window.next END
 RETURN window END FindWindow;
 
@@ -255,7 +264,9 @@ END Mouse;
 
 PROCEDURE WndProc(hwnd, msg, wp, lp: INTEGER): INTEGER;
 VAR res: INTEGER;
-BEGIN (*w.s("    WndProc: "); WindowsMessageNames.Write(msg); w.l;*)
+BEGIN
+  (*w.s("    WndProc: hwnd $"); w.h(hwnd); w.s(", msg "); WindowsMessageNames.Write(msg); w.l;*)
+  IF FirstWindow.hwnd = 0 THEN FirstWindow.hwnd := hwnd END;
   res := 0;
   IF     msg =   02H  (* WM_DESTROY       *) THEN PostQuitMessage(0)
   ELSIF  msg =   0FH  (* WM_PAINT         *) THEN Paint(hwnd)
@@ -272,7 +283,9 @@ RETURN res END WndProc;
 (* -------------------------------------------------------------------------- *)
 
 
-PROCEDURE NewWindow*(x, y, w, h: INTEGER;
+PROCEDURE NewWindow*(x, y:    INTEGER;
+                     width:   INTEGER;
+                     height:  INTEGER;
                      dochar:  CharacterHandler;
                      dodraw:  DrawHandler;
                      domouse: MouseHandler): Window;
@@ -311,28 +324,39 @@ BEGIN
   class.hCursor   := LoadCursorW(0, 32512);  (* IDC_ARROW *)  ASSERT(class.hCursor # 0);
   classAtom       := RegisterClassExW(SYSTEM.ADR(class));
   ASSERT(classAtom # 0);
-  hwnd := CreateWindowExW(
-    0,                       (* Extended window style *)
-    SYSTEM.ADR(classname),
-    SYSTEM.ADR(windowname),
-  (*10CF0000H,               (* WS_OVERLAPPEDWINDOW|WS_VISIBLE *) *)
-    90000000H,               (* WS_POPUP|WS_VISIBLE *)
-    x, y, w, h,              (* Initial position *)
-    0, 0, 0, 0               (* hWndParent, hMenu, hInstance, lpParam *)
-  );
-  ASSERT(hwnd # 0);
 
   NEW(window);
-  window.hwnd    := hwnd;
+  window.hwnd    := 0;    (* Will be filled in by first WndProc callback during CreateWindow *)
   window.x       := x;
   window.y       := y;
-  window.width   := w;
-  window.height  := h;
+  window.width   := width;
+  window.height  := height;
   window.dochar  := dochar;
   window.dodraw  := dodraw;
   window.domouse := domouse;
   window.next    := FirstWindow;
   FirstWindow    := window;
+
+  hwnd := CreateWindowExW(
+    0,                       (* Extended window style *)
+    SYSTEM.ADR(classname),
+    SYSTEM.ADR(windowname),
+  (*10CF0000H,               (* WS_OVERLAPPEDWINDOW|WS_VISIBLE *) *)
+  (*90000000H,               (* WS_POPUP|WS_VISIBLE *) *)
+    80000000H,               (* WS_POPUP *)
+    x, y, width, height,     (* Initial position *)
+    0, 0, 0, 0               (* hWndParent, hMenu, hInstance, lpParam *)
+  );
+  ASSERT(hwnd # 0);
+
+  w.s("Created window. hwnd $");  w.h(hwnd);  w.sl(".");
+
+  window.DPI := GetDpiForWindow(hwnd);
+
+  w.s("GetDpiForWindow -> ");  w.i(window.DPI);  w.sl(".");
+
+  ShowWindow(hwnd, 1);
+
 RETURN window END NewWindow;
 
 
@@ -380,26 +404,31 @@ END MessagePump;
 BEGIN
   w.sl("Hello teapots.");
 
-  K.GetProc(K.Kernel, "GetLastError",           GetLastError);           ASSERT(GetLastError            # NIL);
-  K.GetProc(K.Gdi,    "CreateDIBSection",       CreateDIBSection);       ASSERT(CreateDIBSection        # NIL);
-  K.GetProc(K.Gdi,    "SelectObject",           SelectObject);           ASSERT(SelectObject            # NIL);
-  K.GetProc(K.Gdi,    "DeleteObject",           DeleteObject);           ASSERT(DeleteObject            # NIL);
-  K.GetProc(K.Gdi,    "CreateCompatibleDC",     CreateCompatibleDC);     ASSERT(CreateCompatibleDC      # NIL);
-  K.GetProc(K.Gdi,    "BitBlt",                 BitBlt);                 ASSERT(BitBlt                  # NIL);
-  K.GetProc(K.User,   "LoadCursorW",            LoadCursorW);            ASSERT(LoadCursorW             # NIL);
-  K.GetProc(K.User,   "RegisterClassExW",       RegisterClassExW);       ASSERT(RegisterClassExW        # NIL);
-  K.GetProc(K.User,   "CreateWindowExW",        CreateWindowExW);        ASSERT(CreateWindowExW         # NIL);
-  K.GetProc(K.User,   "GetMessageW",            GetMessageW);            ASSERT(GetMessageW             # NIL);
-  K.GetProc(K.User,   "TranslateMessage",       TranslateMessage);       ASSERT(TranslateMessage        # NIL);
-  K.GetProc(K.User,   "DispatchMessageW",       DispatchMessageW);       ASSERT(DispatchMessageW        # NIL);
-  K.GetProc(K.User,   "DefWindowProcW",         DefWindowProcW);         ASSERT(DefWindowProcW          # NIL);
-  K.GetProc(K.User,   "PostQuitMessage",        PostQuitMessage);        ASSERT(PostQuitMessage         # NIL);
-  K.GetProc(K.User,   "BeginPaint",             BeginPaint);             ASSERT(BeginPaint              # NIL);
-  K.GetProc(K.User,   "EndPaint",               EndPaint);               ASSERT(EndPaint                # NIL);
-  K.GetProc(K.User,   "SetCapture",             SetCapture);             ASSERT(SetCapture              # NIL);
-  K.GetProc(K.User,   "ReleaseCapture",         ReleaseCapture);         ASSERT(ReleaseCapture          # NIL);
-  K.GetProc(K.User,   "MoveWindow",             MoveWindow);             ASSERT(MoveWindow              # NIL);
-  K.GetProc(K.ShCore, "SetProcessDpiAwareness", SetProcessDpiAwareness); ASSERT(SetProcessDpiAwareness  # NIL);
+  K.GetProc(K.Kernel, "GetLastError",       GetLastError);        ASSERT(GetLastError       # NIL);
+  K.GetProc(K.Gdi,    "CreateDIBSection",   CreateDIBSection);    ASSERT(CreateDIBSection   # NIL);
+  K.GetProc(K.Gdi,    "SelectObject",       SelectObject);        ASSERT(SelectObject       # NIL);
+  K.GetProc(K.Gdi,    "DeleteObject",       DeleteObject);        ASSERT(DeleteObject       # NIL);
+  K.GetProc(K.Gdi,    "CreateCompatibleDC", CreateCompatibleDC);  ASSERT(CreateCompatibleDC # NIL);
+  K.GetProc(K.Gdi,    "BitBlt",             BitBlt);              ASSERT(BitBlt             # NIL);
+  K.GetProc(K.User,   "LoadCursorW",        LoadCursorW);         ASSERT(LoadCursorW        # NIL);
+  K.GetProc(K.User,   "RegisterClassExW",   RegisterClassExW);    ASSERT(RegisterClassExW   # NIL);
+  K.GetProc(K.User,   "CreateWindowExW",    CreateWindowExW);     ASSERT(CreateWindowExW    # NIL);
+  K.GetProc(K.User,   "GetMessageW",        GetMessageW);         ASSERT(GetMessageW        # NIL);
+  K.GetProc(K.User,   "TranslateMessage",   TranslateMessage);    ASSERT(TranslateMessage   # NIL);
+  K.GetProc(K.User,   "DispatchMessageW",   DispatchMessageW);    ASSERT(DispatchMessageW   # NIL);
+  K.GetProc(K.User,   "DefWindowProcW",     DefWindowProcW);      ASSERT(DefWindowProcW     # NIL);
+  K.GetProc(K.User,   "PostQuitMessage",    PostQuitMessage);     ASSERT(PostQuitMessage    # NIL);
+  K.GetProc(K.User,   "BeginPaint",         BeginPaint);          ASSERT(BeginPaint         # NIL);
+  K.GetProc(K.User,   "EndPaint",           EndPaint);            ASSERT(EndPaint           # NIL);
+  K.GetProc(K.User,   "SetCapture",         SetCapture);          ASSERT(SetCapture         # NIL);
+  K.GetProc(K.User,   "ReleaseCapture",     ReleaseCapture);      ASSERT(ReleaseCapture     # NIL);
+  K.GetProc(K.User,   "MoveWindow",         MoveWindow);          ASSERT(MoveWindow         # NIL);
+  K.GetProc(K.User,   "GetDpiForWindow",    GetDpiForWindow);     ASSERT(GetDpiForWindow    # NIL);
+  K.GetProc(K.User,   "ShowWindow",         ShowWindow);          ASSERT(ShowWindow         # NIL);
 
-  SetProcessDpiAwareness(2);  (* Disable DPI scaling *)
+  K.GetProc(K.User, "SetProcessDpiAwarenessContext", SetProcessDpiAwarenessContext);
+  ASSERT(SetProcessDpiAwarenessContext # NIL);
+  IF SetProcessDpiAwarenessContext # NIL THEN
+    ASSERT(SetProcessDpiAwarenessContext (-3) # 0)  (* DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE *)
+  END
 END Windows.

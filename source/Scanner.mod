@@ -30,7 +30,7 @@ CONST
   SP  = 32;
 
   MaxIdLen*     = 63;
-  MaxStrLen*    = 255;
+  MaxStrLen*    = 1024;
   MaxInt        = 9223372036854775807;
   MinInt        = -MaxInt - 1;
   NKW           = 35;  (* Number of keywords *)

@@ -21,18 +21,17 @@ TYPE
   HeapTraceHandler = PROCEDURE(reason: INTEGER);
 
 VAR
-  oneByteBeforeBase: CHAR; (* MUST BE THE FIRST GLOBAL VARIABLE       *)
-                           (* - its address locates the kernel's base *)
-
   Kernel*:       INTEGER;
+  Gdi*:          INTEGER;
   User*:         INTEGER;
   Shell*:        INTEGER;
+  ShCore*:       INTEGER;
 
-  MessageBoxW:   PROCEDURE(hWnd, lpText, lpCaption, uType: INTEGER): INTEGER;
-  AddVectoredExceptionHandler: PROCEDURE(first: INTEGER; filter: ExceptionHandlerProc);
+  MessageBoxW:                    PROCEDURE(hWnd, lpText, lpCaption, uType: INTEGER): INTEGER;
+  AddVectoredExceptionHandler:    PROCEDURE(first: INTEGER; filter: ExceptionHandlerProc);
   GetSystemTimePreciseAsFileTime: PROCEDURE(tickAdr: INTEGER);
-  GetModuleFileNameW: PROCEDURE(hModule, lpFilename, nSize: INTEGER);
-  GetCurrentDirectoryW: PROCEDURE(nsize, pbuffer: INTEGER): INTEGER;
+  GetModuleFileNameW:             PROCEDURE(hModule, lpFilename, nSize: INTEGER);
+  GetCurrentDirectoryW:           PROCEDURE(nsize, pbuffer: INTEGER): INTEGER;
 
   (* Heap allocation *)
   VirtualAlloc:  PROCEDURE(lpAddress, dwSize, flAllocationType, flProtect: INTEGER): INTEGER;
@@ -702,7 +701,7 @@ BEGIN  Finalise;  Boot.PEImports.ExitProcess(exitCode) END Halt;
 (* ------- Kernel initialisation code - called following kernel link -------- *)
 (* -------------------------------------------------------------------------- *)
 
-PROCEDURE GetProc(dll: INTEGER; name: ARRAY [untagged] OF CHAR; VAR proc: ARRAY OF BYTE);
+PROCEDURE GetProc*(dll: INTEGER; name: ARRAY OF CHAR; VAR proc: ARRAY OF BYTE);
 BEGIN
   SYSTEM.PUT(SYSTEM.ADR(proc), Boot.PEImports.GetProcAddress(dll, SYSTEM.ADR(name)))
 END GetProc;
@@ -722,8 +721,10 @@ END GetWindowsPaths;
 BEGIN
   (* Set up some useful exports from standard procedures. *)
   Kernel := Boot.PEImports.LoadLibraryA(SYSTEM.ADR("kernel32.dll"));
+  Gdi    := Boot.PEImports.LoadLibraryA(SYSTEM.ADR("gdi32.dll"));
   User   := Boot.PEImports.LoadLibraryA(SYSTEM.ADR("user32.dll"));
   Shell  := Boot.PEImports.LoadLibraryA(SYSTEM.ADR("shell32.dll"));
+  ShCore := Boot.PEImports.LoadLibraryA(SYSTEM.ADR("shCore.dll"));
 
   GetProc(User,   "MessageBoxW",                    MessageBoxW);
   GetProc(Kernel, "AddVectoredExceptionHandler",    AddVectoredExceptionHandler);
