@@ -362,186 +362,126 @@ BEGIN
 END ReadMem;
 
 PROCEDURE Read0(VAR r: Rider; VAR x: ARRAY OF BYTE);
-BEGIN ReadMem(r, SYSTEM.ADR(x), LEN(x))
-END Read0;
+BEGIN ReadMem(r, SYSTEM.ADR(x), LEN(x)) END Read0;
 
-(*
-PROCEDURE Read0(VAR r: Rider; VAR x: ARRAY OF BYTE);
-VAR bRes: Bool; bytesRead: Dword; f: File;
-BEGIN
-  f := r.f; CheckFilePos(r);
-  bRes := ReadFile(f.hFile, SYSTEM.ADR(x), LEN(x), SYSTEM.ADR(bytesRead), 0);
-  r.eof := (bRes # 0) & (bytesRead = 0);
-  IF ~r.eof THEN INC(r.pos, bytesRead); INC(f.pos, bytesRead) END
-END Read0;
-*)
+PROCEDURE ReadByte*(VAR r: Rider; VAR x: BYTE);
+BEGIN Read0(r, x) END ReadByte;
 
-PROCEDURE Read*(VAR r: Rider; VAR x: BYTE);
-BEGIN Read0(r, x)
-END Read;
+PROCEDURE Read*(VAR r: Rider; VAR x: CHAR);
+BEGIN Read0(r, x) END Read;
 
 PROCEDURE ReadInt*(VAR r: Rider; VAR x: INTEGER);
-BEGIN Read0(r, x)
-END ReadInt;
+BEGIN Read0(r, x) END ReadInt;
 
 PROCEDURE ReadReal*(VAR r: Rider; VAR x: REAL);
-VAR bRes: Bool; byteRead: Dword; f: File;
-BEGIN Read0(r, x)
-END ReadReal;
+BEGIN Read0(r, x) END ReadReal;
 
 PROCEDURE ReadCard32*(VAR r: Rider; VAR x: SYSTEM.CARD32);
-VAR bRes: Bool; byteRead: Dword; f: File;
-BEGIN Read0(r, x)
-END ReadCard32;
+BEGIN Read0(r, x) END ReadCard32;
 
 PROCEDURE ReadCard16*(VAR r: Rider; VAR x: SYSTEM.CARD16);
-VAR bRes: Bool; byteRead: Dword; f: File;
-BEGIN Read0(r, x)
-END ReadCard16;
+BEGIN Read0(r, x) END ReadCard16;
+
+PROCEDURE ReadSet*(VAR r: Rider; VAR x: SET);
+BEGIN Read0(r, x) END ReadSet;
+
+PROCEDURE ReadBool*(VAR r: Rider; VAR x: BOOLEAN);
+BEGIN Read0(r, x) END ReadBool;
 
 PROCEDURE ReadNum*(VAR r: Rider; VAR x: INTEGER);
 VAR s, b: BYTE; n: INTEGER;
 BEGIN
-  s := 0; n := 0; Read(r, b);
+  s := 0; n := 0; ReadByte(r, b);
   WHILE b >= 128 DO
-    INC(n, LSL(b - 128, s)); INC(s, 7); Read(r, b)
+    INC(n, LSL(b - 128, s)); INC(s, 7); ReadByte(r, b)
   END;
   x := n + LSL(b MOD 64 - b DIV 64 * 64, s)
 END ReadNum;
-
-PROCEDURE ReadChar16*(VAR r: Rider; VAR x: SYSTEM.CARD16);
-VAR bRes: Bool; byteRead: Dword; f: File;
-BEGIN Read0(r, x)
-END ReadChar16;
 
 PROCEDURE ReadString*(VAR r: Rider; VAR str: ARRAY OF CHAR);
 VAR i: INTEGER;  done: BOOLEAN;  b: BYTE;
 BEGIN
   done := FALSE; i := 0;
   WHILE ~r.eof & ~done DO
-    Read(r, b);  str[i] := CHR(b);
+    ReadByte(r, b);  str[i] := CHR(b);
     IF r.eof THEN str[i] := 0X ELSE done := str[i] = 0X; INC(i) END
   END
 END ReadString;
 
-PROCEDURE ReadString16*(VAR r: Rider; VAR x: ARRAY OF SYSTEM.CARD16);
-VAR i: INTEGER; done: BOOLEAN;
-BEGIN
-  done := FALSE; i := 0;
-  WHILE ~r.eof & ~done DO
-    ReadChar16(r, x[i]);
-    IF r.eof THEN x[i] := 0 ELSE done := x[i] = 0; INC(i) END
-  END
-END ReadString16;
-
-PROCEDURE ReadSet*(VAR r: Rider; VAR x: SET);
-VAR bRes: Bool; byteRead: Dword; f: File;
-BEGIN Read0(r, x)
-END ReadSet;
-
-PROCEDURE ReadBool*(VAR r: Rider; VAR x: BOOLEAN);
-VAR bRes: Bool; byteRead: Dword; f: File;
-BEGIN Read0(r, x)
-END ReadBool;
-
 PROCEDURE ReadBytes*(VAR r: Rider; VAR x: ARRAY OF BYTE; n: INTEGER);
-VAR bRes: Bool; byteRead: Dword; f: File;
+VAR
+  startPos, byteCount: INTEGER;
 BEGIN
-  f := r.f; CheckFilePos(r);
-  IF n > LEN(x) THEN byteRead := LEN(x) ELSE byteRead := n END;
-  bRes := ReadFile(
-    f.hFile, SYSTEM.ADR(x), byteRead, SYSTEM.ADR(byteRead), 0
-  );
-  r.eof := (bRes # 0) & (byteRead = 0);
-  IF ~r.eof THEN INC(r.pos, byteRead); INC(f.pos, byteRead) END;
-  IF byteRead # n THEN r.res := n - byteRead ELSE r.res := 0 END
+  CheckFilePos(r);  startPos := r.pos;
+  IF n > LEN(x) THEN byteCount := LEN(x) ELSE byteCount := n END;
+  ReadMem(r, SYSTEM.ADR(x), byteCount);
+  r.res := n - (r.pos - startPos)
 END ReadBytes;
 
 (* -------------------------------------------------------------------------- *)
 
-PROCEDURE Write0(VAR r: Rider; x: ARRAY OF BYTE);
-VAR bRes: Bool; nWritten: Dword; f: File;
+PROCEDURE WriteMem(VAR r: Rider; adr, len: INTEGER);
+VAR bRes: Bool;  bytesWritten: Dword;  f: File;
 BEGIN
-  f := r.f; CheckFilePos(r);
-  bRes := WriteFile(f.hFile, SYSTEM.ADR(x), LEN(x), SYSTEM.ADR(nWritten), 0);
+  f := r.f;  CheckFilePos(r);
+  bRes := WriteFile(f.hFile, adr, len, SYSTEM.ADR(bytesWritten), 0);
   IF bRes # 0 THEN
-    INC(r.pos, nWritten); INC(f.pos, nWritten);
+    INC(r.pos, bytesWritten);  INC(f.pos, bytesWritten);
     IF f.pos > f.len THEN f.len := f.pos END
   END
-END Write0;
+END WriteMem;
 
-PROCEDURE Write*(VAR r: Rider; x: BYTE);
-BEGIN Write0(r, x)
-END Write;
+PROCEDURE Write0(VAR r: Rider; x: ARRAY OF BYTE);
+BEGIN WriteMem(r, SYSTEM.ADR(x), LEN(x)) END Write0;
 
-PROCEDURE WriteChar*(VAR r: Rider; x: CHAR);
-BEGIN Write0(r, x)
-END WriteChar;
+PROCEDURE WriteByte*(VAR r: Rider; x: BYTE);
+BEGIN Write0(r, x) END WriteByte;
+
+PROCEDURE Write*(VAR r: Rider; x: CHAR);
+BEGIN Write0(r, x) END Write;
 
 PROCEDURE WriteInt*(VAR r: Rider; x: INTEGER);
-BEGIN Write0(r, x)
-END WriteInt;
+BEGIN Write0(r, x) END WriteInt;
 
 PROCEDURE WriteReal*(VAR r: Rider; x: REAL);
-BEGIN Write0(r, x)
-END WriteReal;
+BEGIN Write0(r, x) END WriteReal;
 
 PROCEDURE WriteCard32*(VAR r: Rider; x: SYSTEM.CARD32);
-BEGIN Write0(r, x)
-END WriteCard32;
+BEGIN Write0(r, x) END WriteCard32;
 
 PROCEDURE WriteCard16*(VAR r: Rider; x: SYSTEM.CARD16);
-BEGIN Write0(r, x)
-END WriteCard16;
+BEGIN Write0(r, x) END WriteCard16;
+
+PROCEDURE WriteSet*(VAR r: Rider; x: SET);
+BEGIN Write0(r, x) END WriteSet;
+
+PROCEDURE WriteBool*(VAR r: Rider; x: BOOLEAN);
+BEGIN Write0(r, x) END WriteBool;
 
 PROCEDURE WriteNum*(VAR r: Rider; x: INTEGER);
 BEGIN
   WHILE (x < -64) OR (x >= 64) DO
-    Write(r, x MOD 128 + 128); x := x DIV 128
+    WriteByte(r, x MOD 128 + 128); x := x DIV 128
   END;
-  Write(r, x MOD 128)
+  WriteByte(r, x MOD 128)
 END WriteNum;
 
-PROCEDURE WriteChar16*(VAR r: Rider; x: SYSTEM.CARD16);
-BEGIN Write0(r, x)
-END WriteChar16;
-
-PROCEDURE WriteString*(VAR r: Rider; x: ARRAY OF BYTE);
+PROCEDURE WriteString*(VAR r: Rider; x: ARRAY OF CHAR);
 VAR i: INTEGER;
 BEGIN i := 0;
-  WHILE (i < LEN(x)) & (x[i] # 0) DO Write(r, x[i]); INC(i) END;
-  Write(r, 0)
+  WHILE (i < LEN(x)) & (x[i] # 0X) DO Write(r, x[i]); INC(i) END;
+  WriteByte(r, 0)
 END WriteString;
 
-PROCEDURE WriteString16*(VAR r: Rider; x: ARRAY OF SYSTEM.CARD16);
-VAR i: INTEGER;
-BEGIN i := 0;
-  WHILE (i < LEN(x)) & (x[i] # 0) DO WriteChar16(r, x[i]); INC(i) END;
-  WriteChar16(r, 0)
-END WriteString16;
-
-PROCEDURE WriteSet*(VAR r: Rider; x: SET);
-BEGIN Write0(r, x)
-END WriteSet;
-
-PROCEDURE WriteBool*(VAR r: Rider; x: BOOLEAN);
-BEGIN Write0(r, x)
-END WriteBool;
-
 PROCEDURE WriteBytes*(VAR r: Rider; x: ARRAY OF BYTE; n: INTEGER);
-VAR bRes: Bool; nWritten: Dword; f: File;
+VAR startPos, byteCount: Dword;
 BEGIN
-  f := r.f; CheckFilePos(r);
-  IF n > LEN(x) THEN nWritten := LEN(x) ELSE nWritten := n END;
-  bRes := WriteFile(
-    f.hFile, SYSTEM.ADR(x), nWritten, SYSTEM.ADR(nWritten), 0
-  );
-  IF bRes # 0 THEN
-    INC(r.pos, nWritten); INC(f.pos, nWritten);
-    IF f.pos > f.len THEN f.len := f.pos END
-  END;
-  r.res := n - nWritten
+  CheckFilePos(r);  startPos := r.pos;
+  IF n > LEN(x) THEN byteCount := LEN(x) ELSE byteCount := n END;
+  WriteMem(r, SYSTEM.ADR(x), byteCount);
+  r.res := n - (r.pos - startPos)
 END WriteBytes;
+
 
 (* -------------------------------------------------------------------------- *)
 (* -------------------------------------------------------------------------- *)

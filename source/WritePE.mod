@@ -140,7 +140,7 @@ BEGIN
   (* Fill Oberon section to a whole multiple of section alignment *)
   IF Files.Pos(Exe) - FadrOberon MOD FileAlignment # 0 THEN
     Files.Set(Exe, ExeFile, Align(Files.Pos(Exe), FileAlignment)-1);
-    Files.Write(Exe, 0);
+    Files.WriteByte(Exe, 0);
   END;
 
   OberonSize := Files.Pos(Exe) - FadrOberon;
@@ -165,8 +165,8 @@ PROCEDURE WriteSectionHeader(name: ARRAY OF CHAR;
 VAR i, l: INTEGER;
 BEGIN
   l := LEN(name);  i := 0;  IF l > 8 THEN l := 8 END;
-  WHILE (i < l) & (name[i] # 0X) DO Files.Write(Exe, ORD(name[i]));  INC(i) END;
-  WHILE (i < 8) DO Files.Write(Exe, 0); INC(i) END;
+  WHILE (i < l) & (name[i] # 0X) DO Files.WriteByte(Exe, ORD(name[i]));  INC(i) END;
+  WHILE (i < 8) DO Files.WriteByte(Exe, 0); INC(i) END;
   Files.WriteCard32(Exe, vsize);  (* VirtualSize                     *)
   Files.WriteCard32(Exe, rva);    (* VirtualAddress                  *)
   Files.WriteCard32(Exe, fsize);  (* SizeOfRawData                   *)
@@ -315,7 +315,7 @@ BEGIN
   Files.Set(Exe, ExeFile, 0);
   Files.WriteBytes(Exe, hdr, SYSTEM.SIZE(PEHDR));
 
-  (* Write section headers *)
+  (* WriteByte section headers *)
   WriteSectionHeader(".idata",
                      Align(ImportSize, SectionAlignment),  (* Size in memory *)
                      Align(ImportSize, FileAlignment),     (* Size on disk *)

@@ -1,5 +1,5 @@
 MODULE TestWindows;
-IMPORT SYSTEM, Windows, Rendering, w := Writer;
+IMPORT SYSTEM, Windows, Rendering, w := Writer, Texts;
 
 CONST
   (* States *)

@@ -2,10 +2,6 @@ MODULE Fonts;
 
 IMPORT SYSTEM, K := Kernel, w := Writer;
 
-(* TODO: all advance widths should be determined from the font at EM size.    *)
-(* Currently the code uses the whole pixel advance from GetCharABCWidths or   *)
-(* or the subpixel advance from GetGlyphOutline.                              *)
-
 TYPE
   INT16 = SYSTEM.INT16;  UINT16 = SYSTEM.CARD16;
   INT32 = SYSTEM.INT32;  UINT32 = SYSTEM.CARD32;
@@ -13,7 +9,7 @@ TYPE
   Glyph* = POINTER TO GlyphDesc;
 
   GlyphDesc* = RECORD
-    map*:       INTEGER;  (* Indices in AlphaMap                                                *)
+    map*:       INTEGER;  (* Alphamap index of start of glyph alpha map                         *)
     mapWidth*:  INTEGER;  (* Alpha width                                                        *)
     mapHeight*: INTEGER;  (* Alpha heght                                                        *)
     originX*:   INTEGER;  (* Offset of left alignment edge rightwards from left of alpha map    *)
@@ -26,6 +22,7 @@ TYPE
    FontDesc = RECORD
      hfont:  INTEGER;
      face:   Face;
+     name*:  ARRAY 64 OF CHAR;
      em:     INTEGER;
      glyphs: ARRAY 95 OF Glyph;
      next:   Font
@@ -58,6 +55,11 @@ VAR
   MapLen:    INTEGER;
 
   Faces:     Face;
+
+  Default*:  Font;
+
+
+(* ---------------------------- Font constuction ---------------------------- *)
 
 
 PROCEDURE GetFace(name: ARRAY OF CHAR): Face;
@@ -182,21 +184,47 @@ RETURN face END GetFace;
 
 
 PROCEDURE GetSize(face: Face; em: INTEGER): Font;
-VAR size: Font;
+VAR font: Font;  sizename: ARRAY 32 OF CHAR;
 BEGIN
-  size := face.sizes;
-  WHILE (size # NIL) & (size.em # em) DO size := size.next END;
-  IF size = NIL THEN
-    NEW(size);
-    size.face  := face;
-    size.em    := em;
-    size.hfont := CreateFontA(-em, 0,0,0,0,0,0,0,0,7,0,0,0, SYSTEM.ADR(face.name));
-    size.next  := face.sizes;  face.sizes := size;
+  font := face.sizes;
+  WHILE (font # NIL) & (font.em # em) DO font := font.next END;
+  IF font = NIL THEN
+    NEW(font);
+    font.hfont := CreateFontA(-em, 0,0,0,0,0,0,0,0,7,0,0,0, SYSTEM.ADR(face.name));
+    font.face  := face;
+    font.em    := em; K.IntToDecimal(em, sizename);
+    font.name  := face.name;  K.Append(" ", font.name);  K.Append(sizename, font.name);
+    font.next  := face.sizes;  face.sizes := font;
   END
-RETURN size END GetSize;
+RETURN font END GetSize;
 
 PROCEDURE GetFont*(name: ARRAY OF CHAR; em: INTEGER): Font;
 RETURN GetSize(GetFace(name), em) END GetFont;
+
+PROCEDURE Load*(namesize: ARRAY OF CHAR): Font;  (* Oberon system compatible-ish - size is part of the name *)
+VAR
+  i:    INTEGER;
+  name: ARRAY 128 OF CHAR;
+  size: INTEGER;
+  unit: INTEGER;
+BEGIN
+  i := 0;
+  ASSERT(namesize[0] # 0X);
+  WHILE (i < LEN(namesize)) & (namesize[i] # 0X) DO
+    name[i] := namesize[i]; INC(i)
+  END;
+  DEC(i);
+  unit := 1;
+  size := 0;
+  WHILE (i >= 0) & (name[i] >= '0') & (name[i] <= '9') DO
+    size := size + unit * ORD(name[i]) - ORD('0');
+    unit := unit * 10;
+    DEC(i)
+  END;
+  WHILE (i >= 0) & (name[i] = ' ') DO DEC(i) END;
+  ASSERT(i > 0);
+  name[i] := 0X;
+RETURN GetFont(name, size) END Load;
 
 PROCEDURE WriteMap(alpha: BYTE; len: INTEGER);
 BEGIN
@@ -353,4 +381,5 @@ BEGIN
   K.GetProc(K.Gdi, "GetOutlineTextMetricsW",  GetOutlineTextMetricsW);  ASSERT(GetOutlineTextMetricsW # NIL);
   MapLen := 0;
   DisplayDC := CreateDCA(SYSTEM.ADR("DISPLAY"),0,0,0);  ASSERT(DisplayDC # 0);
+  Default := GetFont("Arial", 16);
 END Fonts.

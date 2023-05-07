@@ -71,7 +71,7 @@ BEGIN
   WHILE slist # NIL DO str := slist.obj;
     Files.Set(X64, X64file, Header.base + str.adr);  i := 0;
     WHILE i < str.len DO
-      Files.WriteChar(X64, B.strBuf[str.bufpos+i]);  INC(i)
+      Files.Write(X64, B.strBuf[str.bufpos+i]);  INC(i)
     END;
     slist := slist.next
   END
@@ -309,7 +309,7 @@ BEGIN
     Files.WriteInt(X64, impmod.key[1]);
     impmod := impmod.next;
   END;
-  Files.Write(X64, 0)
+  Files.WriteByte(X64, 0)
 END WriteImportNames;
 
 (* -------------------------------------------------------------------------- *)
@@ -417,7 +417,7 @@ BEGIN
   (* Round file length to a mutiple of 16 bytes *)
   IF Files.Pos(X64) MOD 16 # 0 THEN
     Files.Set(X64, X64file, Align(Files.Pos(X64), 16)-1);
-    Files.Write(X64,0)
+    Files.WriteByte(X64,0)
   END;
 
   Header.length := Align(Files.Pos(X64), 16);
