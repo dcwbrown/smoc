@@ -858,7 +858,8 @@ VAR x, y: B.Object;  xform: INTEGER;
       IF xform # B.tChar THEN Mark("Invalid value") END;
       IF S.slen > 2 THEN Mark("not char") END;
       y := B.NewConst(B.charType, ORD(S.str[0]));  GetSym
-    ELSIF sym = S.ident THEN y := qualident();
+    ELSIF sym = S.ident THEN
+      y := qualident();
       IF y = NIL THEN Mark("Invalid value")
       ELSIF y IS B.Const THEN
         IF xform = B.tInt THEN CheckInt(y)
@@ -868,7 +869,7 @@ VAR x, y: B.Object;  xform: INTEGER;
       ELSIF y IS B.Str THEN
         IF xform # B.tChar THEN Mark("Invalid value") END;
         IF y(B.Str).len > 2 THEN Mark("not char") END;
-        y := B.NewConst(B.charType, ORD(S.str[0]));  GetSym
+        (*y := B.NewConst(B.charType, ORD(S.str[0]));  GetSym*)
       ELSE Mark("Invalid value");  y := NIL
       END
     ELSE Mark("Integer or char required")
@@ -893,7 +894,8 @@ VAR x, y: B.Object;  xform: INTEGER;
       y := LabelRange(x);
       WHILE sym = S.comma DO
         GetSym;  y := NewNode(S.or, y, LabelRange(x))
-      END;  CheckSym(S.colon);
+      END;
+      CheckSym(S.colon);
       colon := NewNode(S.colon, StatementSequence0(), NIL);
       IF sym = S.bar THEN GetSym;  colon.right := NumericCase(x) END;
       bar := NewNode(S.bar, y, colon)
@@ -1339,7 +1341,7 @@ BEGIN
   RETURN modinit
 END Module;
 
-BEGIN (* w.sl("Parser loaded."); *)
+BEGIN
   type0 := type;  expression0 := expression;
   StatementSequence0 := StatementSequence
 END Parser.

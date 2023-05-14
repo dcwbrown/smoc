@@ -6,7 +6,7 @@ TYPE
   UINT16 = SYSTEM.CARD16;
   UINT32 = SYSTEM.CARD32;
 
-  Colour* = SYSTEM.CARD32;
+  ARGB* = SYSTEM.CARD32;
 
   Bitmap* = POINTER TO BitmapDesc;
   BitmapDesc* = RECORD
@@ -19,13 +19,13 @@ TYPE
   END;
 
   CharacterHandler = PROCEDURE(ch: INTEGER);  (* Receives full UTF-32 codepoint *)
-  DrawHandler      = PROCEDURE(width, height: INTEGER; bitmap: Bitmap);
+  DrawHandler      = PROCEDURE(width, height: INTEGER;  bitmap: Bitmap);
   MouseHandler     = PROCEDURE(x, y: INTEGER; flags: SET);
 
   Window* = POINTER TO WindowDesc;
   WindowDesc = RECORD
     hwnd:    INTEGER;
-    bmp:     Bitmap;
+    bmp*:    Bitmap;
     x*:      INTEGER;
     y*:      INTEGER;
     width*:  INTEGER;
@@ -132,14 +132,14 @@ PROCEDURE Clip(v, max: INTEGER): INTEGER;
 BEGIN IF v > max THEN v := max END
 RETURN v END Clip;
 
-PROCEDURE DrawPixel*(bitmap: Bitmap; x, y: INTEGER; colour: Colour);
+PROCEDURE DrawPixel*(bitmap: Bitmap; x, y: INTEGER; colour: ARGB);
 BEGIN
   x := Clip(x, bitmap.width);
   y := Clip(y, bitmap.height);
   SYSTEM.PUT(bitmap.address + y * bitmap.width * 4 + x * 4, colour)
 END DrawPixel;
 
-PROCEDURE FillRectangle*(bitmap: Bitmap; x, y, wi, h: INTEGER; colour: Colour);
+PROCEDURE FillRectangle*(bitmap: Bitmap; x, y, wi, h: INTEGER; colour: ARGB);
 VAR xs, ys, xl, yl: INTEGER;
 BEGIN
   (*
@@ -351,11 +351,15 @@ BEGIN
 
   w.s("Created window. hwnd $");  w.h(hwnd);  w.sl(".");
 
+  EnsureBitmap(width, height, window.bmp);
+
   window.DPI := GetDpiForWindow(hwnd);
 
   w.s("GetDpiForWindow -> ");  w.i(window.DPI);  w.sl(".");
 
   ShowWindow(hwnd, 1);
+
+  w.sl("ShowWindow complete.");
 
 RETURN window END NewWindow;
 

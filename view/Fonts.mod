@@ -20,20 +20,26 @@ TYPE
    Font* = POINTER TO FontDesc;
 
    FontDesc = RECORD
-     hfont:  INTEGER;
-     face:   Face;
-     name*:  ARRAY 64 OF CHAR;
-     em:     INTEGER;
-     glyphs: ARRAY 95 OF Glyph;
-     next:   Font
+     hfont:    INTEGER;
+     face:     Face;
+     name*:    ARRAY 64 OF CHAR;
+     em:       INTEGER;
+     glyphs:   ARRAY 95 OF Glyph;
+     ascent*:  INTEGER;  (* In whole pixels *)
+     descent*: INTEGER;  (* In whole pixels *)
+     lead*:    INTEGER;  (* In whole pixels *)
+     next:     Font
    END;
 
    FaceDesc = RECORD
-     name:   ARRAY 256 OF CHAR;
-     sizes:  Font;
-     emsize: INTEGER;
-     widths: ARRAY 95 OF INTEGER; (* at emsize in 56.8 *)
-     next:   Face
+     name:    ARRAY 256 OF CHAR;
+     sizes:   Font;
+     emsize:  INTEGER;
+     widths:  ARRAY 95 OF INTEGER; (* at emsize in 56.8 *)
+     ascent:  INTEGER;  (* In whole pixels at emsize *)
+     descent: INTEGER;  (* In whole pixels at emsize *)
+     lead:    INTEGER;  (* In whole pixels at emsize *)
+     next:    Face
    END;
 
 VAR
@@ -155,22 +161,42 @@ BEGIN
     w.s("Create new Fonts.Face '"); w.s(name); w.sl("'.");
     NEW(face);
     face.name := name;
+
     hFont     := CreateFontA(-2048, 0,0,0,0,0,0,0,0,7,0,0,0, SYSTEM.ADR(name));  (* 7: OUT_TT_ONLY_PRECIS *)
     ASSERT(hFont # 0);
     hOldFont  := SelectObject(DisplayDC, hFont);
     bufsize   := GetOutlineTextMetricsW(DisplayDC, 0, 0);
     w.s("GetOutlineTextMetricsW buffer size required: "); w.i(bufsize); w.sl(".");
     ASSERT(GetOutlineTextMetricsW(DisplayDC, SYSTEM.SIZE(OutlineTextMetrics), SYSTEM.ADR(otm)) # 0);
-    face.emsize := otm.emSquare;
-    w.s("Create face '");        w.s(name);
-    w.s(", emSquare ");          w.i(otm.emSquare);
-    w.s(", tmHeight ");          w.i(otm.textmetrics.height);
-    w.s(", tmInternalLeading "); w.i(otm.textmetrics.internalLeading);
-    w.s(", height - leading ");  w.i(otm.textmetrics.height - otm.textmetrics.internalLeading);
-    w.sl(".");
+
     IF otm.emSquare # otm.textmetrics.height - otm.textmetrics.internalLeading THEN
-      (* Reselect the font at its desing em size. *)
+      (* Reselect the font at its design em size. *)
+      ASSERT(DeleteObject(SelectObject(DisplayDC, hOldFont)) # 0);
+      hFont     := CreateFontA(-otm.emSquare, 0,0,0,0,0,0,0,0,7,0,0,0, SYSTEM.ADR(name));  (* 7: OUT_TT_ONLY_PRECIS *)
+      ASSERT(hFont # 0);
+      hOldFont  := SelectObject(DisplayDC, hFont);
+      bufsize   := GetOutlineTextMetricsW(DisplayDC, 0, 0);
+      w.s("GetOutlineTextMetricsW buffer size required: "); w.i(bufsize); w.sl(".");
+      ASSERT(GetOutlineTextMetricsW(DisplayDC, SYSTEM.SIZE(OutlineTextMetrics), SYSTEM.ADR(otm)) # 0);
     END;
+
+    face.emsize  := otm.emSquare;
+    face.ascent  := otm.ascent;
+    face.descent := otm.descent;
+    face.lead    := otm.lineGap;
+    w.s("Create face '");        w.s(name);  w.sl("'.");
+    w.s("  emSquare          "); w.i(otm.emSquare);  w.sl(".");
+    w.s("  tmHeight          "); w.i(otm.textmetrics.height);  w.sl(".");
+    w.s("  tmAscent          "); w.i(otm.textmetrics.ascent);  w.sl(".");
+    w.s("  tmDescent         "); w.i(otm.textmetrics.descent);  w.sl(".");
+    w.s("  tmInternalLeading "); w.i(otm.textmetrics.internalLeading);  w.sl(".");
+    w.s("  height - leading  "); w.i(otm.textmetrics.height - otm.textmetrics.internalLeading);  w.sl(".");
+    w.s("  otm.ascent        "); w.i(otm.ascent);   w.sl(".");
+    w.s("  otm.descent       "); w.i(otm.descent);  w.sl(".");
+    w.s("  otm.lineGap       "); w.i(otm.lineGap);  w.sl(".");
+    w.s("  otm.macAscent     "); w.i(otm.macAscent);   w.sl(".");
+    w.s("  otm.macDescent    "); w.i(otm.macDescent);  w.sl(".");
+    w.s("  otm.macLineGap    "); w.i(otm.macLineGap);  w.sl(".");
     (* fill in character width at design em square size *)
     ASSERT(GetCharABCWidthsW(DisplayDC, 32, 126, SYSTEM.ADR(abcs)) # 0);
     FOR i := 0 TO 94 DO
@@ -190,13 +216,24 @@ BEGIN
   WHILE (font # NIL) & (font.em # em) DO font := font.next END;
   IF font = NIL THEN
     NEW(font);
-    font.hfont := CreateFontA(-em, 0,0,0,0,0,0,0,0,7,0,0,0, SYSTEM.ADR(face.name));
-    font.face  := face;
-    font.em    := em; K.IntToDecimal(em, sizename);
-    font.name  := face.name;  K.Append(" ", font.name);  K.Append(sizename, font.name);
-    font.next  := face.sizes;  face.sizes := font;
+    font.hfont   := CreateFontA(-em, 0,0,0,0,0,0,0,0,7,0,0,0, SYSTEM.ADR(face.name));
+    font.face    := face;
+    font.em      := em; K.IntToDecimal(em, sizename);
+    font.name    := face.name;  K.Append(" ", font.name);  K.Append(sizename, font.name);
+    font.ascent  := (face.ascent * em + face.emsize - 1) DIV face.emsize;  (* Whole pixels rounded up *)
+    font.descent := (-face.descent * em + face.emsize - 1) DIV face.emsize;  (* Whole pixels rounded up *)
+    font.lead    := (face.lead * em + face.emsize - 1) DIV face.emsize;  (* Whole pixels rounded up *)
+    font.next    := face.sizes;
+    face.sizes   := font;
+
+    w.s("Fonts.GetSize '"); w.s(face.name);  w.s("' at "); w.i(em); w.sl(":");
+    w.s("  sizename: '");   w.s(font.name);    w.sl("'.");
+    w.s("  ascent:   ");    w.i(font.ascent);  w.sl(".");
+    w.s("  descent:  ");    w.i(font.descent); w.sl(".");
+    w.s("  lead:     ");    w.i(font.lead);    w.sl(".");
   END
 RETURN font END GetSize;
+
 
 PROCEDURE GetFont*(name: ARRAY OF CHAR; em: INTEGER): Font;
 RETURN GetSize(GetFace(name), em) END GetFont;
@@ -367,7 +404,8 @@ BEGIN
   END
 RETURN glyph END GetGlyph;
 
-PROCEDURE GetAdvance*(font: Font; ch: INTEGER): INTEGER;
+PROCEDURE GetAdvance*(font: Font; ch: INTEGER): INTEGER;  (* Result in 1/256ths of a pixel *)
+BEGIN  ASSERT((ch >= 32) & (ch <= 126));
 RETURN font.face.widths[ch-32] * font.em * 256 DIV font.face.emsize END GetAdvance;
 
 
@@ -381,5 +419,8 @@ BEGIN
   K.GetProc(K.Gdi, "GetOutlineTextMetricsW",  GetOutlineTextMetricsW);  ASSERT(GetOutlineTextMetricsW # NIL);
   MapLen := 0;
   DisplayDC := CreateDCA(SYSTEM.ADR("DISPLAY"),0,0,0);  ASSERT(DisplayDC # 0);
-  Default := GetFont("Arial", 16);
+  (*Default := GetFont("Avrile Serif Medium", 13);*)
+  (*Default := GetFont("Cambria", 16);*)
+  (*Default := GetFont("Arial", 15);*)
+  Default := GetFont("Calibri", 17);
 END Fonts.

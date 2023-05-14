@@ -236,11 +236,13 @@ BEGIN str := "";
   IF str = "" THEN w.s("WM $"); w.h(msg) ELSE w.s("WM"); w.s(str) END
 END Write;
 
+(*
 PROCEDURE GetProc(dll: INTEGER; name: ARRAY [untagged] OF CHAR; VAR proc: ARRAY OF BYTE);
 BEGIN
   SYSTEM.PUT(SYSTEM.ADR(proc), Boot.PEImports.GetProcAddress(dll, SYSTEM.ADR(name)))
 END GetProc;
+*)
 
 BEGIN
-  GetProc(K.User, "GetClipboardFormatNameW", GetClipboardFormatNameW); ASSERT(GetClipboardFormatNameW # NIL);
+  K.GetProc(K.User, "GetClipboardFormatNameW", GetClipboardFormatNameW); ASSERT(GetClipboardFormatNameW # NIL);
 END WindowsMessageNames.

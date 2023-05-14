@@ -47,7 +47,7 @@ BEGIN
 END BlendChannel;
 
 
-PROCEDURE BlendPixel(fg, bg: ARGB; alpha: BYTE): ARGB;
+PROCEDURE BlendPixel*(fg, bg: ARGB; alpha: BYTE): ARGB;
 VAR result: ARGB;
 BEGIN
   IF    bg    = 0   THEN result := AlphaMultiplyPixel(fg, alpha)

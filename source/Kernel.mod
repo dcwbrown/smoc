@@ -510,6 +510,7 @@ END New;
 PROCEDURE Mark(blk: INTEGER);
 VAR mark: INTEGER;
 BEGIN
+  ASSERT(blk # 0);
   SYSTEM.GET(blk+8, mark);
   IF mark # 0 THEN (* already marked *)
   ELSE SYSTEM.PUT(blk+8, MarkedList);  MarkedList := blk
