@@ -33,7 +33,7 @@ VAR
   (* a pattern is an array of bytes; the first is its width (< 32), *)
   (* the second its height, the rest the raster.                    *)
 
-  Window:  Windows.Window;
+  Window*: Windows.Window;
 
 PROCEDURE Handle*(F: Frame; VAR M: FrameMsg);
 BEGIN
@@ -147,7 +147,7 @@ BEGIN
   *)
 
   bitmapadr := Window.bmp.address;
-  stride := Window.bmp.width;
+  stride    := Window.bmp.width;
 
   mp       := bitmapadr + 4 * (stride * y + x DIV 4);
   subpixel := x MOD 4;
@@ -199,35 +199,10 @@ END RenderAlphaMap;
 
 (* ----------------------- Windows specific handlers ------------------------ *)
 
-PROCEDURE DoCharacter(ch: INTEGER);
-BEGIN
-  IF ch = 1BH THEN Windows.Quit END
-END DoCharacter;
-
-PROCEDURE DoDraw(width, height: INTEGER;  bitmap: Windows.Bitmap);
-BEGIN
-END DoDraw;
-
-PROCEDURE DoMouse(x, y: INTEGER;  flags: SET);
-BEGIN
-END DoMouse;
-
-
 BEGIN
   w.sl("Display initialising.");
   Width  := 1920;
   Height := 1280;
-
-  (*
-  arrow  := SYSTEM.ADR($0F0F 0060 0070 0038 001C 000E 0007 8003 C101 E300 7700 3F00 1F00 3F00 7F00 FF00$);
-  star   := SYSTEM.ADR($0F0F 8000 8220 8410 8808 9004 A002 C001 7F7F C001 A002 9004 8808 8410 8220 8000$);
-  hook   := SYSTEM.ADR($0C0C 070F 8707 C703 E701 F700 7F00 3F00 1F00 0F00 0700 0300 01$);
-  updown := SYSTEM.ADR($080E 183C 7EFF 1818 1818 1818 FF7E3C18$);
-  block  := SYSTEM.ADR($0808 FFFF C3C3 C3C3 FFFF$);
-  cross  := SYSTEM.ADR($0F0F 0140 0220 0410 0808 1004 2002 4001 0000 4001 2002 1004 0808 0410 0220 0140$);
-  grey   := SYSTEM.ADR($2002 0000 5555 5555 AAAA AAAA$)
-  *)
-
-  Window := Windows.NewWindow(50, 50, Width, Height, DoCharacter, DoDraw, DoMouse);
+  Window := Windows.NewWindow(50, 50, Width, Height);
   w.sl("Display initialised.");
 END Display.

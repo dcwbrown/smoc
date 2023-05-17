@@ -7,7 +7,7 @@ IMPORT SYSTEM, Kernel, (*Disk, FileDir,*)
        w := Writer;
 
 CONST
-  Version*     = "Oberon/Win DCWB 12 May 2023";
+  Version*     = "Windy Oberon DCWB 12 May 2023";
   StandardMenu = "System.Close System.Copy System.Grow Edit.Search Edit.Store | System.Expand System.Spread System.Clone";
   LogMenu      = "Edit.Locate Edit.Search System.Copy System.Grow System.Clear | System.Expand System.Spread System.Clone";
 
@@ -211,11 +211,11 @@ BEGIN
     Texts.SetColor(W, Display.white);
     Texts.WriteString(W, Version);
     Texts.WriteString(W, " / Display ");
-    Texts.WriteInt(W, Viewers.CurDisplay.id, 3);
-    Texts.Write(W, " ");
+    Texts.WriteInt(W, Viewers.CurDisplay.id, 1);
+    Texts.WriteString(W, " '");
     Texts.WriteString(W, Viewers.CurDisplay.name);
+    Texts.WriteString(W, "'.");
     EndLine;
-    Texts.WriteString(W, "Prototype use only."); EndLine;
 
     w.sl("Calling Oberon.AllocateSystemViewer for System.Log.");
     Oberon.AllocateSystemViewer(0, X, Y);
@@ -739,20 +739,11 @@ BEGIN GetArg(S);
 END Batch;
 *)
 
-PROCEDURE Init*;
 BEGIN
   w.sl("System initialisation starting.");
   Texts.OpenWriter(W);  Texts.SetColor(W, Display.white);
-  w.sl("TextsOpenWriter completed.");
   Oberon.OpenLog(TextFrames.Text(""));
-  w.sl("Oberon.OpenLog completed.");
   CreateDisplay("Oberon");
-  w.sl("System.CreateDisplay completed.");
-(*Run("System.Batch")*)
+  (*Run("System.Batch")*)
   w.sl("System initialisation complete.");
-
-  Oberon.Loop
-END Init;
-
-BEGIN w.sl("System Loaded.");
 END System.

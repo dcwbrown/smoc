@@ -1,5 +1,5 @@
 MODULE Viewers; (*JG 14.9.90 / NW 15.9.13 / AP 13.2.20 Extended Oberon / DCWB 8May23 *)
-IMPORT Display, w := Writer;
+IMPORT Display, w := Writer, SYSTEM;
 
 CONST
   restore*  = 0; (*message ids*)
@@ -102,34 +102,61 @@ END GetFocus;
 PROCEDURE Adjust* (F: Display.Frame; id, Y, H: INTEGER);
 VAR M: ViewerMsg;
 BEGIN
-  M.id := id;
-  M.Y  := Y;
-  M.H  := H;
-  F.handle(F, M);
-  F.Y := Y;
-  F.H := H
+  IF Y+H > Display.Height THEN
+    w.s("Viewers.Adjust Y "); w.i(Y);
+    w.s(", H ");                       w.i(H);
+    IF F IS Viewer THEN
+      w.s(", viewer state ");          w.i(F(Viewer).state);
+    END;
+    w.s(", viewer adr $");             w.i(SYSTEM.ADR(F));
+    w.sl(".");
+    ASSERT(FALSE);
+  END;
+  M.Y := Y;  M.H := H;  M.id := id;  F.handle(F, M);
+  F.Y := Y;  F.H := H
 END Adjust;
+
+
+PROCEDURE WVS(f: Display.Frame);  (* Write viewer state *)
+BEGIN
+  IF f IS Viewer THEN
+    w.s(" state ");
+    IF    f(Viewer).state < -1 THEN w.s("suspended")
+    ELSIF f(Viewer).state = -1 THEN w.s("track or suspended filler")
+    ELSIF f(Viewer).state =  0 THEN w.s("closed")
+    ELSIF f(Viewer).state =  1 THEN w.s("filler")
+    ELSIF f(Viewer).state >  1 THEN w.s("displayed")
+    END
+  ELSE w.s(" not viewer") END
+END WVS;
+
 
 PROCEDURE Open* (D: DisplayArea; V: Viewer; X, Y: INTEGER); (* Y is requested top for new view *)
 VAR T, v: Display.Frame; M: ViewerMsg;
 BEGIN
-  w.s("Viewers.Open at "); Display.wxy(X, Y); w.sl(".");
+  w.s("Viewers.Open at "); Display.wxy(X, Y); w.s(" min height "); w.i(V.minH); w.sl(".");
   IF (V.state = Closed) & (X < inf) THEN
     IF Y > D.H THEN Y := D.H END;
+
     T := D.child.next; (* first track *)
     WHILE X >= T.X + T.W DO T := T.next END;
-    v := T.child.next;
-    WHILE v.Y + v.H < Y DO v := v.next END;
 
-    IF Y > v.Y + v.H - V.minH THEN
+    (* Find viewer containing Y *)
+    v := T.child.next;
+    WHILE v.Y + v.H <= Y DO v := v.next END;
+
+    ASSERT(Y >= v.Y);  ASSERT(Y < v.Y + v.H);
+
+    IF Y + V.minH > v.Y + v.H THEN
       Y := v.Y + v.H - V.minH;
       w.s("  adjust Y to "); w.i(Y); w.sl(" to ensure minimal height.");
     END;
 
-    w.s("  found exiting viewer at "); Display.wfpos(v); w.sl(".");
-    w.s("  next viewer at          "); Display.wfpos(v.next); w.sl(".");
-    IF v = v.next THEN w.sl("  (v and v.next are the same viewer).")
+    w.s("  found existing viewer at "); Display.wfpos(v); WVS(v); w.sl(".");
+    w.s("  next viewer at           "); Display.wfpos(v.next); WVS(v.next); w.sl(".");
+        IF v = v.next THEN w.sl("  (v and v.next are the same viewer).")
                   ELSE w.sl("  (v and v.next are different viewers).") END;
+
     w.s("  Y "); w.i(Y);
     w.s(", v.Y "); w.i(v.Y);
     w.s(", v(Viewer).minH "); w.i(v(Viewer).minH);
@@ -139,7 +166,7 @@ BEGIN
     w.sl(".");
 
     (*IF (v.next.Y + v.next.H # T.H) & (Y <= v.Y + v(Viewer).minH) THEN*)
-    IF (v.next.Y + v.next.H # T.H) & (Y <= v.Y + v(Viewer).minH) THEN
+    IF (v(Viewer).state > 1) & (Y <= v.Y + v(Viewer).minH) THEN
       w.sl("  replace existing viewer.");
       V.X := T.X;
       V.W := T.W;
@@ -150,49 +177,59 @@ BEGIN
       V.prev              := v(Viewer).prev;
       v(Viewer).prev.next := V;
       v.next(Viewer).prev := V;
-      V(Viewer).parent    := T(Viewer);
-      V.state             := Displayed
+      IF T.child = v THEN T.child := V END;
     ELSE
+      (* Split - v gets space above Y, V is added below *)
       w.s("  split existing viewer at Y "); w.i(Y); w.sl(".");
+      w.s("  v was ");  Display.wfpos(v);  w.sl(".");
       V.X := T.X;
       V.W := T.W;
       V.Y := Y;
       V.H := v.Y + v.H - Y;
-      Adjust(v, modify, Y + V.H, v.H - V.H);
-      V.next              := v;
-      V.prev              := v(Viewer).prev;
-      v(Viewer).prev.next := V;
-      v(Viewer).prev      := V;
-      V(Viewer).parent    := T(Viewer);
-      V.state             := Displayed
-    END
+      w.s("  Generated V ");  Display.wfpos(V);  w.sl(".");
+      Adjust(v, modify, v.Y, Y - v.Y);
+      V.next              := v.next;
+      V.prev              := v(Viewer);
+      v.next              := V;
+      V.next(Viewer).prev := V;
+    END;
+    V(Viewer).parent    := T(Viewer);
+    V.state             := Displayed
   END;
   w.s("  opened viewer at "); Display.wfpos(V); w.sl(".");
+  ASSERT(V.Y + V.H <= Display.Height);
 END Open;
+
 
 PROCEDURE Validate* (V: Viewer; VAR Y, H: INTEGER);
 VAR D: DisplayArea; v: Display.Frame; s: INTEGER;
 BEGIN
-  IF V.state > 1 THEN D := ThisDisplay(V);
+  IF V.state > 1 THEN
+    D := ThisDisplay(V);
     IF H < V.minH THEN H := V.minH END;
-    v := V.prev; s := 0;
+    v := V.prev;
+    s := 0;
     WHILE v(Viewer).state > 1 DO s := s + v(Viewer).minH; v := v(Viewer).prev END;
     IF Y < s THEN Y := s END;
-    v := V.next; s := 0;
+    v := V.next;
+    s := 0;
     WHILE v(Viewer).state > 1 DO s := s + v(Viewer).minH; v := v.next END;
-    IF Y > D.H - s - V.minH THEN Y := D.H - s - V.minH; H := V.minH
-    ELSIF Y + H > D.H - s THEN H := D.H - s - Y
+    IF    Y > D.H - s - V.minH THEN Y := D.H - s - V.minH; H := V.minH
+    ELSIF Y + H > D.H - s      THEN H := D.H - s - Y
     END
   END
 END Validate;
+
 
 PROCEDURE Change* (V: Viewer; Y, H: INTEGER);
 CONST none = 0; self = 1; above = 2; below = 3;
 VAR v: Viewer; i, y, dY: INTEGER; m: ARRAY 3 OF INTEGER; up, down: BOOLEAN;
 BEGIN (*Y, H validated*)
+  w.sl("Viewers.Change called - not yet integrated.");  ASSERT(FALSE);
   IF V.state > 1 THEN
     m[0] := none; m[1] := self; m[2] := none;
-    up := Y + H > V.Y + V.H; down := Y + H < V.Y + V.H;
+    up   := Y + H > V.Y + V.H;
+    down := Y + H < V.Y + V.H;
     IF Y < V.Y THEN m[0] := below;
       IF up THEN m[1] := above; m[2] := self ELSIF down THEN m[2] := above END
     ELSIF Y > V.Y THEN m[2] := below;
@@ -225,6 +262,7 @@ BEGIN (*Y, H validated*)
   END
 END Change;
 
+(*
 PROCEDURE Spread* (D: DisplayArea; X, W: INTEGER); (*redistribute viewers vertically*)
 VAR T, t, v, fil: Display.Frame; M: ViewerMsg; Y, H: INTEGER;
 BEGIN
@@ -246,10 +284,14 @@ BEGIN
     UNTIL t = T
   END
 END Spread;
+*)
+
 
 PROCEDURE RestoreTrack (S: Display.Frame);
 VAR T, t, v: Display.Frame; M: ViewerMsg;
-BEGIN t := S(Viewer).prev; T := S(Track).under;
+BEGIN
+  w.sl("Viewers.RestoreTrack called - not yet integrated.");  ASSERT(FALSE);
+  t := S(Viewer).prev; T := S(Track).under;
   WHILE T.next # NIL DO T := T.next END;
   t.next := S(Track).under; t.next(Viewer).prev := t(Viewer); T.next := S.next; T.next(Viewer).prev := T(Viewer);
   M.id := restore;
@@ -259,9 +301,11 @@ BEGIN t := S(Viewer).prev; T := S(Track).under;
   UNTIL t = T
 END RestoreTrack;
 
+
 PROCEDURE Close* (V: Viewer);
 VAR D: DisplayArea; T, U: Display.Frame; M: ViewerMsg;
 BEGIN
+  w.sl("Viewers.Close called - not yet integrated.");  ASSERT(FALSE);
   IF V.state > 1 THEN D := ThisDisplay(V);
     U := V.next; T := D.child;
     REPEAT T := T.next UNTIL V.X < T.X + T.W;
@@ -279,6 +323,8 @@ BEGIN
   END
 END Close;
 
+
+(*
 PROCEDURE Recall* (D: DisplayArea; VAR V: Viewer); (*last closed viewer*)
 BEGIN V := D.backup
 END Recall;
@@ -286,6 +332,8 @@ END Recall;
 PROCEDURE Flush* (D: DisplayArea); (*last closed viewer*)
 BEGIN D.backup := NIL
 END Flush;
+*)
+
 
 PROCEDURE Locate* (D: DisplayArea; X, H: INTEGER;
                    VAR fil, top, bot, alt, max: Display.Frame);
@@ -295,16 +343,17 @@ BEGIN
   IF X < inf THEN
     track := D.child;  REPEAT track := track.next UNTIL X < track.X + track.W;
     fil := track.child;
-    top := fil(Viewer).prev;
-    bot := fil.next;
-    IF bot.next # fil THEN
-      alt := bot.next;
-      V   := alt.next;
+    top := fil.next;           ASSERT(top(Viewer).prev = fil);
+    bot := fil(Viewer).prev;   ASSERT(bot.next = fil);
+    IF top.next # fil THEN
+      (* There's more than one viewer in the track *)
+      alt := bot(Viewer).prev;
+      V   := alt(Viewer).prev;
       WHILE (V # fil) & (alt.H < H) DO
         IF V.H > alt.H THEN alt := V END;
-        V := V.next
+        V := V(Viewer).prev
       END
-    ELSE alt := bot
+    ELSE alt := top
     END;
     max := track.child;
     V := max.next;
@@ -314,11 +363,11 @@ BEGIN
     END
   END;
   w.sl("Viewers.Locate complete, frames returned:");
-  w.s("  fil at "); w.i(fil.X); w.c(","); w.i(fil.Y); w.s(" size ");w.i(fil.W); w.c(","); w.i(fil.H); w.sl(".");
-  w.s("  top at "); w.i(top.X); w.c(","); w.i(top.Y); w.s(" size ");w.i(top.W); w.c(","); w.i(top.H); w.sl(".");
-  w.s("  bot at "); w.i(bot.X); w.c(","); w.i(bot.Y); w.s(" size ");w.i(bot.W); w.c(","); w.i(bot.H); w.sl(".");
-  w.s("  alt at "); w.i(alt.X); w.c(","); w.i(alt.Y); w.s(" size ");w.i(alt.W); w.c(","); w.i(alt.H); w.sl(".");
-  w.s("  max at "); w.i(max.X); w.c(","); w.i(max.Y); w.s(" size ");w.i(max.W); w.c(","); w.i(max.H); w.sl(".");
+  w.s("  fil $"); w.h(SYSTEM.ADR(fil^)); w.s(" at "); w.i(fil.X); w.c(","); w.i(fil.Y); w.s(" size ");w.i(fil.W); w.c(","); w.i(fil.H); w.sl(".");
+  w.s("  top $"); w.h(SYSTEM.ADR(top^)); w.s(" at "); w.i(top.X); w.c(","); w.i(top.Y); w.s(" size ");w.i(top.W); w.c(","); w.i(top.H); w.sl(".");
+  w.s("  bot $"); w.h(SYSTEM.ADR(bot^)); w.s(" at "); w.i(bot.X); w.c(","); w.i(bot.Y); w.s(" size ");w.i(bot.W); w.c(","); w.i(bot.H); w.sl(".");
+  w.s("  alt $"); w.h(SYSTEM.ADR(alt^)); w.s(" at "); w.i(alt.X); w.c(","); w.i(alt.Y); w.s(" size ");w.i(alt.W); w.c(","); w.i(alt.H); w.sl(".");
+  w.s("  max $"); w.h(SYSTEM.ADR(max^)); w.s(" at "); w.i(max.X); w.c(","); w.i(max.Y); w.s(" size ");w.i(max.W); w.c(","); w.i(max.H); w.sl(".");
 END Locate;
 
 PROCEDURE Install* (parent, F: Display.Frame); (*frame F as a subframe into parent frame*)
@@ -419,6 +468,7 @@ BEGIN
   END
 END OpenTrack;
 
+(*
 PROCEDURE CloseTrack* (D: DisplayArea; X: INTEGER);
 VAR T, V: Display.Frame; M: ViewerMsg; hasFocus: BOOLEAN;
 BEGIN
@@ -435,15 +485,23 @@ BEGIN
     END
   END
 END CloseTrack;
+*)
 
 PROCEDURE Broadcast* (VAR M: Display.FrameMsg); (*to current display*)
 VAR T, V: Display.Frame;
 BEGIN
+  w.sl("Viewers.Broadcast to:");
   IF CurDisplay # NIL THEN
     T := CurDisplay.child.next;
     WHILE T # CurDisplay.child DO
       V := T.child;
-      REPEAT V := V.next; V.handle(V, M) UNTIL V = T.child;
+      REPEAT V := V.next;
+        CASE V OF
+        | Viewer: w.sl("  Viewer.");
+        | Display.Frame: w.sl("  Display.Frame");
+        END;
+        V.handle(V, M)
+      UNTIL V = T.child;
       T := T.next
     END
   END

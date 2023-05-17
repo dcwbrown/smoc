@@ -261,7 +261,7 @@ BEGIN
   T.length := T.length + B.length; end := pos + B.length;
   B.last := B.header; B.last.next := NIL; B.length := 0;
   T.changed := TRUE;
-  IF T.notify # NIL THEN  T.notify(T, insert, pos, end) END
+  IF T.notify # NIL THEN w.sl("Calling T.notify");  T.notify(T, insert, pos, end) END
 END Insert;
 
 PROCEDURE Append*(T: Text; B: Buffer);

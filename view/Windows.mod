@@ -4,7 +4,7 @@ IMPORT SYSTEM, w := Writer, K := Kernel, Boot, WindowsMessageNames;
 
 TYPE
   UINT16 = SYSTEM.CARD16;
-  UINT32 = SYSTEM.CARD32;
+  UINT32 = SYSTEM.CARD32;  INT32 = SYSTEM.INT32;
 
   ARGB* = SYSTEM.CARD32;
 
@@ -19,23 +19,24 @@ TYPE
   END;
 
   CharacterHandler = PROCEDURE(ch: INTEGER);  (* Receives full UTF-32 codepoint *)
-  DrawHandler      = PROCEDURE(width, height: INTEGER;  bitmap: Bitmap);
+  DrawHandler      = PROCEDURE(x, y, width, height: INTEGER;  bitmap: Bitmap);
   MouseHandler     = PROCEDURE(x, y: INTEGER; flags: SET);
 
   Window* = POINTER TO WindowDesc;
   WindowDesc = RECORD
-    hwnd:    INTEGER;
-    bmp*:    Bitmap;
-    x*:      INTEGER;
-    y*:      INTEGER;
-    width*:  INTEGER;
-    height*: INTEGER;
-    DPI*:    INTEGER;
-    highch:  INTEGER;  (* Leading/high surrogate codepoint of a pair *)
-    dochar:  CharacterHandler;
-    dodraw:  DrawHandler;
-    domouse: MouseHandler;
-    next:    Window
+    hwnd:     INTEGER;
+    bmp*:     Bitmap;
+    x*:       INTEGER;
+    y*:       INTEGER;
+    width*:   INTEGER;
+    height*:  INTEGER;
+    DPI*:     INTEGER;
+    highch:   INTEGER;  (* Leading/high surrogate codepoint of a pair *)
+    dochar:   CharacterHandler;
+    predraw:  DrawHandler;
+    postdraw: DrawHandler;
+    domouse:  MouseHandler;
+    next:     Window
   END;
 
 VAR
@@ -62,6 +63,7 @@ VAR
   MoveWindow:         PROCEDURE(hwnd, x, y, w, h, repaint: INTEGER);
   GetDpiForWindow:    PROCEDURE(hwnd: INTEGER): INTEGER;
   ShowWindow:         PROCEDURE(hwnd, cmd: INTEGER);
+  WInvalidateRect:    PROCEDURE(hwnd, rect, bErase: INTEGER): INTEGER;
 
   SetProcessDpiAwarenessContext: PROCEDURE(context: INTEGER): INTEGER;
 
@@ -106,16 +108,18 @@ BEGIN
       res := SelectObject(bitmap.context, bitmap.oldh);
       res := DeleteObject(bitmap.hdib)
     END;
-    bitmap.width := 0;  bitmap.height := 0;
-    bitmap.address   := 0;  bitmap.hdib   := 0;
-    bitmap.oldh  := 0;
+    bitmap.width   := 0;  bitmap.height := 0;
+    bitmap.address := 0;  bitmap.hdib   := 0;
+    bitmap.oldh    := 0;
+
     ZeroFill(bmi);
     bmi.size     := SYSTEM.SIZE(BITMAPINFOHEADER);
     bmi.width    := w;
     bmi.height   := -h;  (* Negative height => y=0 at top *)
     bmi.planes   := 1;
     bmi.bitCount := 32;  (* 4 bytes per pixel: RGBA *)
-    bitmap.hdib := CreateDIBSection(0, SYSTEM.ADR(bmi), 0, SYSTEM.ADR(bitmap.address), 0, 0);
+    bitmap.hdib  := CreateDIBSection(0, SYSTEM.ADR(bmi), 0, SYSTEM.ADR(bitmap.address), 0, 0);
+
     ASSERT(bitmap.hdib # 0);
     bitmap.width  := w;
     bitmap.height := h;
@@ -128,9 +132,11 @@ BEGIN
   END
 END EnsureBitmap;
 
+
 PROCEDURE Clip(v, max: INTEGER): INTEGER;
 BEGIN IF v > max THEN v := max END
 RETURN v END Clip;
+
 
 PROCEDURE DrawPixel*(bitmap: Bitmap; x, y: INTEGER; colour: ARGB);
 BEGIN
@@ -139,16 +145,16 @@ BEGIN
   SYSTEM.PUT(bitmap.address + y * bitmap.width * 4 + x * 4, colour)
 END DrawPixel;
 
+
 PROCEDURE FillRectangle*(bitmap: Bitmap; x, y, wi, h: INTEGER; colour: ARGB);
 VAR xs, ys, xl, yl: INTEGER;
 BEGIN
-  (*
   w.s("Fill rectangle. x "); w.i(x);
   w.s(", y ");               w.i(y);
   w.s(", w ");               w.i(wi);
   w.s(", h ");               w.i(h);
+  w.s(", colour $");         w.h(colour);
   w.sl(".");
-  *)
   xs := Clip(x, bitmap.width-1);   xl := Clip(x+wi-1, bitmap.width-1);
   ys := Clip(y, bitmap.height-1);  yl := Clip(y+h-1, bitmap.height-1);
   FOR y := ys TO yl DO
@@ -188,6 +194,7 @@ BEGIN window := FirstWindow;
   WHILE (window # NIL) & (hwnd # window.hwnd) DO window := window.next END
 RETURN window END FindWindow;
 
+
 PROCEDURE Paint(hwnd: INTEGER);
 TYPE
   PAINTSTRUCT = RECORD
@@ -202,34 +209,43 @@ TYPE
     rgbReserved: ARRAY 36 OF BYTE
   END;
 VAR
-  ps:     PAINTSTRUCT;
   res:    INTEGER;
+  ps:     PAINTSTRUCT;
+  x, y:   INTEGER;
+  width:  INTEGER;
+  height: INTEGER;
   window: Window;
   hdc:    INTEGER;
 BEGIN
-  res := BeginPaint(hwnd, SYSTEM.ADR(ps));
   window := FindWindow(hwnd);
   ASSERT(window # NIL);
 
-  EnsureBitmap(window.width, window.height, window.bmp);
+  (*EnsureBitmap(window.width, window.height, window.bmp);*)
 
-  IF window.dodraw # NIL THEN window.dodraw(window.width, window.height, window.bmp) END;
+  res    := BeginPaint(hwnd, SYSTEM.ADR(ps));
+  x      := ps.left;
+  y      := ps.top;
+  width  := ps.right  - ps.left + 1;
+  height := ps.bottom - ps.top  + 1;
 
-  res := BitBlt(ps.hdc,
-                0, 0,
-                window.width, window.height,
-                window.bmp.context,
-                0, 0,
-                0CC0020H);  (* SRCCPY *)
+  IF window.predraw # NIL THEN window.predraw(x, y, width, height, window.bmp) END;
+
+  w.s("BitBlt x "); w.i(x);      w.s(", y ");      w.i(y);
+  w.s(", width ");  w.i(width);  w.s(", height "); w.i(height);  w.sl(".");
+  res := BitBlt(ps.hdc, x, y, width, height, window.bmp.context, x, y, 0CC0020H);  (* SRCCPY *)
   IF res = 0 THEN LastError END;
   ASSERT(res # 0);
+
+  IF window.postdraw # NIL THEN window.postdraw(x, y, width, height, window.bmp) END;
 
   res := EndPaint(hwnd, SYSTEM.ADR(ps));
 END Paint;
 
+
 PROCEDURE Size(wi, h: INTEGER);
 BEGIN w.s("size := "); w.i(wi); w.c(","); w.i(h); w.sl(".");
 END Size;
+
 
 PROCEDURE Char(hwnd, ch: INTEGER);  (* UTF-16 value *)
 VAR window: Window;
@@ -245,6 +261,7 @@ BEGIN w.s("char $"); w.h(ch); w.sl(".");
     END
   END
 END Char;
+
 
 PROCEDURE Mouse(hwnd, msg, x, y, flags: INTEGER);
 VAR window: Window;
@@ -283,12 +300,7 @@ RETURN res END WndProc;
 (* -------------------------------------------------------------------------- *)
 
 
-PROCEDURE NewWindow*(x, y:    INTEGER;
-                     width:   INTEGER;
-                     height:  INTEGER;
-                     dochar:  CharacterHandler;
-                     dodraw:  DrawHandler;
-                     domouse: MouseHandler): Window;
+PROCEDURE NewWindow*(x, y, width, height: INTEGER): Window;
 TYPE
   wndclassexw = RECORD
     cbsize:        UINT32;
@@ -326,16 +338,17 @@ BEGIN
   ASSERT(classAtom # 0);
 
   NEW(window);
-  window.hwnd    := 0;    (* Will be filled in by first WndProc callback during CreateWindow *)
-  window.x       := x;
-  window.y       := y;
-  window.width   := width;
-  window.height  := height;
-  window.dochar  := dochar;
-  window.dodraw  := dodraw;
-  window.domouse := domouse;
-  window.next    := FirstWindow;
-  FirstWindow    := window;
+  window.hwnd      := 0;    (* Will be filled in by first WndProc callback during CreateWindow *)
+  window.x         := x;
+  window.y         := y;
+  window.width     := width;
+  window.height    := height;
+  window.dochar    := NIL;
+  window.predraw   := NIL;
+  window.postdraw  := NIL;
+  window.domouse   := NIL;
+  window.next      := FirstWindow;
+  FirstWindow      := window;
 
   hwnd := CreateWindowExW(
     0,                       (* Extended window style *)
@@ -362,6 +375,15 @@ BEGIN
   w.sl("ShowWindow complete.");
 
 RETURN window END NewWindow;
+
+PROCEDURE SetCharacterHandler* (w: Window; h: CharacterHandler);
+BEGIN w.dochar := h END SetCharacterHandler;
+
+PROCEDURE SetMouseHandler* (w: Window; h: MouseHandler);
+BEGIN w.domouse := h END SetMouseHandler;
+
+PROCEDURE SetDrawHandlers* (w: Window; pre, post: DrawHandler);
+BEGIN w.predraw := pre;  w.postdraw := post END SetDrawHandlers;
 
 
 (* -------------------------------------------------------------------------- *)
@@ -394,6 +416,19 @@ BEGIN
   END
 END MessagePump;
 
+
+PROCEDURE InvalidateRect* (w: Window; x, y, width, height: INTEGER);
+VAR rect: RECORD left, top, right, bottom: INT32 END;
+BEGIN
+  rect.left   := x;
+  rect.top    := y;
+  rect.right  := x + width;
+  rect.bottom := y + height;
+  ASSERT(WInvalidateRect(w.hwnd, SYSTEM.ADR(rect), 0) # 0)
+END InvalidateRect;
+
+PROCEDURE Invalidate* (w: Window);
+BEGIN InvalidateRect(w, 0, 0, w.bmp.width, w.bmp.height) END Invalidate;
 
 
 (* -------------------------------------------------------------------------- *)
@@ -429,6 +464,7 @@ BEGIN
   K.GetProc(K.User,   "MoveWindow",         MoveWindow);          ASSERT(MoveWindow         # NIL);
   K.GetProc(K.User,   "GetDpiForWindow",    GetDpiForWindow);     ASSERT(GetDpiForWindow    # NIL);
   K.GetProc(K.User,   "ShowWindow",         ShowWindow);          ASSERT(ShowWindow         # NIL);
+  K.GetProc(K.User,   "InvalidateRect",     WInvalidateRect);     ASSERT(WInvalidateRect    # NIL);
 
   K.GetProc(K.User, "SetProcessDpiAwarenessContext", SetProcessDpiAwarenessContext);
   ASSERT(SetProcessDpiAwarenessContext # NIL);

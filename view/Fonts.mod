@@ -10,8 +10,8 @@ TYPE
 
   GlyphDesc* = RECORD
     map*:       INTEGER;  (* Alphamap index of start of glyph alpha map                         *)
-    mapWidth*:  INTEGER;  (* Alpha width                                                        *)
-    mapHeight*: INTEGER;  (* Alpha heght                                                        *)
+    mapWidth*:  INTEGER;  (* Alpha width in 1/4 pixels                                          *)
+    mapHeight*: INTEGER;  (* Alpha heght in whole pixles                                        *)
     originX*:   INTEGER;  (* Offset of left alignment edge rightwards from left of alpha map    *)
     baseline*:  INTEGER   (* Offset of baseline downwards from top of alpha map                 *)
    END;
@@ -190,7 +190,8 @@ BEGIN
     w.s("  tmAscent          "); w.i(otm.textmetrics.ascent);  w.sl(".");
     w.s("  tmDescent         "); w.i(otm.textmetrics.descent);  w.sl(".");
     w.s("  tmInternalLeading "); w.i(otm.textmetrics.internalLeading);  w.sl(".");
-    w.s("  height - leading  "); w.i(otm.textmetrics.height - otm.textmetrics.internalLeading);  w.sl(".");
+    w.s("  tm height-leading "); w.i(otm.textmetrics.height - otm.textmetrics.internalLeading);  w.sl(".");
+    w.s("  tm ascent+descent "); w.i(otm.textmetrics.ascent + otm.textmetrics.descent);  w.sl(".");
     w.s("  otm.ascent        "); w.i(otm.ascent);   w.sl(".");
     w.s("  otm.descent       "); w.i(otm.descent);  w.sl(".");
     w.s("  otm.lineGap       "); w.i(otm.lineGap);  w.sl(".");
@@ -404,12 +405,76 @@ BEGIN
   END
 RETURN glyph END GetGlyph;
 
+
+PROCEDURE ConvertOberonPattern*(obmp: INTEGER): Glyph;
+VAR i, j:   INTEGER;
+    stride: INTEGER;
+    tbmp:   ARRAY 1024 OF BYTE;
+    ti:     INTEGER;
+    width:  INTEGER;
+    height: INTEGER;
+    x, y:   INTEGER;
+    b:      BYTE;
+    bit:    INTEGER;
+    wb:     INTEGER;  (* Width of oberon bitmap in bytes *)
+    ch:     CHAR;
+    rowp:   INTEGER;
+    alpha:  BYTE;
+    glyph:  Glyph;
+BEGIN
+  SYSTEM.GET(obmp,   b);  width  := b;
+  SYSTEM.GET(obmp+1, b);  height := b;
+  ti := 0;
+  wb := (width + 7) DIV 8;
+  stride :=  wb * 8;
+  ASSERT(width * height * 4 <= LEN(tbmp));
+  w.s("height "); w.i(height); w.s(" stride "); w.i(stride); w.s(" width "); w.i(width); w.sl(".");
+  FOR y := 0 TO height - 1 DO
+    rowp := obmp + 2 + (height - 1 - y) * wb;
+    w.in(rowp-obmp, 4); w.s(": |");
+    FOR x := 0 TO width-1 DO
+      IF x MOD 8 = 0 THEN
+        SYSTEM.GET(rowp, b);  INC(rowp);  w.s(" <"); w.hn(b,2); w.s("> ")
+      END;
+      IF ODD(b) THEN alpha := 64 ELSE alpha := 0 END;
+      b := ASR(b, 1);
+      IF alpha = 0 THEN w.c(" ") ELSE w.c("O") END;
+      FOR i := 0 TO 3 DO
+        tbmp[y * width * 4  +  x * 4  + i] := alpha
+      END
+    END;
+    w.sl("|");
+  END;
+  (* Dump tbmp to be sure *)
+  j := 0;
+  FOR y := 0 TO height - 1 DO
+    w.s("|");
+    FOR x := 0 TO width - 1 DO
+      FOR i := 0 TO 3 DO
+        IF tbmp[j] = 0 THEN w.c(" ") ELSE w.c("O") END; INC(j)
+      END
+    END;
+    w.sl("|");
+  END;
+
+  NEW(glyph);
+  glyph.mapWidth  := width*4;
+  glyph.mapHeight := height;
+  glyph.originX   := 0;
+  glyph.baseline  := 0;
+
+  glyph.map := SYSTEM.ADR(AlphaMap[MakeAlphaMap(width*4, height, tbmp)]);
+
+  w.DumpMem(0, glyph.map, 0, SYSTEM.ADR(AlphaMap[MapLen]) - glyph.map);
+RETURN glyph END ConvertOberonPattern;
+
 PROCEDURE GetAdvance*(font: Font; ch: INTEGER): INTEGER;  (* Result in 1/256ths of a pixel *)
 BEGIN  ASSERT((ch >= 32) & (ch <= 126));
 RETURN font.face.widths[ch-32] * font.em * 256 DIV font.face.emsize END GetAdvance;
 
 
 BEGIN
+  w.sl("Fonts loaded.");
   K.GetProc(K.Gdi, "CreateDCA",               CreateDCA);               ASSERT(CreateDCA              # NIL);
   K.GetProc(K.Gdi, "CreateFontA",             CreateFontA);             ASSERT(CreateFontA            # NIL);
   K.GetProc(K.Gdi, "SelectObject",            SelectObject);            ASSERT(SelectObject           # NIL);
@@ -423,4 +488,5 @@ BEGIN
   (*Default := GetFont("Cambria", 16);*)
   (*Default := GetFont("Arial", 15);*)
   Default := GetFont("Calibri", 17);
+
 END Fonts.

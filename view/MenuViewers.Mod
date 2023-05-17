@@ -1,17 +1,26 @@
 MODULE MenuViewers; (*JG 26.8.90 / 16.9.93 / NW 10.3.13 / AP 15.8.22 Extended Oberon*)
-IMPORT Input, Display, Viewers, Oberon, w := Writer;
+IMPORT Input, Display, Viewers, Oberon, w := Writer, SYSTEM;
 
-TYPE Viewer* = POINTER TO ViewerDesc;
+TYPE
+  Viewer* = POINTER TO ViewerDesc;
   ViewerDesc* = RECORD (Viewers.ViewerDesc) menuH*: INTEGER END;
 
-PROCEDURE Draw (V: Viewer; Y, H: INTEGER);
+PROCEDURE DrawBorders (V: Viewer; Y, H: INTEGER);
 BEGIN
-  w.s("MenuViewer.Draw viewer at "); Display.wfpos(V); w.s("; Y "); w.i(Y); w.s(", H "); w.i(H); w.sl(".");
+  IF Y+H > Display.Height THEN
+    w.s("MenuViewers.DrawBorders Y "); w.i(Y);
+    w.s(", H ");                       w.i(H);
+    w.s(", viewer state ");            w.i(V.state);
+    w.s(", viewer adr $");             w.i(SYSTEM.ADR(V));
+    w.sl(".");
+    ASSERT(FALSE);
+  END;
+  w.s("MenuViewer.DrawBorders viewer at "); Display.wfpos(V); w.s("; Y "); w.i(Y); w.s(", H "); w.i(H); w.sl(".");
   Display.FillRectangle(V.X,           Y,         1,       H, Display.white);
   Display.FillRectangle(V.X + V.W - 1, Y,         1,       H, Display.white);
   Display.FillRectangle(V.X + 1,       Y,         V.W - 2, 1, Display.white);
   Display.FillRectangle(V.X + 1,       Y + H - 1, V.W - 2, 1, Display.white);
-END Draw;
+END DrawBorders;
 
 PROCEDURE Restore (V: Viewer);
 VAR Menu, Main: Display.Frame;
@@ -20,8 +29,9 @@ BEGIN
   Menu := V.child;
   Main := V.child.next;
   Oberon.RemoveMarks(V.X, V.Y, V.W, V.H);
-  Draw(V, V.Y, V.H);
+  DrawBorders(V, V.Y, V.H);
   IF V.H > V.menuH + 1 THEN
+    (* There is sufficient room for the whole menu *)
     Menu.X := V.X + 1;
     Menu.Y := V.Y + 1;
     Menu.W := V.W - 2;
@@ -46,26 +56,40 @@ BEGIN
   END
 END Restore;
 
+
 PROCEDURE Modify (V: Viewer; Y, H: INTEGER);
 VAR Menu, Main: Display.Frame;
-BEGIN Menu := V.child; Main := V.child.next;
+BEGIN
+  Menu := V.child;
+  Main := V.child.next;
   Oberon.RemoveMarks(V.X, V.Y, V.W, V.H);
+
   IF H > V.menuH + 1 THEN
-    IF Y + H > V.Y + V.H THEN
-      Viewers.Adjust(Menu, Viewers.modify, Y + H - V.menuH, V.menuH - 1);
-      Viewers.Adjust(Main, Viewers.modify, Y + 1, H - V.menuH - 1)
+    (* Sufficient room for menu *)
+    IF Y < V.Y THEN
+      (* Top moving up *)
+      (* Put menu at top *)
+      Viewers.Adjust(Menu, Viewers.modify, Y,  V.menuH - 1);
+      (* Fill remainder with main *)
+      Viewers.Adjust(Main, Viewers.modify, Y + V.menuH + 1, H - V.menuH - 1)
     ELSE
-      Viewers.Adjust(Main, Viewers.modify, Y + 1, H - V.menuH - 1);
-      Viewers.Adjust(Menu, Viewers.modify, Y + H - V.menuH, V.menuH - 1)
+      (* Top not changing or moving down *)
+      (* Put main at bottom *)
+      Viewers.Adjust(Main, Viewers.modify, Y + V.menuH + 1, H - V.menuH - 1);
+      (* Put menu at top *)
+      Viewers.Adjust(Menu, Viewers.modify, Y, V.menuH - 1)
     END
   ELSIF Y + H > V.Y + V.H THEN
-    Viewers.Adjust(Menu, Viewers.modify, Y + 1, H - 2);
-    Viewers.Adjust(Main, Viewers.modify, Y + H - V.menuH, 0)
+    (* Insufficient room for menu and top moving up *)
+    Viewers.Adjust(Menu, Viewers.modify, Y, H - 2);
+    Viewers.Adjust(Main, Viewers.modify, Y + V.menuH + 1, 0)
   ELSE
-    Viewers.Adjust(Main, Viewers.modify, Y + H - V.menuH, 0);
-    Viewers.Adjust(Menu, Viewers.modify, Y + 1, H - 2)
-  END ;
-  Draw(V, Y, H)
+    (* Insufficient room for menu and top not changing, or moving down *)
+    Viewers.Adjust(Main, Viewers.modify, Y + V.menuH + 1, 0);
+    Viewers.Adjust(Menu, Viewers.modify, Y, H - 2)
+  END;
+
+  DrawBorders(V, Y, H)
 END Modify;
 
 PROCEDURE Suspend (V: Viewer);
@@ -73,54 +97,64 @@ VAR Menu, Main: Display.Frame;
 BEGIN
   w.sl("MenuViewers.Suspend.");
   Menu := V.child; Main := V.child.next;
-  Viewers.Adjust(Main, Viewers.modify, V.Y + V.H - V.menuH, 0);
-  Viewers.Adjust(Menu, Viewers.modify, V.Y + V.H - 1, 0)
+  Viewers.Adjust(Main, Viewers.modify, V.Y + V.menuH, 0);
+  Viewers.Adjust(Menu, Viewers.modify, V.Y + 1, 0)
 END Suspend;
+
 
 PROCEDURE Move (V: Viewer; X, Y: INTEGER; Keys: SET);
 VAR Y0, H: INTEGER; keysum: SET;
     D: Viewers.DisplayArea; v: Viewers.Viewer;
-BEGIN (*Keys # {}*) keysum := Keys; Input.Mouse(Keys, X, Y); Y0 := Y;
+BEGIN
+  w.sl("MenuViewers.Move called - not yet integrated.");  ASSERT(FALSE);
+  (*Keys # {}*) keysum := Keys; Input.Mouse(Keys, X, Y); Y0 := Y;
   WHILE Keys # {} DO keysum := keysum + Keys;
     Oberon.DrawMouseStar(X, Y); Input.Mouse(Keys, X, Y)
-  END ;
+  END;
   Oberon.FadeMouse;
   IF (Y # Y0) & ~(0 IN keysum) THEN (*~MR*)
     v := Viewers.This(X, Y);
     IF v = V.next THEN Y0 := V.Y;
-      IF Y > v.Y + v.H - v.minH THEN H := v.Y + v.H - Y0; Viewers.Close(v) ELSE H := Y - Y0 END ;
+      IF Y > v.Y + v.H - v.minH THEN H := v.Y + v.H - Y0; Viewers.Close(v) ELSE H := Y - Y0 END;
       Viewers.Validate(V, Y0, H); Viewers.Change(V, Y0, H)
     ELSIF v = V THEN Y0 := V.Y;
-      IF Y < V.Y + V.minH THEN H := V.minH ELSE H := Y - Y0 END ;
+      IF Y < V.Y + V.minH THEN H := V.minH ELSE H := Y - Y0 END;
       Viewers.Validate(V, Y0, H); Viewers.Change(V, Y0, H)
     ELSIF V.minH <= v.H THEN
-      IF Y > v.Y + v.H - v.minH THEN Y := v.Y + v.H END ;
-      IF Y < v.Y + V.minH THEN Y := v.Y + V.minH END ;
+      IF Y > v.Y + v.H - v.minH THEN Y := v.Y + v.H END;
+      IF Y < v.Y + V.minH THEN Y := v.Y + V.minH END;
       D := Viewers.ThisDisplay(V); Viewers.Close(V); Viewers.Open(D, V, X, Y); Restore(V)
     END
   END
 END Move;
 
+
 PROCEDURE Change (V: Viewer; X, Y: INTEGER; Keys: SET);
 VAR Y0, H: INTEGER;
-BEGIN (*Keys # {}*) Input.Mouse(Keys, X, Y);
+BEGIN
+  w.sl("MenuViewers.Change called - not yet integrated.");  ASSERT(FALSE);
+  (*Keys # {}*) Input.Mouse(Keys, X, Y);
   WHILE Keys # {} DO Y0 := Y;
     Oberon.DrawMouseArrow(X, Y); Input.Mouse(Keys, X, Y);
     IF (Y # Y0) & (Keys = {2}) THEN (*ML*)
       IF Y > Y0 THEN H := V.H + Y - Y0; Y0 := V.Y
       ELSIF Y0 - Y > V.H - V.minH THEN Y0 := V.Y + V.H - V.minH - Y0 + Y; H := V.minH
       ELSE H := V.H - Y0 + Y; Y0 := V.Y
-      END ;
+      END;
       Viewers.Validate(V, Y0, H); Viewers.Change(V, Y0, H)
     END
   END
 END Change;
 
+
 PROCEDURE Expand (V: Viewers.Viewer);
 VAR D: Viewers.DisplayArea; Y, H: INTEGER;
-BEGIN D := Viewers.ThisDisplay(V); Y := 0; H := D.H;
+BEGIN
+  w.sl("MenuViewers.Expand called - not yet integrated.");  ASSERT(FALSE);
+  D := Viewers.ThisDisplay(V); Y := 0; H := D.H;
   Viewers.Validate(V, Y, H); Viewers.Change(V, Y, H)
 END Expand;
+
 
 PROCEDURE Copy (V: Viewer; VAR V1: Viewer);
 VAR Menu, Main: Display.Frame; M: Oberon.CopyMsg;
@@ -138,14 +172,15 @@ BEGIN Menu := V.child; Main := V.child.next;
     CASE M OF
     Oberon.InputMsg:
       IF M.id = Oberon.track THEN X := M.X; Y := M.Y;
-        IF Y < V.Y + 1 THEN Oberon.DrawMouseArrow(X, Y)
-        ELSIF Y < V.Y + V.H - V(Viewer).menuH THEN Main.handle(Main, M)
+        IF    Y < V.Y + 1                         THEN Oberon.DrawMouseArrow(X, Y)
+        ELSIF Y < V.Y + V.H - V(Viewer).menuH     THEN Main.handle(Main, M)
         ELSIF Y < V.Y + V.H - V(Viewer).menuH + 2 THEN Menu.handle(Menu, M)
         ELSIF Y < V.Y + V.H - 1 THEN
           IF X < V.X + V.W - 30 THEN
-            IF 2 IN M.keys THEN Change(V(Viewer), X, Y, M.keys) ELSE Menu.handle(Menu, M) END
-          ELSIF 1 IN M.keys THEN Menu.handle(Menu, M)
-          ELSIF 2 IN M.keys THEN Move(V(Viewer), X, Y, M.keys)
+            IF 2 IN M.keys THEN Change(V(Viewer), X, Y, M.keys)
+                           ELSE Menu.handle(Menu, M) END
+          ELSIF 1 IN M.keys  THEN Menu.handle(Menu, M)
+          ELSIF 2 IN M.keys  THEN Move(V(Viewer), X, Y, M.keys)
           ELSIF M.keys = {0} THEN Expand(V)
           ELSE Oberon.DrawMouseStar(X, Y)
           END
@@ -154,22 +189,24 @@ BEGIN Menu := V.child; Main := V.child.next;
       ELSIF M.id = Oberon.consume THEN Menu.handle(Menu, M); Main.handle(Main, M)
       END |
     Oberon.ControlMsg:
-      IF M.id = Oberon.mark THEN
-        X := M.X; Y := M.Y; Oberon.DrawMouseArrow(X, Y); Oberon.DrawPointerStar(X, Y)
-      ELSIF M.id = Oberon.defocus THEN Menu.handle(Menu, M); Main.handle(Main, M)
+      IF    M.id = Oberon.mark       THEN X := M.X; Y := M.Y;
+                                          Oberon.DrawMouseArrow(X, Y);
+                                          Oberon.DrawPointerStar(X, Y)
+      ELSIF M.id = Oberon.defocus    THEN Menu.handle(Menu, M); Main.handle(Main, M)
       ELSIF M.id = Oberon.neutralize THEN Menu.handle(Menu, M); Main.handle(Main, M)
       END |
     Oberon.CopyMsg:
       Copy(V(Viewer), V1); M.F := V1 |
     Viewers.ViewerMsg:
-      IF M.id = Viewers.restore THEN Restore(V(Viewer))
+      IF    M.id = Viewers.restore THEN Restore(V(Viewer))
       ELSIF M.id = Viewers.suspend THEN Suspend(V(Viewer))
-      ELSIF M.id = Viewers.modify THEN Modify(V(Viewer), M.Y, M.H)
+      ELSIF M.id = Viewers.modify  THEN Modify(V(Viewer), M.Y, M.H)
       END |
     Display.FrameMsg: Menu.handle(Menu, M); Main.handle(Main, M)
     END
   END
 END Handle;
+
 
 PROCEDURE New* (Menu, Main: Display.Frame; menuH, X, Y: INTEGER): Viewer;
 VAR V: Viewer;

@@ -1,5 +1,5 @@
 MODULE Input; (*NW 5.10.86 / 15.11.90 Ceres-2; PDR 21.4.12 / NW 15.5.2013 Ceres-4 / AP 15.9.20 Extended Oberon* / DCWB 8May23 *)
-IMPORT SYSTEM;
+IMPORT SYSTEM, w := Writer;
 
 CONST
   msAdr        = -40;
@@ -86,5 +86,5 @@ BEGIN
   Recd  := FALSE;
 END Init;
 
-BEGIN Init
+BEGIN Init;  w.sl("Input loaded.");
 END Input.

@@ -1,8 +1,6 @@
 MODULE Oberon; (*JG 6.9.90 / 23.9.93 / 13.8.94 / NW 14.4.2013 / 22.12.2015 / AP 1.9.22 Extended Oberon / DCWB 8May23 *)
-IMPORT SYSTEM, Kernel, Files, Modules,
-               Input, Display,
-               Viewers, Fonts, Texts,
-               Windows, w := Writer;
+IMPORT SYSTEM, Kernel,  Windows, Files, Modules, Input,   Display,
+               Viewers, Fonts, Texts,   w := Writer;
 
 CONST
   consume*    = 0;  (*message ids*)
@@ -23,8 +21,6 @@ CONST
   CR      = 0DX;
   ESC     = 1BX;
   SETSTAR = 1AX;
-
-  (*LNK = 15;*)
 
 TYPE
   Painter* = PROCEDURE (x, y: INTEGER);
@@ -69,6 +65,22 @@ TYPE
     handle: Handler
   END;
 
+  DisplayDumper = PROCEDURE;
+
+  ARGB = SYSTEM.CARD32;
+
+  Sprite = POINTER TO SpriteDesc;
+  SpriteDesc = RECORD
+    on:     BOOLEAN;
+    glyph:  Fonts.Glyph;
+    x:      INTEGER;             (* In 256ths of a pixel *)
+    y:      INTEGER;             (* In whole pixels      *)
+    save:   ARRAY 256 OF ARGB;  (* Saved background     *)
+    sx, sy: INTEGER;             (* In whole pixels      *)
+    sw, sh: INTEGER              (* Enough space for up to 32x32 *)
+  END;
+
+
 VAR
   User*:     ARRAY 8 OF CHAR;
   Password*: INTEGER;
@@ -104,6 +116,19 @@ VAR
   last:  INTEGER;
   W:     Texts.Writer;
 
+  DumpDisplay: DisplayDumper;
+
+  (* Marker glyphs *)
+  ArrowGlyph:  Fonts.Glyph;
+  StarGlyph:   Fonts.Glyph;
+  HookGlyph:   Fonts.Glyph;
+  UpdownGlyph: Fonts.Glyph;
+  BlockGlyph:  Fonts.Glyph;
+  CrossGlyph:  Fonts.Glyph;
+  GreyGlyph:   Fonts.Glyph;
+
+  TestSprite: Sprite;
+
 (*user identification*)
 
 PROCEDURE Code(VAR s: ARRAY OF CHAR): INTEGER;
@@ -136,9 +161,69 @@ PROCEDURE Time*(): INTEGER;
 BEGIN RETURN Kernel.Time()
 END Time;
 
+
+(* --------------------------- Marks and cursors ---------------------------- *)
+
+
+
+PROCEDURE SaveRect(bmp: Windows.Bitmap; x, y, wi, h: INTEGER; VAR buf: ARRAY OF ARGB);
+VAR sadr, i, ilim, ylim: INTEGER;
+BEGIN ASSERT(wi * h <= LEN(buf));
+  i := 0;  ylim := y + h;
+  WHILE y < ylim DO
+    sadr := bmp.address + 4 * (bmp.width * y + x);  ilim := i + wi;
+    WHILE i < ilim DO SYSTEM.GET(sadr, buf[i]);  INC(i);  INC(sadr, 4); END;
+    INC(y);
+  END
+END SaveRect;
+
+
+PROCEDURE RestoreRect(buf: ARRAY OF ARGB; bmp: Windows.Bitmap; x, y, wi, h: INTEGER);
+VAR tadr, i, ilim, ylim: INTEGER;
+BEGIN ASSERT(wi * h <= LEN(buf));
+  i := 0;  ylim := y + h;
+  WHILE y < ylim DO
+    tadr := bmp.address + 4 * (bmp.width * y + x);  ilim := i + wi;
+    WHILE i < ilim DO SYSTEM.PUT(tadr, buf[i]);  INC(i);  INC(tadr, 4); END;
+    INC(y)
+  END
+END RestoreRect;
+
+
+PROCEDURE DrawSprite(s: Sprite;  bmp: Windows.Bitmap);
+VAR x, y: INTEGER;  pixel: ARGB;  i, sadr: INTEGER;
+BEGIN ASSERT(s.on);  ASSERT(s.glyph # NIL);
+  s.sx := (s.x - s.glyph.originX) DIV 256;
+  s.sy := s.y - s.glyph.baseline;
+  s.sw := (s.x - s.glyph.originX + s.glyph.mapWidth*64 + 255) DIV 256 - s.sx;
+  s.sh := s.glyph.mapHeight;
+  SaveRect(bmp, s.sx, s.sy, s.sw, s.sh, s.save);
+  Display.RenderAlphaMap(
+    s.x DIV 64 + s.glyph.originX,  s.y - s.glyph.baseline,
+    s.glyph.mapWidth,              s.glyph.mapHeight,
+    s.glyph.map,                   0FFFFFFH)
+END DrawSprite;
+
+
+PROCEDURE UnDrawSprite(s: Sprite;  bmp: Windows.Bitmap);
+VAR x, y: INTEGER;  pixel: ARGB;  i, tadr: INTEGER;
+BEGIN ASSERT(s.on);
+  RestoreRect(s.save, bmp, s.sx, s.sy, s.sw, s.sh)
+END UnDrawSprite;
+
+
+
+
+
+
+
+
+(* ------------------------ old mark and cursor code ------------------------ *)
+(*
+
+
 (*cursors handling*)
 
-(*
 PROCEDURE FlipArrow (X, Y: INTEGER);
 BEGIN
   IF X < CL THEN
@@ -375,30 +460,18 @@ VAR
   H0,  H1,  H2,  H3,  y:   INTEGER;
   fil, top, bot, alt, max: Display.Frame;
 BEGIN
-  w.sl("Oberon.SplitY starting.");
+  w.s("Oberon.SplitY(X "); w.i(X); w.s(") starting.");
   Viewers.Locate(Viewers.CurDisplay, X, DH, fil, top, bot, alt, max);
-
   H3 := DH - DH DIV 3;  (* H3 = 2/3  DH *)  (* DH = Display.Height *)
   H2 := H3 - H3 DIV 2;  (* H2 = 1/3  DH *)
   H1 := DH DIV 5;       (* H1 = 1/5  DH *)
   H0 := DH DIV 10;      (* H0 = 1/10 DH *)
-
-  (*
-  IF    fil.H >= DH DIV 8 THEN y := DH
-  ELSIF max.H >= DH - H0  THEN y := max.Y + H3
-  ELSIF max.H >= H3 - H0  THEN y := max.Y + H2
-  ELSIF max.H >= H2 - H0  THEN y := max.Y + H1
-                          ELSE y := max.Y + max.H DIV 2
-  END;
-  *)
-
   IF    fil.H >= DH DIV 8 THEN y := fil.Y
   ELSIF max.H >= DH - H0  THEN y := max.Y + max.H - H3
   ELSIF max.H >= H3 - H0  THEN y := max.Y + max.H - H2
   ELSIF max.H >= H2 - H0  THEN y := max.Y + max.H - H1
                           ELSE y := max.Y + max.H DIV 2
   END;
-
   w.s("Oberon.SplitY returning "); w.i(y); w.sl(".");
   RETURN y
 END SplitY;
@@ -419,7 +492,8 @@ BEGIN
 
     Y := SplitY(X)
   END;
-  w.sl("Oberon.AllocateSystemViewer complete.");
+  w.s("Oberon.AllocateSystemViewer returning X ");  w.i(X);
+  w.s(", Y ");  w.i(Y);  w.sl(".");
 END AllocateSystemViewer;
 
 (*garbage collection*)
@@ -585,6 +659,67 @@ END Remove;
 PROCEDURE Collect*(count: INTEGER);
 BEGIN ActCnt := count
 END Collect;
+
+(* --------------------- Windows event handler mapping ---------------------- *)
+
+PROCEDURE ws(s: ARRAY OF CHAR);
+BEGIN Texts.WriteString(W, s) END ws;
+
+PROCEDURE wl;
+BEGIN Texts.WriteLn(W);  Texts.Append(Log, W.buf); END wl;
+
+PROCEDURE SetDumpDisplay* (proc: DisplayDumper);
+BEGIN DumpDisplay := proc END SetDumpDisplay;
+
+PROCEDURE DoCharacter(ch: INTEGER);
+VAR i: INTEGER;  g: Fonts.Glyph;
+BEGIN
+  CASE CHR(ch) OF
+  | 1BX: Windows.Quit
+  | ".": Texts.WriteString(W, "'.' pressed.");
+         Texts.WriteLn(W);
+         Texts.Append(Log, W.buf);
+         Windows.Invalidate(Display.Window);
+  | "d": IF DumpDisplay # NIL THEN DumpDisplay END
+  | "m": (* Test markers *)
+         Display.RenderAlphaMap(80,       50, ArrowGlyph.mapWidth,  ArrowGlyph.mapHeight,  ArrowGlyph.map,  0FFFFFFH);
+         Display.RenderAlphaMap(80 + 128, 50, StarGlyph.mapWidth,   StarGlyph.mapHeight,   StarGlyph.map,   0FFFFFFH);
+         Display.RenderAlphaMap(80 + 256, 50, HookGlyph.mapWidth,   HookGlyph.mapHeight,   HookGlyph.map,   0FFFFFFH);
+         Display.RenderAlphaMap(80 + 384, 50, UpdownGlyph.mapWidth, UpdownGlyph.mapHeight, UpdownGlyph.map, 0FFFFFFH);
+         Display.RenderAlphaMap(80 + 512, 50, BlockGlyph.mapWidth,  BlockGlyph.mapHeight,  BlockGlyph.map,  0FFFFFFH);
+         Display.RenderAlphaMap(80 + 640, 50, CrossGlyph.mapWidth,  CrossGlyph.mapHeight,  CrossGlyph.map,  0FFFFFFH);
+         Display.RenderAlphaMap(80 + 768, 50, GreyGlyph.mapWidth,   GreyGlyph.mapHeight,   GreyGlyph.map,   0FFFFFFH);
+         Windows.InvalidateRect(Display.Window, 20, 50, 250, 20);
+  END
+END DoCharacter;
+
+
+PROCEDURE PreDraw(x, y, width, height: INTEGER;  bitmap: Windows.Bitmap);
+BEGIN
+  IF TestSprite.on THEN DrawSprite(TestSprite, bitmap) END;
+END PreDraw;
+
+
+PROCEDURE PostDraw(x, y, width, height: INTEGER;  bitmap: Windows.Bitmap);
+BEGIN
+  IF TestSprite.on THEN UnDrawSprite(TestSprite, bitmap) END;
+END PostDraw;
+
+
+PROCEDURE DoMouse(x, y: INTEGER;  flags: SET);
+BEGIN
+  w.s("DoMouse("); w.i(x); w.c(","); w.i(y);
+  w.s(",$"); w.h(SYSTEM.VAL(INTEGER, flags)); w.sl(").");
+  TestSprite.x := x * 256;  TestSprite.y := y;
+  IF TestSprite.sw # 0 THEN  (* Invalidate where mouse was previously *)
+    Windows.InvalidateRect(
+      Display.Window,
+      TestSprite.sx, TestSprite.sy,
+      TestSprite.sw, TestSprite.sh)
+  END;
+  Windows.InvalidateRect(Display.Window, x, y, 20, 20);
+END DoMouse;
+
 
 PROCEDURE Loop*;
 (*
@@ -752,10 +887,24 @@ BEGIN
   Kernel.Install(SYSTEM.ADR(Abort), 0);
   *)
 
-  (*
-  IF Modules.importing = "Oberon" THEN (*loaded by the regular loader*)
-    Modules.Load("System", Mod);  Mod := NIL;
-  END
-  *)
+  Windows.SetCharacterHandler(Display.Window, DoCharacter);
+  Windows.SetMouseHandler(Display.Window, DoMouse);
+  Windows.SetDrawHandlers(Display.Window, PreDraw, PostDraw);
+
+  ArrowGlyph  := Fonts.ConvertOberonPattern(SYSTEM.ADR($ 0F0F 0060 0070 0038 001C 000E 0007 8003 C101 E300 7700 3F00 1F00 3F00 7F00 FF00 $));
+  StarGlyph   := Fonts.ConvertOberonPattern(SYSTEM.ADR($ 0F0F 8000 8220 8410 8808 9004 A002 C001 7F7F C001 A002 9004 8808 8410 8220 8000 $));
+  HookGlyph   := Fonts.ConvertOberonPattern(SYSTEM.ADR($ 0C0C 070F 8707 C703 E701 F700 7F00 3F00 1F00 0F00 0700 0300 0100                $));
+  UpdownGlyph := Fonts.ConvertOberonPattern(SYSTEM.ADR($ 080E 183C 7EFF 1818 1818 1818 FF7E 3C18                                         $));
+  BlockGlyph  := Fonts.ConvertOberonPattern(SYSTEM.ADR($ 0808 FFFF C3C3 C3C3 FFFF                                                        $));
+  CrossGlyph  := Fonts.ConvertOberonPattern(SYSTEM.ADR($ 0F0F 0140 0220 0410 0808 1004 2002 4001 0000 4001 2002 1004 0808 0410 0220 0140 $));
+  GreyGlyph   := Fonts.ConvertOberonPattern(SYSTEM.ADR($ 2002 5555 5555 AAAA AAAA                                                        $));
+
+  NEW(TestSprite);
+  TestSprite.on    := TRUE;
+  TestSprite.x     := 25600;
+  TestSprite.y     := 100;
+  TestSprite.glyph := ArrowGlyph;
+  TestSprite.sw    := 0;
+
   w.sl("Oberon initialised.");
 END Oberon.
