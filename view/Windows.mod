@@ -1,6 +1,6 @@
 MODULE Windows;
 
-IMPORT SYSTEM, w := Writer, K := Kernel, Boot, WindowsMessageNames;
+IMPORT SYSTEM, w := Writer, K := Kernel, Boot, WindowsMessageNames, Fonts;
 
 TYPE
   UINT16 = SYSTEM.CARD16;
@@ -39,17 +39,31 @@ TYPE
     next:     Window
   END;
 
+  MSG = RECORD
+    hwnd:     INTEGER;
+    message:  UINT32;
+    pad1:     UINT32;
+    wParam:   INTEGER;
+    lParam:   INTEGER;
+    time:     UINT32;
+    x, y:     UINT32;
+    lPrivate: UINT32
+  END;
+
 VAR
   CreateDIBSection:   PROCEDURE(hdc, pbmi, usage, ppvbits, hsection, offset: INTEGER): INTEGER;
   SelectObject:       PROCEDURE(hdc, hobject: INTEGER): INTEGER;
   DeleteObject:       PROCEDURE(hobject: INTEGER): INTEGER;
   CreateCompatibleDC: PROCEDURE(hdc: INTEGER): INTEGER;
+  CreateBitmap:       PROCEDURE(width, height, planes, depth, bits: INTEGER): INTEGER;
   LoadCursorW:        PROCEDURE(hinstance, lpcursorname: INTEGER): INTEGER;
   RegisterClassExW:   PROCEDURE(wndclassexw: INTEGER): INTEGER;
   CreateWindowExW:    PROCEDURE(dwExStyle, lpClassName, lpWindowName,
                                 dwStyle, X, Y, nWidth, nHeight,
                                 hWndParent, hMenu, hInstance, lpParam: INTEGER): INTEGER;
   GetMessageW:        PROCEDURE(lpmsg, hwnd, filtermin, filtermax: INTEGER): INTEGER;
+  PeekMessageW:       PROCEDURE(lpmsg, hwnd, filtermin, filtermax, remove: INTEGER): INTEGER;
+  GetQueueStatus:     PROCEDURE(flags: INTEGER): INTEGER;
   TranslateMessage:   PROCEDURE(msg: INTEGER): INTEGER;
   DispatchMessageW:   PROCEDURE(msg: INTEGER): INTEGER;
   DefWindowProcW:     PROCEDURE(hwnd, umsg, wparam, lparam: INTEGER): INTEGER;
@@ -64,7 +78,11 @@ VAR
   GetDpiForWindow:    PROCEDURE(hwnd: INTEGER): INTEGER;
   ShowWindow:         PROCEDURE(hwnd, cmd: INTEGER);
   WInvalidateRect:    PROCEDURE(hwnd, rect, bErase: INTEGER): INTEGER;
+  ShowCursor:         PROCEDURE(show: INTEGER);
+  CreateIconIndirect: PROCEDURE(iconinfo: INTEGER): INTEGER;
+  Sleep:              PROCEDURE(ms: INTEGER);
 
+  MsgWaitForMultipleObjects:     PROCEDURE(count, handles, waitall, ms, wakemask: INTEGER);
   SetProcessDpiAwarenessContext: PROCEDURE(context: INTEGER): INTEGER;
 
   FirstWindow: Window;
@@ -180,6 +198,184 @@ BEGIN
 END Resize;
 
 
+(* -------------------------- Rendering primitives -------------------------- *)
+
+
+PROCEDURE u8sqrt(x: INTEGER): INTEGER;
+VAR c, d: INTEGER;
+BEGIN
+  c := 0;  d := 16384;
+  WHILE d # 0 DO
+    IF x >= c + d THEN
+      DEC(x, c + d);  c := c DIV 2 + d
+    ELSE
+      c := c DIV 2
+    END;
+    d := d DIV 4
+  END
+RETURN c END u8sqrt;
+
+
+PROCEDURE AlphaMultiplyChannel(p, a: BYTE): INTEGER;
+RETURN (p * p * a) DIV 256 END AlphaMultiplyChannel;
+
+
+PROCEDURE AlphaMultiplyPixel(pixel: INTEGER; alpha: BYTE): INTEGER;
+VAR result: INTEGER;
+BEGIN
+  IF    alpha = 0   THEN result := 0
+  ELSIF alpha = 255 THEN result := pixel
+  ELSE
+    result := (u8sqrt(AlphaMultiplyChannel((pixel DIV 10000H) MOD 100H, alpha)) * 10000H)
+            + (u8sqrt(AlphaMultiplyChannel((pixel DIV   100H) MOD 100H, alpha)) *   100H)
+            + (u8sqrt(AlphaMultiplyChannel( pixel             MOD 100H, alpha))         )
+            + 0FF000000H;
+  END
+RETURN result END AlphaMultiplyPixel;
+
+
+(*   BlendChannel - Blend alpha * foreground with 1-alpha * background *)
+(*   entry  fg    - 8 bit gamma encoded foreground intensity           *)
+(*          bg    - 8 bit gamma encoded background intensity           *)
+(*          alpha - 8 bit linear alpha                                 *)
+PROCEDURE BlendChannel(fg, bg, alpha: BYTE): BYTE;
+BEGIN
+  RETURN u8sqrt(  AlphaMultiplyChannel(fg, alpha)
+                + AlphaMultiplyChannel(bg, 255 - alpha))
+END BlendChannel;
+
+
+PROCEDURE BlendPixel*(fg, bg: ARGB; alpha: BYTE): ARGB;
+VAR result: ARGB;
+BEGIN
+  IF    bg    = 0   THEN result := AlphaMultiplyPixel(fg, alpha)
+  ELSIF alpha = 255 THEN result := fg
+  ELSIF alpha = 0   THEN result := bg
+  ELSE
+    result := (BlendChannel((fg DIV 10000H) MOD 100H, (bg DIV 10000H) MOD 100H, alpha) * 10000H)
+            + (BlendChannel((fg DIV   100H) MOD 100H, (bg DIV   100H) MOD 100H, alpha) *   100H)
+            + (BlendChannel( fg             MOD 100H,  bg             MOD 100H, alpha)         )
+            + 0FF000000H;
+  END
+RETURN result END BlendPixel;
+
+
+
+PROCEDURE RenderAlphaMapToBitmap*(
+  x:         INTEGER;  (* In 1/4 pixels   *)
+  y:         INTEGER;  (* In whole pixels *)
+  width:     INTEGER;  (* In 1/4 pixels   *)
+  height:    INTEGER;  (* In whole pixels *)
+  mapadr:    INTEGER;
+  paint:     ARGB;
+  bitmapadr: INTEGER;
+  stride:    INTEGER
+);
+VAR
+  alpha, len: BYTE;
+  sp,    mp:  INTEGER;
+  pixel:      ARGB;
+  subpixel:   INTEGER;
+  alphasum:   INTEGER;
+BEGIN
+  (*
+  w.s("RenderAlphaMapToBitmap, x "); w.i(x);
+  w.s(", width ");           w.i(width);
+  w.s(", height ");          w.i(height);
+  w.s(", mapadr $");         w.h(mapadr);  w.sl(".");
+
+  w.DumpMem(2, mapadr, 0, 323);
+  *)
+
+  mp       := bitmapadr + 4 * (stride * y + x DIV 4);
+  subpixel := x MOD 4;
+  alphasum := 0;
+  sp       := 0;
+
+  SYSTEM.GET(mapadr, len);  INC(mapadr);
+  WHILE len # 0 DO
+    CASE len DIV 64 OF
+    | 0: alpha := len;        len := 1
+    | 1: len := len MOD 40H;  alpha := 0;
+    | 2: len := len MOD 40H;  alpha := 40H;
+    | 3: len := len MOD 40H;  SYSTEM.GET(mapadr, alpha);  INC(mapadr);
+    END;
+
+    WHILE len > 0 DO
+      INC(alphasum, alpha); INC(subpixel);
+      IF subpixel > 3 THEN
+        IF alphasum > 0 THEN
+          IF alphasum >= 255 THEN
+            SYSTEM.PUT(mp, paint);
+          ELSE
+            SYSTEM.GET(mp, pixel);
+            SYSTEM.PUT(mp, BlendPixel(paint, pixel, alphasum));
+          END
+        END;
+        subpixel := 0;
+        alphasum := 0;
+        INC(mp, 4);
+      END;
+      INC(sp);
+      IF sp >= width THEN
+        IF alphasum > 0 THEN  (* write remaining partial pixel *)
+          SYSTEM.GET(mp, pixel);
+          SYSTEM.PUT(mp, BlendPixel(paint, pixel, alphasum));
+        END;
+        INC(y);
+        mp := bitmapadr + 4 * (stride * y + x DIV 4);
+        sp := 0;
+        alphasum := 0;
+        subpixel := x MOD 4;
+      END;
+      DEC(len)
+    END;
+    SYSTEM.GET(mapadr, len);  INC(mapadr);
+  END
+END RenderAlphaMapToBitmap;
+
+
+(* ---------------- Make Windows application icon for Oberon ---------------- *)
+(* - Obtains icon from character U+058D (Armenian eternity sign) in Calibri - *)
+
+PROCEDURE MakeIcon(): INTEGER;
+VAR
+  font:       Fonts.Font;
+  glyph:      Fonts.Glyph;
+  maskbits:   ARRAY  128 OF BYTE;  (* 32 x 32 x 1 bit *)
+  colourbits: ARRAY 1024 OF ARGB;  (* 32 x 32 x 4 bytes *)
+  icon, i, j: INTEGER;
+  IconInfo:   RECORD
+    fIcon:    UINT32;
+    xHotspot: UINT32;
+    yHotspot: UINT32;
+    hbmMask:  INTEGER;
+    hbmColor: INTEGER
+  END;
+BEGIN
+  NEW(glyph);
+  font := Fonts.GetFont("segoe ui symbol", 40);
+  Fonts.GetAlphaMap(font, 2707H (*58DH*), glyph);
+  w.s("Icon dimensions w "); w.i((glyph.mapWidth+3) DIV 4);
+  w.s(", h "); w.i(glyph.mapHeight); w.sl(".");
+  FOR i := 0 TO LEN(maskbits)-1 DO maskbits[i] := 0FFH END;
+  ZeroFill(colourbits);
+  RenderAlphaMapToBitmap(0,0, glyph.mapWidth, glyph.mapHeight, glyph.map, 0FFFFFFFFH,
+                         SYSTEM.ADR(colourbits), 32);
+  IconInfo.fIcon    := 1;
+  IconInfo.xHotspot := 0;
+  IconInfo.yHotspot := 0;
+  IconInfo.hbmMask  := CreateBitmap(32, 32, 1,  1, SYSTEM.ADR(maskbits));
+  IconInfo.hbmColor := CreateBitmap(32, 32, 1, 32, SYSTEM.ADR(colourbits));
+  icon := CreateIconIndirect(SYSTEM.ADR(IconInfo));
+  ASSERT(icon # 0);
+  ASSERT(DeleteObject(IconInfo.hbmMask)  # 0);
+  ASSERT(DeleteObject(IconInfo.hbmColor) # 0);
+RETURN icon END MakeIcon;
+
+
+
+
 (* -------------------------- Window hwnd handling -------------------------- *)
 
 
@@ -230,9 +426,17 @@ BEGIN
 
   IF window.predraw # NIL THEN window.predraw(x, y, width, height, window.bmp) END;
 
+  (*
   w.s("BitBlt x "); w.i(x);      w.s(", y ");      w.i(y);
   w.s(", width ");  w.i(width);  w.s(", height "); w.i(height);  w.sl(".");
-  res := BitBlt(ps.hdc, x, y, width, height, window.bmp.context, x, y, 0CC0020H);  (* SRCCPY *)
+  *)
+
+  IF TRUE THEN
+    res := BitBlt(ps.hdc, x, y, width, height, window.bmp.context, x, y, 0CC0020H);  (* SRCCPY *)
+  ELSE (* Testing: paint the whole bitmap *)
+    res := BitBlt(ps.hdc, 0, 0, window.width, window.height, window.bmp.context, 0, 0, 0CC0020H);  (* SRCCPY *)
+  END;
+
   IF res = 0 THEN LastError END;
   ASSERT(res # 0);
 
@@ -263,6 +467,21 @@ BEGIN w.s("char $"); w.h(ch); w.sl(".");
 END Char;
 
 
+PROCEDURE Key(hwnd, key: INTEGER);
+VAR window: Window;
+BEGIN
+  window := FindWindow(hwnd);  ASSERT(window # NIL);
+  IF window.dochar # NIL THEN
+    CASE key OF
+    | 25H: (* VK_LEFT  *) window.dochar(11H)
+    | 26H: (* VK_UP    *) window.dochar(13H)
+    | 27H: (* VK_RIGHT *) window.dochar(12H)
+    | 28H: (* VK_DOWN  *) window.dochar(14H)
+    END
+  END
+END Key;
+
+
 PROCEDURE Mouse(hwnd, msg, x, y, flags: INTEGER);
 VAR window: Window;
 BEGIN
@@ -289,6 +508,7 @@ BEGIN
   ELSIF  msg =   0FH  (* WM_PAINT         *) THEN Paint(hwnd)
   ELSIF  msg =   14H  (* WM_ERASEBKGND    *) THEN
   ELSIF  msg =   05H  (* WM_SIZE          *) THEN Size(lp MOD 10000H, lp DIV 10000H MOD 10000H)
+  ELSIF  msg =  100H  (* WM_KEYDOWN       *) THEN Key(hwnd, wp)
   ELSIF  msg =  102H  (* WM_CHAR          *) THEN Char(hwnd, wp)
   ELSIF (msg >= 200H) (* WM_MOUSEMOVE     *)
      &  (msg <= 209H) (* WM_MBUTTONDBLCLK *) THEN Mouse(hwnd, msg, lp MOD 10000H, lp DIV 10000H MOD 10000H, wp)
@@ -298,7 +518,6 @@ RETURN res END WndProc;
 
 
 (* -------------------------------------------------------------------------- *)
-
 
 PROCEDURE NewWindow*(x, y, width, height: INTEGER): Window;
 TYPE
@@ -326,14 +545,15 @@ VAR
   i:          INTEGER;
   window:     Window;
 BEGIN
-  i := K.Utf8ToUtf16("Oberon",        classname);
-  i := K.Utf8ToUtf16("Oberon window", windowname);
+  i := K.Utf8ToUtf16("Oberon", classname);
+  i := K.Utf8ToUtf16("Oberon", windowname);
   ZeroFill(class);
   class.cbsize    := SYSTEM.SIZE(wndclassexw);
   class.style     := 3;                      (* CS_HREDRAW|CS_VREDRAW *)
   class.wndproc   := SYSTEM.VAL(INTEGER, WndProc);
   class.className := SYSTEM.ADR(classname);
-  class.hCursor   := LoadCursorW(0, 32512);  (* IDC_ARROW *)  ASSERT(class.hCursor # 0);
+  class.hIcon     := MakeIcon();
+  class.hCursor   := 0;  (*LoadCursorW(0, 32512);  (* IDC_ARROW *)  ASSERT(class.hCursor # 0);*)
   classAtom       := RegisterClassExW(SYSTEM.ADR(class));
   ASSERT(classAtom # 0);
 
@@ -370,6 +590,7 @@ BEGIN
 
   w.s("GetDpiForWindow -> ");  w.i(window.DPI);  w.sl(".");
 
+  ShowCursor(0);
   ShowWindow(hwnd, 1);
 
   w.sl("ShowWindow complete.");
@@ -386,35 +607,79 @@ PROCEDURE SetDrawHandlers* (w: Window; pre, post: DrawHandler);
 BEGIN w.predraw := pre;  w.postdraw := post END SetDrawHandlers;
 
 
-(* -------------------------------------------------------------------------- *)
+(* ------------- Windows message pump - pump until queue empty -------------- *)
 
-PROCEDURE MessagePump*;
-TYPE
-  MSG = RECORD
-    hwnd:     INTEGER;
-    message:  UINT32;
-    pad1:     UINT32;
-    wParam:   INTEGER;
-    lParam:   INTEGER;
-    time:     UINT32;
-    x, y:     UINT32;
-    lPrivate: UINT32
-  END;
+PROCEDURE MessagePump*(): BOOLEAN;  (* Returns FALSE only on receipt of WM_QUIT *)
 VAR
-  msg: MSG;
-  res: INTEGER;
-BEGIN
-  (*w.sl("MessagePump starting.");*)
-  res := GetMessageW(SYSTEM.ADR(msg), 0,0,0);
-  WHILE res # 0 DO
+  msg:  MSG;
+  res:  INTEGER;
+  quit: BOOLEAN;
+BEGIN quit := FALSE;
+  res := PeekMessageW(SYSTEM.ADR(msg), 0,0,0,1); (* Get and remove message if available *)
+  WHILE ~quit & (res # 0) DO
     ASSERT(res # -1);
-    (*w.s("GetMessageW: "); WindowsMessageNames.Write(msg.message); w.l;*)
-    res := TranslateMessage(SYSTEM.ADR(msg));
-    res := DispatchMessageW(SYSTEM.ADR(msg));
-
+    w.s("PeekMessageW: "); WindowsMessageNames.Write(msg.message); w.l;
+    IF msg.message = 0FH THEN w.sl("** PeekMessage returned WM_PAINT **") END;
+    IF msg.message = 12H THEN quit := TRUE  (* 12H = WM_QUIT *)
+    ELSE
+      res := TranslateMessage(SYSTEM.ADR(msg));
+      res := DispatchMessageW(SYSTEM.ADR(msg));
+      res := PeekMessageW(SYSTEM.ADR(msg), 0,0,0,1); (* Get and remove messgae if available *)
+    END
+  END;
+  (*
+  (* There may still be a WM_PAINT in the queue, but only GetMessage can return that. *)
+  IF ~quit & (GetQueueStatus(20H) # 0) THEN  (* Check for pending WM_PAINT *)
+    w.sl("** GetQueueStatus reported WM_PAINT available **");
     res := GetMessageW(SYSTEM.ADR(msg), 0,0,0);
+    w.s("GetMessageW: "); WindowsMessageNames.Write(msg.message); w.l;
+    IF  res # 0 THEN
+      res := TranslateMessage(SYSTEM.ADR(msg));
+      res := DispatchMessageW(SYSTEM.ADR(msg))
+    END
   END
-END MessagePump;
+  *)
+RETURN ~quit END MessagePump;
+
+
+PROCEDURE ProcessOneMessage* (): INTEGER;  (* 0 - none available, 1 - processed, 2 - WM_QUIT received *)
+VAR
+  msg:  MSG;
+  res:  INTEGER;
+BEGIN
+  res := PeekMessageW(SYSTEM.ADR(msg), 0,0,0,1); (* Get and remove message if available *)
+  IF res # 0  THEN
+    IF msg.message = 12H THEN
+      res :=  2  (* 12H = WM_QUIT *)
+    ELSE
+      res := TranslateMessage(SYSTEM.ADR(msg));
+      res := DispatchMessageW(SYSTEM.ADR(msg));
+      res := 1;
+    END
+  END
+RETURN res END ProcessOneMessage;
+
+PROCEDURE WaitMsgOrTime*(time: INTEGER);  (* Waits for time (ms) OR message in queue *)
+BEGIN MsgWaitForMultipleObjects(0, 0, 0, time, 1DFFH);
+END WaitMsgOrTime;
+
+
+(* Shortcut to get the next message if and only if it is a mouse movement *)
+PROCEDURE GetMouseMessage* (VAR x, y: INTEGER;  VAR flags: SET): BOOLEAN;
+VAR
+  msg:  MSG;
+  res:  INTEGER;
+BEGIN
+  res := PeekMessageW(SYSTEM.ADR(msg), 0, 200H, 209H, 1); (* Any mouse move w/wout click *)
+  IF res # 0 THEN
+    x := msg.lParam MOD 10000H;
+    y := msg.lParam DIV 10000H MOD 10000H;
+    flags := {};
+    IF ODD(msg.wParam DIV 2)  THEN INCL(flags, 0) END;  (* (1) -> MR *)
+    IF ODD(msg.wParam DIV 16) THEN INCL(flags, 1) END;  (* (4) -> MM *)
+    IF ODD(msg.wParam)        THEN INCL(flags, 2) END;  (* (0) -> ML *)
+  END
+RETURN res # 0 END GetMouseMessage;
 
 
 PROCEDURE InvalidateRect* (w: Window; x, y, width, height: INTEGER);
@@ -444,15 +709,19 @@ BEGIN
   w.sl("Hello teapots.");
 
   K.GetProc(K.Kernel, "GetLastError",       GetLastError);        ASSERT(GetLastError       # NIL);
+  K.GetProc(K.Kernel, "Sleep",              Sleep);               ASSERT(Sleep              # NIL);
   K.GetProc(K.Gdi,    "CreateDIBSection",   CreateDIBSection);    ASSERT(CreateDIBSection   # NIL);
   K.GetProc(K.Gdi,    "SelectObject",       SelectObject);        ASSERT(SelectObject       # NIL);
   K.GetProc(K.Gdi,    "DeleteObject",       DeleteObject);        ASSERT(DeleteObject       # NIL);
   K.GetProc(K.Gdi,    "CreateCompatibleDC", CreateCompatibleDC);  ASSERT(CreateCompatibleDC # NIL);
+  K.GetProc(K.Gdi,    "CreateBitmap",       CreateBitmap);        ASSERT(CreateBitmap       # NIL);
   K.GetProc(K.Gdi,    "BitBlt",             BitBlt);              ASSERT(BitBlt             # NIL);
   K.GetProc(K.User,   "LoadCursorW",        LoadCursorW);         ASSERT(LoadCursorW        # NIL);
   K.GetProc(K.User,   "RegisterClassExW",   RegisterClassExW);    ASSERT(RegisterClassExW   # NIL);
   K.GetProc(K.User,   "CreateWindowExW",    CreateWindowExW);     ASSERT(CreateWindowExW    # NIL);
   K.GetProc(K.User,   "GetMessageW",        GetMessageW);         ASSERT(GetMessageW        # NIL);
+  K.GetProc(K.User,   "PeekMessageW",       PeekMessageW);        ASSERT(PeekMessageW       # NIL);
+  K.GetProc(K.User,   "GetQueueStatus",     GetQueueStatus);      ASSERT(GetQueueStatus     # NIL);
   K.GetProc(K.User,   "TranslateMessage",   TranslateMessage);    ASSERT(TranslateMessage   # NIL);
   K.GetProc(K.User,   "DispatchMessageW",   DispatchMessageW);    ASSERT(DispatchMessageW   # NIL);
   K.GetProc(K.User,   "DefWindowProcW",     DefWindowProcW);      ASSERT(DefWindowProcW     # NIL);
@@ -465,6 +734,11 @@ BEGIN
   K.GetProc(K.User,   "GetDpiForWindow",    GetDpiForWindow);     ASSERT(GetDpiForWindow    # NIL);
   K.GetProc(K.User,   "ShowWindow",         ShowWindow);          ASSERT(ShowWindow         # NIL);
   K.GetProc(K.User,   "InvalidateRect",     WInvalidateRect);     ASSERT(WInvalidateRect    # NIL);
+  K.GetProc(K.User,   "ShowCursor",         ShowCursor);          ASSERT(ShowCursor         # NIL);
+  K.GetProc(K.User,   "CreateIconIndirect", CreateIconIndirect);  ASSERT(CreateIconIndirect # NIL);
+
+  K.GetProc(K.User, "MsgWaitForMultipleObjects", MsgWaitForMultipleObjects);
+  ASSERT(MsgWaitForMultipleObjects # NIL);
 
   K.GetProc(K.User, "SetProcessDpiAwarenessContext", SetProcessDpiAwarenessContext);
   ASSERT(SetProcessDpiAwarenessContext # NIL);

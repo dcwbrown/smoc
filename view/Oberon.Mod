@@ -1,6 +1,6 @@
 MODULE Oberon; (*JG 6.9.90 / 23.9.93 / 13.8.94 / NW 14.4.2013 / 22.12.2015 / AP 1.9.22 Extended Oberon / DCWB 8May23 *)
 IMPORT SYSTEM, Kernel,  Windows, Files, Modules, Input,   Display,
-               Viewers, Fonts, Texts,   w := Writer;
+               Viewers, Fonts, Texts,   o := Writer;
 
 CONST
   consume*    = 0;  (*message ids*)
@@ -19,15 +19,19 @@ CONST
   TAB     = 09X;
   LF      = 0AX;
   CR      = 0DX;
-  ESC     = 1BX;
-  SETSTAR = 1AX;
+  ESC     = 1BH;
+  SETSTAR = 1AH;
 
 TYPE
-  Painter* = PROCEDURE (x, y: INTEGER);
-  Marker*  = RECORD Fade*, Draw*: Painter END;
+  ARGB = SYSTEM.CARD32;
 
-  Cursor* = RECORD
-     marker*: Marker;  on*: BOOLEAN;  X*, Y*: INTEGER
+  Sprite* = POINTER TO SpriteDesc;  (* Used for curors and other markers *)
+  SpriteDesc = RECORD
+    glyph:  Fonts.Glyph;        (* Determines render image and save size *)
+    x:      INTEGER;            (* In whole pixels                       *)
+    y:      INTEGER;            (* In whole pixels                       *)
+    save:   ARRAY 256 OF ARGB;  (* Saved background - enough for 16x16   *)
+    next:   Sprite              (* Next in list of enabled sprites       *)
   END;
 
   InputMsg* = RECORD (Display.FrameMsg)
@@ -67,27 +71,10 @@ TYPE
 
   DisplayDumper = PROCEDURE;
 
-  ARGB = SYSTEM.CARD32;
-
-  Sprite = POINTER TO SpriteDesc;
-  SpriteDesc = RECORD
-    on:     BOOLEAN;
-    glyph:  Fonts.Glyph;
-    x:      INTEGER;             (* In 256ths of a pixel *)
-    y:      INTEGER;             (* In whole pixels      *)
-    save:   ARRAY 256 OF ARGB;  (* Saved background     *)
-    sx, sy: INTEGER;             (* In whole pixels      *)
-    sw, sh: INTEGER              (* Enough space for up to 32x32 *)
-  END;
-
 
 VAR
   User*:     ARRAY 8 OF CHAR;
   Password*: INTEGER;
-  Arrow*:    Marker;  (*predefined marker representing an arrow pointing to the NW*)
-  Star*:     Marker;  (*predefined marker representing a star symbol*)
-  Mouse:     Cursor;  (*predefined cursor representing a mouse*)
-  Pointer:   Cursor;  (*predefined cursor representing a global system pointer*)
   Log*:      Texts.Text;
 
   Par*: RECORD
@@ -118,16 +105,25 @@ VAR
 
   DumpDisplay: DisplayDumper;
 
-  (* Marker glyphs *)
-  ArrowGlyph:  Fonts.Glyph;
-  StarGlyph:   Fonts.Glyph;
-  HookGlyph:   Fonts.Glyph;
-  UpdownGlyph: Fonts.Glyph;
-  BlockGlyph:  Fonts.Glyph;
-  CrossGlyph:  Fonts.Glyph;
-  GreyGlyph:   Fonts.Glyph;
+  (* Sprite glyphs *)
+  ArrowGlyph*:  Fonts.Glyph;
+  StarGlyph*:   Fonts.Glyph;
+  HookGlyph*:   Fonts.Glyph;
+  UpdownGlyph*: Fonts.Glyph;
+  BlockGlyph*:  Fonts.Glyph;
+  CrossGlyph*:  Fonts.Glyph;
+  GreyGlyph*:   Fonts.Glyph;
+  ThumbGlyph*:  Fonts.Glyph;
 
-  TestSprite: Sprite;
+  PrevX: INTEGER;
+  PrevY: INTEGER;
+
+  (* There are at most one of each of these 3 sprites                    *)
+  Mouse*: Sprite;  (* Mouse pointer represented by Arrow/UpdownGlyph     *)
+  Star*:  Sprite;  (* Viewer mark represented by StarGlyph               *)
+  Hook*:  Sprite;  (* Text position mark represented by HookGlyph        *)
+
+  EnabledSprites: Sprite;  (* List of sprites showing *)
 
 (*user identification*)
 
@@ -164,11 +160,107 @@ END Time;
 
 (* --------------------------- Marks and cursors ---------------------------- *)
 
+(* Marks and cursors are represented by 'sprites'. Each sprite is a location  *)
+(* on the screen at which to render a glyph.                                  *)
+(*                                                                            *)
+(* During normal bitmap update by viewers/frames, the sprites are not present *)
+(* in the window bitmap.                                                      *)
+(*                                                                            *)
+(* Sprites are only rendered to the screen bitmap just before the BitBlt to   *)
+(* the screen device, and are removed immediately afterwards. (Only sprites   *)
+(* that affect the BitBlt area will be rendered and removed.)                 *)
+(*                                                                            *)
+(* Clients (frames and viewers) add and remove sprites to the sprite list by  *)
+(* enabling/disabling them.                                                   *)
 
+
+PROCEDURE GetPixelGlyphBox(g: Fonts.Glyph; gx, gy: INTEGER; VAR x, y, w, h: INTEGER);
+BEGIN  (* Return pixel box relative to origin that contains all glyph subpixels *)
+  x := (gx * 4 + g.originX) DIV 4;
+  w := (gx * 4 + g.originX + g.mapWidth + 3) DIV 4 - x;
+  y := gy - g.baseline;
+  h := g.mapHeight;
+END GetPixelGlyphBox;
+
+
+PROCEDURE InvalidateSpriteRect(s: Sprite);
+VAR x, y, w, h: INTEGER;
+BEGIN
+  GetPixelGlyphBox(s.glyph, s.x, s.y, x, y, w, h);
+  Windows.InvalidateRect(Display.Window, x, y, w, h);
+END InvalidateSpriteRect;
+
+
+PROCEDURE Enabled(s: Sprite): BOOLEAN;
+VAR p: Sprite;
+BEGIN p := EnabledSprites;  WHILE (p # NIL) & (p # s) DO p := p.next END;
+RETURN p = s END Enabled;
+
+
+PROCEDURE EnableSprite*(s: Sprite);  (* Does nothing if already enabled *)
+BEGIN
+  IF ~Enabled(s) THEN
+    s.next := EnabledSprites;  EnabledSprites := s;  InvalidateSpriteRect(s)
+  END
+END EnableSprite;
+
+
+PROCEDURE DisableSprite*(s: Sprite);  (* Does nothing if already disabled *)
+VAR p: Sprite;
+BEGIN
+  IF EnabledSprites # NIL THEN
+    InvalidateSpriteRect(s);
+    IF s = EnabledSprites THEN
+      EnabledSprites := EnabledSprites.next
+    ELSE
+      p := EnabledSprites;
+      WHILE (p.next # NIL) & (p.next # s) DO p := p.next END;
+      IF p.next = s THEN p.next := s.next END
+    END
+  END;
+  s.next := NIL;
+END DisableSprite;
+
+
+PROCEDURE SetSpritePos* (s: Sprite; x, y: INTEGER);
+BEGIN
+  InvalidateSpriteRect(s);  s.x := x;  s.y := y;  InvalidateSpriteRect(s)
+END SetSpritePos;
+
+PROCEDURE SetSpriteGlyph*(s: Sprite; g: Fonts.Glyph);
+BEGIN s.glyph := g END SetSpriteGlyph;
+
+
+(* Convenience functions *)
+
+
+PROCEDURE SetMouseGlyph* (g: Fonts.Glyph);
+BEGIN Mouse.glyph := g END SetMouseGlyph;
+
+
+PROCEDURE SetStarPos* (x, y: INTEGER);
+BEGIN SetSpritePos(Star, x, y);  EnableSprite(Star) END SetStarPos;
+
+PROCEDURE SetHookPos* (x, y: INTEGER);
+BEGIN o.s("Set hook pos "); o.i(x); o.c(","); o.i(y); o.sl(".");
+SetSpritePos(Hook, x, y);  EnableSprite(Hook) END SetHookPos;
+
+PROCEDURE RemoveMarks*(x, y, w, h: INTEGER);
+BEGIN
+  IF (Hook.x > x - 8) & (Hook.x < x + w + 8)
+   & (Hook.y > y - 8) & (Hook.y < y + h + 8) THEN DisableSprite(Hook) END;
+
+  IF (Star.x > x - 8) & (Star.x < x + w + 8)
+   & (Star.y > y - 8) & (Star.y < y + h + 8) THEN DisableSprite(Star) END
+END RemoveMarks;
+
+
+(* ---------------------------- Sprite rendering ---------------------------- *)
 
 PROCEDURE SaveRect(bmp: Windows.Bitmap; x, y, wi, h: INTEGER; VAR buf: ARRAY OF ARGB);
 VAR sadr, i, ilim, ylim: INTEGER;
 BEGIN ASSERT(wi * h <= LEN(buf));
+  (*o.s("SaveRect "); Display.wxy(x,y); o.s(" size "); Display.wxy(wi,h); o.sl(".");*)
   i := 0;  ylim := y + h;
   WHILE y < ylim DO
     sadr := bmp.address + 4 * (bmp.width * y + x);  ilim := i + wi;
@@ -177,10 +269,10 @@ BEGIN ASSERT(wi * h <= LEN(buf));
   END
 END SaveRect;
 
-
 PROCEDURE RestoreRect(buf: ARRAY OF ARGB; bmp: Windows.Bitmap; x, y, wi, h: INTEGER);
 VAR tadr, i, ilim, ylim: INTEGER;
 BEGIN ASSERT(wi * h <= LEN(buf));
+  (*o.s("RestoreRect "); Display.wxy(x,y); o.s(" size "); Display.wxy(wi,h); o.sl(".");*)
   i := 0;  ylim := y + h;
   WHILE y < ylim DO
     tadr := bmp.address + 4 * (bmp.width * y + x);  ilim := i + wi;
@@ -190,145 +282,116 @@ BEGIN ASSERT(wi * h <= LEN(buf));
 END RestoreRect;
 
 
-PROCEDURE DrawSprite(s: Sprite;  bmp: Windows.Bitmap);
-VAR x, y: INTEGER;  pixel: ARGB;  i, sadr: INTEGER;
-BEGIN ASSERT(s.on);  ASSERT(s.glyph # NIL);
-  s.sx := (s.x - s.glyph.originX) DIV 256;
-  s.sy := s.y - s.glyph.baseline;
-  s.sw := (s.x - s.glyph.originX + s.glyph.mapWidth*64 + 255) DIV 256 - s.sx;
-  s.sh := s.glyph.mapHeight;
-  SaveRect(bmp, s.sx, s.sy, s.sw, s.sh, s.save);
-  Display.RenderAlphaMap(
-    s.x DIV 64 + s.glyph.originX,  s.y - s.glyph.baseline,
-    s.glyph.mapWidth,              s.glyph.mapHeight,
-    s.glyph.map,                   0FFFFFFH)
-END DrawSprite;
+(* TODO - only add/remove sprites that affect the paint rectangle *)
 
-
-PROCEDURE UnDrawSprite(s: Sprite;  bmp: Windows.Bitmap);
-VAR x, y: INTEGER;  pixel: ARGB;  i, tadr: INTEGER;
-BEGIN ASSERT(s.on);
-  RestoreRect(s.save, bmp, s.sx, s.sy, s.sw, s.sh)
-END UnDrawSprite;
-
-
-
-
-
-
-
-
-(* ------------------------ old mark and cursor code ------------------------ *)
-(*
-
-
-(*cursors handling*)
-
-PROCEDURE FlipArrow (X, Y: INTEGER);
+PROCEDURE PreRenderSprites;  (* Add enabled sprites to window bitmap *)
+VAR p, q: Sprite;  x, y, w, h: INTEGER;
 BEGIN
-  IF X < CL THEN
-    IF X > DW - 15 THEN X := DW - 15 END
-  ELSE
-    IF X > CL + DW - 15 THEN X := CL + DW - 15 END
-  END;
-  IF Y < 14 THEN Y := 14 ELSIF Y > DH THEN Y := DH END;
-  Display.CopyPattern(Display.white, Display.arrow, X, Y - 14, Display.invert)
-END FlipArrow;
-
-PROCEDURE FlipStar (X, Y: INTEGER);
-BEGIN
-  IF X < CL THEN
-    IF X < 7 THEN X := 7 ELSIF X > DW - 8 THEN X := DW - 8 END
-  ELSE
-    IF X < CL + 7 THEN X := CL + 7 ELSIF X > CL + DW - 8 THEN X := CL + DW - 8 END
-  END;
-  IF Y < 7 THEN Y := 7 ELSIF Y > DH - 8 THEN Y := DH - 8 END;
-  Display.CopyPattern(Display.white, Display.star, X - 7, Y - 7, Display.invert)
-END FlipStar;
-*)
-
-PROCEDURE OpenCursor(VAR c: Cursor);
-BEGIN c.on := FALSE;  c.X := 0;  c.Y := 0
-END OpenCursor;
-
-PROCEDURE FadeCursor(VAR c: Cursor);
-BEGIN IF c.on THEN c.marker.Fade(c.X, c.Y);  c.on := FALSE END
-END FadeCursor;
-
-PROCEDURE DrawCursor(VAR c: Cursor;  m: Marker;  x, y: INTEGER);
-BEGIN
-  IF c.on & ((x # c.X) OR (y # c.Y) OR (m.Draw # c.marker.Draw)) THEN
-    c.marker.Fade(c.X, c.Y);  c.on := FALSE
-  END;
-  IF ~c.on THEN
-    m.Draw(x, y);  c.marker := m;  c.X := x;  c.Y := y;  c.on := TRUE
+  p := EnabledSprites;  EnabledSprites := NIL;
+  WHILE p # NIL DO
+    (*o.s("Pre-render sprite $"); o.h(SYSTEM.ADR(p^)); o.s(" at ");  Display.wxy(p.x, p.y); o.sl(".");*)
+    GetPixelGlyphBox(p.glyph, p.x, p.y,  x, y, w, h);
+    SaveRect(Display.Window.bmp,  x, y, w, h,  p.save);
+    Display.RenderAlphaMap(
+      p.x * 4 + p.glyph.originX, p.y - p.glyph.baseline,
+      p.glyph.mapWidth,          p.glyph.mapHeight,
+      p.glyph.map,               0FFFFFFH);
+    (* Put sprites back on the EnabledSprites list in reverse order *)
+    q := p.next;
+    p.next := EnabledSprites;
+    EnabledSprites := p;
+    p := q
   END
-END DrawCursor;
-
-PROCEDURE DrawMouse*(m: Marker;  x, y: INTEGER);
-BEGIN DrawCursor(Mouse, m, x, y)
-END DrawMouse;
-
-PROCEDURE DrawMouseArrow*(x, y: INTEGER);
-BEGIN DrawCursor(Mouse, Arrow, x, y)
-END DrawMouseArrow;
-
-PROCEDURE DrawMouseStar*(x, y: INTEGER);
-BEGIN DrawCursor(Mouse, Star, x, y)
-END DrawMouseStar;
-
-PROCEDURE FadeMouse*;
-BEGIN FadeCursor(Mouse)
-END FadeMouse;
-
-PROCEDURE MouseOn*(): BOOLEAN;
-BEGIN RETURN Mouse.on
-END MouseOn;
-
-PROCEDURE DrawPointer*(m: Marker;  x, y: INTEGER);
-BEGIN DrawCursor(Pointer, m, x, y)
-END DrawPointer;
-
-PROCEDURE DrawPointerArrow*(x, y: INTEGER);
-BEGIN DrawCursor(Pointer, Arrow, x, y)
-END DrawPointerArrow;
-
-PROCEDURE DrawPointerStar*(x, y: INTEGER);
-BEGIN DrawCursor(Pointer, Star, x, y)
-END DrawPointerStar;
-
-PROCEDURE FadePointer*;
-BEGIN FadeCursor(Pointer)
-END FadePointer;
+END PreRenderSprites;
 
 
-PROCEDURE PointerOn*(): BOOLEAN;
-BEGIN w.sl("PointerOn.");
-  w.s("Pointer at $"); w.h(SYSTEM.ADR(Pointer)); w.sl(".");
-  w.s("Pointer is ");  IF Pointer.on THEN w.sl("on.") ELSE w.sl("off.") END;
-  RETURN Pointer.on
-END PointerOn;
-
-PROCEDURE RemoveMarks*(X, Y, W, H: INTEGER);
+PROCEDURE PostRenderSprites;  (* Erase enabled sprites from the window bitmap *)
+VAR p, q: Sprite;  x, y, w, h: INTEGER;
 BEGIN
-  (*
-  IF (Mouse.X > X     - 16)
-   & (Mouse.X < X + W + 16)
-   & (Mouse.Y > Y     - 16)
-   & (Mouse.Y < Y + H + 16) THEN
-    FadeCursor(Mouse)
-  END;
-  IF (Pointer.X > X     - 8)
-   & (Pointer.X < X + W + 8)
-   & (Pointer.Y > Y     - 8)
-   & (Pointer.Y < Y + H + 8) THEN
-    FadeCursor(Pointer)
+  p := EnabledSprites;  EnabledSprites := NIL;
+  WHILE p # NIL DO
+    (*o.s("Post-render sprite $"); o.h(SYSTEM.ADR(p^)); o.s(" at ");  Display.wxy(p.x, p.y); o.sl(".");*)
+    GetPixelGlyphBox(p.glyph, p.x, p.y, x, y, w, h);
+    RestoreRect(p.save, Display.Window.bmp, x, y, w, h);
+    (* Put sprites back on the EnabledSprites list in reverse order *)
+    q := p.next;
+    p.next := EnabledSprites;
+    EnabledSprites := p;
+    p := q
   END
-  *)
-END RemoveMarks;
+END PostRenderSprites;
+
+(* -------------------------------------------------------------------------- *)
 
 
-(*current looks*)
+
+
+(* PROCEDURE DrawMouse*(s: Sprite;  x, y: INTEGER);                             *)
+(* BEGIN DrawSprite(Mouse, s, x, y)                                             *)
+(* END DrawMouse;                                                               *)
+(*                                                                              *)
+(* PROCEDURE DrawMouseArrow*(x, y: INTEGER);                                    *)
+(* BEGIN                                                                        *)
+(*   o.s("Oberon.DrawMouseArrow("); o.i(x); o.c(","); o.i(y); o.sl(").");       *)
+(*   DrawSprite(Mouse, Arrow, x, y)                                             *)
+(* END DrawMouseArrow;                                                          *)
+(*                                                                              *)
+(* PROCEDURE DrawMouseStar*(x, y: INTEGER);                                     *)
+(* BEGIN DrawSprite(Mouse, Star, x, y)                                          *)
+(* END DrawMouseStar;                                                           *)
+(*                                                                              *)
+(* PROCEDURE FadeMouse*;                                                        *)
+(* BEGIN FadeSprite(Mouse)                                                      *)
+(* END FadeMouse;                                                               *)
+(*                                                                              *)
+(* PROCEDURE MouseOn*(): BOOLEAN;                                               *)
+(* BEGIN RETURN Mouse.on                                                        *)
+(* END MouseOn;                                                                 *)
+(*                                                                              *)
+(* PROCEDURE DrawPointer*(s: Sprite;  x, y: INTEGER);                           *)
+(* BEGIN DrawSprite(Pointer, s, x, y)                                           *)
+(* END DrawPointer;                                                             *)
+(*                                                                              *)
+(* PROCEDURE DrawPointerArrow*(x, y: INTEGER);                                  *)
+(* BEGIN DrawSprite(Pointer, Arrow, x, y)                                       *)
+(* END DrawPointerArrow;                                                        *)
+(*                                                                              *)
+(* PROCEDURE DrawPointerStar*(x, y: INTEGER);                                   *)
+(* BEGIN DrawSprite(Pointer, Star, x, y)                                        *)
+(* END DrawPointerStar;                                                         *)
+(*                                                                              *)
+(* PROCEDURE FadePointer*;                                                      *)
+(* BEGIN FadeSprite(Pointer)                                                    *)
+(* END FadePointer;                                                             *)
+(*                                                                              *)
+(*                                                                              *)
+(* PROCEDURE PointerOn*(): BOOLEAN;                                             *)
+(* BEGIN o.sl("PointerOn.");                                                    *)
+(*   o.s("Pointer at $"); o.h(SYSTEM.ADR(Pointer)); o.sl(".");                  *)
+(*   o.s("Pointer is ");  IF Pointer.on THEN o.sl("on.") ELSE o.sl("off.") END; *)
+(*   RETURN Pointer.on                                                          *)
+(* END PointerOn;                                                               *)
+(*                                                                              *)
+(* PROCEDURE RemoveMarks*(X, Y, W, H: INTEGER);                                 *)
+(* BEGIN                                                                        *)
+(*   (*                                                                         *)
+(*   IF (Mouse.x > X     - 16)                                                  *)
+(*    & (Mouse.x < X + W + 16)                                                  *)
+(*    & (Mouse.y > Y     - 16)                                                  *)
+(*    & (Mouse.y < Y + H + 16) THEN                                             *)
+(*     FadeSprite(Mouse)                                                        *)
+(*   END;                                                                       *)
+(*   IF (Pointer.X > X     - 8)                                                 *)
+(*    & (Pointer.X < X + W + 8)                                                 *)
+(*    & (Pointer.Y > Y     - 8)                                                 *)
+(*    & (Pointer.Y < Y + H + 8) THEN                                            *)
+(*     FadeSprite(Pointer)                                                      *)
+(*   END                                                                        *)
+(*   *)                                                                         *)
+(* END RemoveMarks;                                                             *)
+
+
+(* ----------------------------- Current looks ------------------------------ *)
 
 PROCEDURE SetFont*(fnt: Fonts.Font);
 BEGIN CurFnt := fnt
@@ -358,23 +421,22 @@ END GetSelection;
 
 PROCEDURE HandleFiller (V: Display.Frame;  VAR M: Display.FrameMsg);
 BEGIN
-  (*
+  o.sl("Oberon.HandleFiller.");
   CASE M OF
-  | InputMsg: IF M.id = track THEN DrawMouseArrow(M.X, M.Y) END
-  | ControlMsg: IF M.id = mark THEN DrawPointerStar(M.X, M.Y) END
+  | InputMsg:   IF M.id = track THEN (* Mouse position is updated by top level handler *)END
+  | ControlMsg: IF M.id = mark  THEN SetSpritePos(Star,  M.X, M.Y);  EnableSprite(Star) END
   | Viewers.ViewerMsg:
     IF (M.id = Viewers.restore) & (V.W > 0) & (V.H > 0) THEN
       RemoveMarks(V.X, V.Y, V.W, V.H);
-      Display.ReplConst(Display.black, V.X, V.Y, V.W, V.H, Display.replace)
+      Windows.FillRectangle(Display.Window.bmp, V.X, V.Y, V.W, V.H, 0)
     ELSIF M.id = Viewers.modify THEN
       IF M.Y < V.Y THEN
         RemoveMarks(V.X, M.Y, V.W, V.Y - M.Y);
-        Display.ReplConst(Display.black, V.X, M.Y, V.W, V.Y - M.Y, Display.replace)
+        Windows.FillRectangle(Display.Window.bmp, V.X, M.Y, V.W, V.Y - M.Y, 0)
       ELSIF M.Y > V.Y THEN RemoveMarks(V.X, V.Y, V.W, M.Y - V.Y)
       END
     END
   END
-  *)
 END HandleFiller;
 
 PROCEDURE InitTrack*(D: Viewers.DisplayArea;  W, H: INTEGER); (*add new track to the right*)
@@ -414,13 +476,14 @@ BEGIN RETURN DH
 END DisplayHeight;
 
 PROCEDURE MarkedViewer*(): Viewers.Viewer;
-BEGIN RETURN Viewers.This(Pointer.X, Pointer.Y)
+BEGIN RETURN Viewers.This(Star.x, Star.y)
 END MarkedViewer;
 
 PROCEDURE PassFocus*(V: Viewers.Viewer);
 VAR M: ControlMsg;
 BEGIN
   IF Viewers.FocusViewer # NIL  THEN
+    o.sl("  defocus.");
     M.id := defocus;  Viewers.FocusViewer.handle(Viewers.FocusViewer, M)
   END;
   Viewers.SetFocus(Viewers.ThisDisplay(V), V)
@@ -450,7 +513,7 @@ END UY;
 
 PROCEDURE AllocateUserViewer*(DX: INTEGER;  VAR X, Y: INTEGER);
 BEGIN
-  IF PointerOn() THEN X := Pointer.X;  Y := Pointer.Y
+  IF Enabled(Star) THEN X := Star.x;  Y := Star.y
   ELSE X := DX DIV DW * DW;  Y := UY(X)
   END
 END AllocateUserViewer;
@@ -460,7 +523,7 @@ VAR
   H0,  H1,  H2,  H3,  y:   INTEGER;
   fil, top, bot, alt, max: Display.Frame;
 BEGIN
-  w.s("Oberon.SplitY(X "); w.i(X); w.s(") starting.");
+  o.s("Oberon.SplitY(X "); o.i(X); o.s(") starting.");
   Viewers.Locate(Viewers.CurDisplay, X, DH, fil, top, bot, alt, max);
   H3 := DH - DH DIV 3;  (* H3 = 2/3  DH *)  (* DH = Display.Height *)
   H2 := H3 - H3 DIV 2;  (* H2 = 1/3  DH *)
@@ -472,36 +535,40 @@ BEGIN
   ELSIF max.H >= H2 - H0  THEN y := max.Y + max.H - H1
                           ELSE y := max.Y + max.H DIV 2
   END;
-  w.s("Oberon.SplitY returning "); w.i(y); w.sl(".");
+  o.s("Oberon.SplitY returning "); o.i(y); o.sl(".");
   RETURN y
 END SplitY;
 
 PROCEDURE AllocateSystemViewer*(DX: INTEGER;  VAR X, Y: INTEGER);
 BEGIN
-  w.sl("Oberon.AllocateSystemViewer starting.");
-  IF PointerOn() THEN
-    X := Pointer.X;  Y := Pointer.Y
+  o.sl("Oberon.AllocateSystemViewer starting.");
+  IF Enabled(Star) THEN
+    X := Star.x;  Y := Star.y
   ELSE
     (*X := DX DIV DW * DW + DW DIV 8 * 5;*)
 
-    w.sl("1.");
+    o.sl("1.");
     X := DX DIV DW * DW;
-    w.sl("2.");
+    o.sl("2.");
     INC(X, DW DIV 8 * 5);
-    w.sl("3.");
+    o.sl("3.");
 
     Y := SplitY(X)
   END;
-  w.s("Oberon.AllocateSystemViewer returning X ");  w.i(X);
-  w.s(", Y ");  w.i(Y);  w.sl(".");
+  o.s("Oberon.AllocateSystemViewer returning X ");  o.i(X);
+  o.s(", Y ");  o.i(Y);  o.sl(".");
 END AllocateSystemViewer;
 
 (*garbage collection*)
 
-(*
+
 PROCEDURE CollectGarbage;
+(*
 VAR mod: Modules.Module;
+*)
 BEGIN
+  (*o.sl(".. collect garbage ..");*)
+  (*
   IF (ActCnt <= 0) OR (Kernel.allocated >= Kernel.heapLim - Kernel.heapOrg - 10000H) THEN
     mod := Modules.root;  LED(21H);
     WHILE mod # NIL DO
@@ -514,8 +581,9 @@ BEGIN
     Modules.Collect;
     ActCnt := BasicCycle
   END
+  *)
 END CollectGarbage;
-*)
+
 
 (*command interpretation*)
 
@@ -672,56 +740,84 @@ PROCEDURE SetDumpDisplay* (proc: DisplayDumper);
 BEGIN DumpDisplay := proc END SetDumpDisplay;
 
 PROCEDURE DoCharacter(ch: INTEGER);
-VAR i: INTEGER;  g: Fonts.Glyph;
+VAR N: ControlMsg;  V: Viewers.Viewer;  M: InputMsg;
 BEGIN
-  CASE CHR(ch) OF
-  | 1BX: Windows.Quit
-  | ".": Texts.WriteString(W, "'.' pressed.");
-         Texts.WriteLn(W);
-         Texts.Append(Log, W.buf);
-         Windows.Invalidate(Display.Window);
-  | "d": IF DumpDisplay # NIL THEN DumpDisplay END
-  | "m": (* Test markers *)
-         Display.RenderAlphaMap(80,       50, ArrowGlyph.mapWidth,  ArrowGlyph.mapHeight,  ArrowGlyph.map,  0FFFFFFH);
-         Display.RenderAlphaMap(80 + 128, 50, StarGlyph.mapWidth,   StarGlyph.mapHeight,   StarGlyph.map,   0FFFFFFH);
-         Display.RenderAlphaMap(80 + 256, 50, HookGlyph.mapWidth,   HookGlyph.mapHeight,   HookGlyph.map,   0FFFFFFH);
-         Display.RenderAlphaMap(80 + 384, 50, UpdownGlyph.mapWidth, UpdownGlyph.mapHeight, UpdownGlyph.map, 0FFFFFFH);
-         Display.RenderAlphaMap(80 + 512, 50, BlockGlyph.mapWidth,  BlockGlyph.mapHeight,  BlockGlyph.map,  0FFFFFFH);
-         Display.RenderAlphaMap(80 + 640, 50, CrossGlyph.mapWidth,  CrossGlyph.mapHeight,  CrossGlyph.map,  0FFFFFFH);
-         Display.RenderAlphaMap(80 + 768, 50, GreyGlyph.mapWidth,   GreyGlyph.mapHeight,   GreyGlyph.map,   0FFFFFFH);
-         Windows.InvalidateRect(Display.Window, 20, 50, 250, 20);
+
+  Windows.Invalidate(Display.Window);  (* Testing *)
+
+  IF ch = 1BH THEN (* ESC - TestOberon specific ... *)
+    Windows.Quit
+  ELSIF ch = 19H THEN  (* Ctrl/Y - originally ESC *)
+    N.id := neutralize;  Viewers.Broadcast(N);
+    DisableSprite(Hook);  DisableSprite(Star);
+    (*LED(0)*)
+  ELSIF ch = SETSTAR THEN  (* Ctrl/Z *)
+    N.id := mark;  N.X := Mouse.x;  N.Y := Mouse.y;
+    V := Viewers.This(Mouse.x, Mouse.y);  V.handle(V, N)
+  ELSE
+    M.id  := consume;  M.ch   := CHR(ch);  M.fnt := CurFnt;
+    M.col := CurCol;   M.voff := CurOff;
+    V := Viewers.FocusViewer;
+    o.s("Oberon.DoCharacter focus viewer is $"); o.h(SYSTEM.ADR(V^)); o.sl(".");
+    V.handle(V, M);
+    DEC(ActCnt)
   END
 END DoCharacter;
 
 
 PROCEDURE PreDraw(x, y, width, height: INTEGER;  bitmap: Windows.Bitmap);
-BEGIN
-  IF TestSprite.on THEN DrawSprite(TestSprite, bitmap) END;
-END PreDraw;
+BEGIN PreRenderSprites END PreDraw;
 
 
 PROCEDURE PostDraw(x, y, width, height: INTEGER;  bitmap: Windows.Bitmap);
-BEGIN
-  IF TestSprite.on THEN UnDrawSprite(TestSprite, bitmap) END;
-END PostDraw;
+BEGIN PostRenderSprites END PostDraw;
 
 
-PROCEDURE DoMouse(x, y: INTEGER;  flags: SET);
+(* --- flags values: from Windows WM_MOUSEMOVE wParam --- *)
+(* MK_LBUTTON   0x0001  The left mouse button is down.    *)
+(* MK_RBUTTON   0x0002  The right mouse button is down.   *)
+(* MK_SHIFT     0x0004  The SHIFT key is down.            *)
+(* MK_CONTROL   0x0008  The CTRL key is down.             *)
+(* MK_MBUTTON   0x0010  The middle mouse button is down.  *)
+(* MK_XBUTTON1  0x0020  The first X button is down.       *)
+(* MK_XBUTTON2  0x0040  The second X button is down.      *)
+
+PROCEDURE DoMouse(x, y: INTEGER;  flags: SET);  (* {0} MR, {1} MM, {2} ML *)
+VAR keys: SET;  M: InputMsg;  V: Viewers.Viewer;
 BEGIN
-  w.s("DoMouse("); w.i(x); w.c(","); w.i(y);
-  w.s(",$"); w.h(SYSTEM.VAL(INTEGER, flags)); w.sl(").");
-  TestSprite.x := x * 256;  TestSprite.y := y;
-  IF TestSprite.sw # 0 THEN  (* Invalidate where mouse was previously *)
-    Windows.InvalidateRect(
-      Display.Window,
-      TestSprite.sx, TestSprite.sy,
-      TestSprite.sw, TestSprite.sh)
+  o.s("DoMouse("); o.i(x); o.c(","); o.i(y);
+  o.s(",$"); o.h(SYSTEM.VAL(INTEGER, flags)); o.sl(").");
+
+  InvalidateSpriteRect(Mouse);  (* Make sure erasure of old mouse position gets displayed *)
+
+  Mouse.glyph := ArrowGlyph;  (* Default shape - viewers may override this *)
+  Mouse.x := x;
+  Mouse.y := y;
+
+  M.id := track;  M.X := x;  M.Y := y;  M.keys := {};
+  IF 1 IN flags THEN INCL(M.keys, 0) END;  (* MR *)
+  IF 4 IN flags THEN INCL(M.keys, 1) END;  (* MM *)
+  IF 0 IN flags THEN INCL(M.keys, 2) END;  (* ML *)
+
+  IF (M.keys # {}) THEN
+    V := Viewers.This(x, y);  V.handle(V, M);
+    DEC(ActCnt)
+  ELSE
+    IF (x # PrevX) OR (y # PrevY) THEN
+      M.id := track;
+      IF y >= DH THEN y := DH END;
+      M.Y := y;
+      V := Viewers.This(x, y);  V.handle(V, M);
+      PrevX := x;  PrevY := y
+    END
   END;
-  Windows.InvalidateRect(Display.Window, x, y, 20, 20);
+
+  InvalidateSpriteRect(Mouse);  (* Make sure any updated mouse position gets displayed *)
 END DoMouse;
 
 
 PROCEDURE Loop*;
+VAR res: INTEGER;  time, wait: INTEGER;  prev: Task;
 (*
 VAR V: Viewers.Viewer;  M: InputMsg;  N: ControlMsg;
     prevX, prevY, X, Y, t: INTEGER;  keys: SET;  ch: CHAR;
@@ -730,14 +826,17 @@ BEGIN
   (*
   REPEAT
     Input.Mouse(keys, X, Y);
-    IF Input.Available() > 0 THEN Input.Read(ch);
-      IF ch = ESC THEN
-        N.id := neutralize;  Viewers.Broadcast(N);  FadePointer;  LED(0)
-      ELSIF ch = SETSTAR THEN
-        N.id := mark;  N.X := X;  N.Y := Y;  V := Viewers.This(X, Y);  V.handle(V, N)
-      ELSE M.id := consume;  M.ch := ch;  M.fnt := CurFnt;
-        M.col := CurCol;  M.voff := CurOff;
-        V := Viewers.FocusViewer;  V.handle(V, M);  DEC(ActCnt)
+    IF Input.Available() > 0 THEN
+      Input.Read(ch);
+      IF    ch = ESC     THEN  N.id := neutralize;  Viewers.Broadcast(N);
+                               FadePointer;  LED(0)
+      ELSIF ch = SETSTAR THEN  N.id := mark;  N.X := X;  N.Y := Y;
+                               V := Viewers.This(X, Y);  V.handle(V, N)
+      ELSE
+        M.id  := consume;  M.ch   := ch;  M.fnt := CurFnt;
+        M.col := CurCol;   M.voff := CurOff;
+        V := Viewers.FocusViewer;  V.handle(V, M);
+        DEC(ActCnt)
       END
     ELSIF keys # {} THEN
       M.id := track;  M.X := X;  M.Y := Y;  M.keys := keys;
@@ -762,7 +861,29 @@ BEGIN
     END
   UNTIL FALSE
   *)
-  Windows.MessagePump
+
+  REPEAT
+    res := Windows.ProcessOneMessage();
+    IF res = 0 THEN  (* Empty queue *)
+      (* Find first ready task, or soonest ready if none ready now. *)
+      time    := Kernel.Time();
+      prev    := CurTask;
+      wait    := CurTask.nextTime - time;
+      CurTask := CurTask.next;
+      WHILE (CurTask # prev) & (CurTask.nextTime > time) DO
+        IF CurTask.nextTime - time < wait THEN wait := CurTask.nextTime - time END;
+        CurTask := CurTask.next
+      END;
+      IF CurTask.nextTime <= time THEN  (* There is a task ready to run *)
+        CurTask.nextTime := time + CurTask.period;
+        CurTask.state := active;  CurTask.handle;  CurTask.state := idle
+      ELSE (* There is nothing to do but wait for time or message *)
+        CurTask := CurTask.next;
+        (*o.s("Waiting "); o.i(wait); o.sl("ms.");*)
+        Windows.WaitMsgOrTime(wait)
+      END
+    END
+  UNTIL res > 1  (* => WM_QUIT *)
 END Loop;
 
 PROCEDURE Reset*;
@@ -854,14 +975,26 @@ BEGIN
 END Deferred;
 
 BEGIN
-  w.sl("Oberon initialising.");
+  o.sl("Oberon initialising.");
   User[0] := 0X;
-  (*
-  Arrow.Fade := FlipArrow;  Arrow.Draw := FlipArrow;
-  Star.Fade := FlipStar;  Star.Draw := FlipStar;
-  OpenCursor(Mouse);
-  *)
-  OpenCursor(Pointer);
+
+  ArrowGlyph  := Fonts.ConvertOberonPattern(SYSTEM.ADR($ 0F0F 0060 0070 0038 001C 000E 0007 8003 C101 E300 7700 3F00 1F00 3F00 7F00 FF00 $));
+  HookGlyph   := Fonts.ConvertOberonPattern(SYSTEM.ADR($ 0C0C 070F 8707 C703 E701 F700 7F00 3F00 1F00 0F00 0700 0300 0100                $));
+  UpdownGlyph := Fonts.ConvertOberonPattern(SYSTEM.ADR($ 080E 183C 7EFF 1818 1818 1818 FF7E 3C18                                         $));
+  BlockGlyph  := Fonts.ConvertOberonPattern(SYSTEM.ADR($ 0808 FFFF C3C3 C3C3 FFFF                                                        $));
+  CrossGlyph  := Fonts.ConvertOberonPattern(SYSTEM.ADR($ 0F0F 0140 0220 0410 0808 1004 2002 4001 0000 4001 2002 1004 0808 0410 0220 0140 $));
+  GreyGlyph   := Fonts.ConvertOberonPattern(SYSTEM.ADR($ 2002 5555 5555 AAAA AAAA                                                        $));
+  ThumbGlyph  := Fonts.ConvertOberonPattern(SYSTEM.ADR($ 0B14 FF07 FF07 FF07 FF07 FF07 FF07 FF07 FF07 FF07 FF07 FF07 FF07 FF07 FF07 FF07
+                                                                                                                FF07 FF07 FF07 FF07 FF07 $));
+  StarGlyph   := Fonts.ConvertOberonPattern(SYSTEM.ADR($ 0F0F 8000 8220 8410 8808 9004 A002 C001 7F7F C001 A002 9004 8808 8410 8220 8000 $));
+  StarGlyph.originX := -23;  StarGlyph.baseline := 7;
+
+  NEW(Hook);  SetSpriteGlyph(Hook,  HookGlyph);   (* Text position marker *)
+  NEW(Star);  SetSpriteGlyph(Star,  StarGlyph);   (* Viewer marker        *)
+  NEW(Mouse); SetSpriteGlyph(Mouse, ArrowGlyph);  (* Mouse pointer        *)
+  Mouse.x := 10;  PrevX := 10;
+  Mouse.y := 10;  PrevY := 10;
+  EnableSprite(Mouse);
 
   DW     := Display.Width;
   DH     := Display.Height;
@@ -871,9 +1004,7 @@ BEGIN
   CurOff := 0;
   ActCnt := 0;
 
-  (*
-  CurTask := NewTask(CollectGarbage, 1000);  Install(CurTask);
-  *)
+  CurTask := NewTask(CollectGarbage, 2000);  Install(CurTask);
 
   Texts.OpenWriter(W);  Texts.SetColor(W, Display.white);
 
@@ -891,20 +1022,5 @@ BEGIN
   Windows.SetMouseHandler(Display.Window, DoMouse);
   Windows.SetDrawHandlers(Display.Window, PreDraw, PostDraw);
 
-  ArrowGlyph  := Fonts.ConvertOberonPattern(SYSTEM.ADR($ 0F0F 0060 0070 0038 001C 000E 0007 8003 C101 E300 7700 3F00 1F00 3F00 7F00 FF00 $));
-  StarGlyph   := Fonts.ConvertOberonPattern(SYSTEM.ADR($ 0F0F 8000 8220 8410 8808 9004 A002 C001 7F7F C001 A002 9004 8808 8410 8220 8000 $));
-  HookGlyph   := Fonts.ConvertOberonPattern(SYSTEM.ADR($ 0C0C 070F 8707 C703 E701 F700 7F00 3F00 1F00 0F00 0700 0300 0100                $));
-  UpdownGlyph := Fonts.ConvertOberonPattern(SYSTEM.ADR($ 080E 183C 7EFF 1818 1818 1818 FF7E 3C18                                         $));
-  BlockGlyph  := Fonts.ConvertOberonPattern(SYSTEM.ADR($ 0808 FFFF C3C3 C3C3 FFFF                                                        $));
-  CrossGlyph  := Fonts.ConvertOberonPattern(SYSTEM.ADR($ 0F0F 0140 0220 0410 0808 1004 2002 4001 0000 4001 2002 1004 0808 0410 0220 0140 $));
-  GreyGlyph   := Fonts.ConvertOberonPattern(SYSTEM.ADR($ 2002 5555 5555 AAAA AAAA                                                        $));
-
-  NEW(TestSprite);
-  TestSprite.on    := TRUE;
-  TestSprite.x     := 25600;
-  TestSprite.y     := 100;
-  TestSprite.glyph := ArrowGlyph;
-  TestSprite.sw    := 0;
-
-  w.sl("Oberon initialised.");
+  o.sl("Oberon initialised.");
 END Oberon.

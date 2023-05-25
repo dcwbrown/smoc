@@ -91,7 +91,10 @@ BEGIN RETURN V.prev(Viewer)
 END Prev;
 
 PROCEDURE SetFocus* (D: DisplayArea; V: Viewer);
-BEGIN D.focus := V;
+BEGIN
+  w.s("Viewers.SetFocus to viewer $"); w.h(SYSTEM.ADR(V^)); w.sl(".");
+  D.focus := V;
+  w.s("  D $");  w.h(SYSTEM.ADR(D^));  w.s(", CurDisplay $");  w.h(SYSTEM.ADR(CurDisplay^)); w.sl(".");
   IF D = CurDisplay THEN FocusViewer := V END
 END SetFocus;
 

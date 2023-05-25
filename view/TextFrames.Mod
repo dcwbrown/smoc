@@ -1,6 +1,6 @@
 MODULE TextFrames; (*JG 8.10.90 / NW 16.11.2015 / AP 30.12.20 Extended Oberon / DCWB 8May23 *)
 
-IMPORT Input, Display, Viewers, Fonts, Texts, Oberon, w := Writer;
+IMPORT Input, Display, Viewers, Fonts, Texts, Oberon, w := Writer, SYSTEM;
 
 CONST
   replace* = Texts.replace; (*message ids*)
@@ -31,7 +31,7 @@ TYPE
 
   Line = POINTER TO LineDesc;
   LineDesc = RECORD
-    length:   INTEGER;  (* Number of character positions             *)
+    length:   INTEGER;  (* Number of (UTF-8) CHAR positions          *)
     width:    INTEGER;  (* Line width in whole pixels                *)
     ascent:   INTEGER;  (* Largest font ascent in line               *)
     descent:  INTEGER;  (* largest font descent in line              *)
@@ -42,12 +42,12 @@ TYPE
   END;
 
   Location* = RECORD
-    org*:  INTEGER;  (* Set by LocateChar, LocatePos, LocateLine *)
-    line:  Line;     (* Set by LocateChar, LocatePos, LocateLine *)
-    y*:    INTEGER;  (* Set by LocateChar, LocatePos, LocateLine *)
-    pos*:  INTEGER;  (* Set by LocateChar, LocatePos             *)
-    x*:    INTEGER;  (* Set by LocateChar, LocatePos             *)
-    dx*:   INTEGER   (* Set by LocateChar                        *)
+    org*:  INTEGER;  (* Set by LocateChar, LocateString, LocatePos, LocateLine *)
+    line:  Line;     (* Set by LocateChar, LocateString, LocatePos, LocateLine *)
+    y*:    INTEGER;  (* Set by LocateChar, LocateString, LocatePos, LocateLine *)
+    pos*:  INTEGER;  (* Set by LocateChar, LocateString, LocatePos             *)
+    x*:    INTEGER;  (* Set by LocateChar, LocateString, LocatePos             *)
+    dx*:   INTEGER   (* Set by LocateChar, LocateString                        *)
   END;
 
   Frame* = POINTER TO FrameDesc;
@@ -76,7 +76,10 @@ TYPE
     hasSel*:    BOOLEAN;
     selbeg*:    Location;
     selend*:    Location;
-    time*:      INTEGER   (* Time of last selection                          *)
+    time*:      INTEGER;  (* Time of last selection                          *)
+
+    changeMark: Oberon.Sprite;
+    thumbMark:  Oberon.Sprite
 
     (*
     markH*:        INTEGER;  (* thumb                                           *)
@@ -153,46 +156,43 @@ END LastLine;
 
 (*------------------display support------------------------*)
 
-PROCEDURE UpdateMark (F: Frame);  (*in scroll bar*)
-VAR h, oldH: INTEGER;
+PROCEDURE MarkThumb* (F: Frame;  on: BOOLEAN);  (*in scroll bar*)
 BEGIN
-  (*
-  oldH := F.markH;  h := Min(F.H - 2, 20);  F.markH := Max(F.org * F.H DIV (F.text.length + 1), 1);
-  IF (h > 0) & F.hasMark & (F.left >= BarWidth) & (F.markH # oldH) THEN
-    Display.ReplConst(Display.white, F.X + 2, Max(F.Y + F.H - 1 -  oldH   - h, F.Y + 1),
-                      markW, h, Display.invert);
-    Display.ReplConst(Display.white, F.X + 2, Max(F.Y + F.H - 1 - F.markH - h, F.Y + 1),
-                      markW, h, Display.invert)
+  IF (F.H > 0) & (F.left >= BarWidth) THEN
+    IF on THEN
+      Oberon.SetSpritePos(F.thumbMark, F.X + 3, F.Y + F.thumb + 2);
+      Oberon.EnableSprite(F.thumbMark)
+    ELSE
+      Oberon.DisableSprite(F.thumbMark)
+    END
   END
-  *)
-END UpdateMark;
+END MarkThumb;
 
-PROCEDURE Mark* (F: Frame;  on: BOOLEAN);  (*in scroll bar*)
-VAR h: INTEGER;
+
+PROCEDURE UpdateThumb (F: Frame);  (*in scroll bar*)
 BEGIN
-  (*
-  h := Min(F.H - 2, 20);
-  IF (F.H > 0) & (F.left >= BarWidth) & ((F.hasMark & ~on) OR (~F.hasMark & on)) THEN
-    Display.ReplConst(Display.white, F.X + 2, Max(F.Y + F.H - 1 - F.markH - h, F.Y + 1),
-                      markW, h, Display.invert)
-  END;
-  F.hasMark := on
-  *)
-END Mark;
+  F.thumb := Max(F.org * (F.H - 24) DIV (F.text.length + 1), 0);
+  w.s("UpdateThumb: F.org "); w.i(F.org);
+  w.s(", F.text.length ");    w.i(F.H);
+  w.s(", F.H ");              w.i(F.H);
+  w.s("-> F.thumb ");         w.i(F.thumb); w.sl(".");
+  MarkThumb(F, TRUE)
+END UpdateThumb;
+
 
 PROCEDURE SetChangeMark (F: Frame;  on: BOOLEAN);  (*in corner*)
 BEGIN
-  (*
-  IF F.H > menuH THEN
-    IF ~F.hasChangeMark & on THEN
-      Display.CopyPatternClipped(Display.white, Display.block, F.X+F.W-12, F.Y+F.H-12,
-                                 0, 0, 0, 0, Display.paint)
-    ELSIF F.hasChangeMark & ~on THEN Display.ReplConst(F.col, F.X+F.W-12, F.Y+F.H-12,
-                                                       8, 8, Display.replace)
+  w.s("TextFrames.SetChangeMark $"); w.h(SYSTEM.ADR(F^));
+  IF on THEN w.sl(" on.") ELSE w.sl(" off.") END;
+  IF F.H > MenuHeight THEN
+    ASSERT(F.changeMark # NIL);
+    IF on THEN
+      Oberon.SetSpritePos(F.changeMark, F.X+F.W-12, F.Y+4);
+      Oberon.EnableSprite(F.changeMark)
+    ELSE
+      Oberon.DisableSprite(F.changeMark)
     END
-  END;
-  F.hasChangeMark := on
-  *)
+  END
 END SetChangeMark;
 
 
@@ -371,7 +371,7 @@ BEGIN
     END
   END;
   L.next := F.sentinel;
-  F.markH := F.org * F.H DIV (F.text.length + 1)
+  F.thumb := F.org * F.H DIV (F.text.length + 1)
   *)
 END Extend;
 
@@ -392,7 +392,7 @@ BEGIN
   ELSIF F.H > F.top THEN Display.ReplConst(F.col, F.X + F.left, F.Y, F.W - F.left,
                                            F.H - F.top, Display.replace)
   END;
-  F.markH := F.org * F.H DIV (F.text.length + 1);  Mark(F, TRUE)
+  F.thumb := F.org * F.H DIV (F.text.length + 1);  MarkThumb(F, TRUE)
   *)
 END Reduce;
 
@@ -429,7 +429,7 @@ BEGIN
   IF (L0 # F.sentinel) & (curY > Y1) THEN
     DisplayLine(F, L0, R, F.X + F.left, curY - L0.ascent, topY, Y1, 0)  (*old fractional top line*)
   END;
-  UpdateMark(F)
+  UpdateThumb(F)
   *)
 END ScrollDown;
 
@@ -461,7 +461,7 @@ BEGIN
     DisplayLine(F, l, R, F.X + F.left, curY - l.ascent, topY, botY, 0);
     L.next := l;  L := l;  org := org + L.length;  curY := curY - L.lineHeight
   END;
-  L.next := F.sentinel;  UpdateMark(F)
+  L.next := F.sentinel;  UpdateThumb(F)
   *)
 END ScrollUp;
 
@@ -511,9 +511,9 @@ BEGIN (*dY # 0*)
         WHILE ~l.eot & (org < F.text.length) & (dy + l.lineHeight <= dY + F.voff) DO
           org := org + l.length;  dy := dy + l.lineHeight;  MeasureLine(l, R)
         END;
-        IF (org < F.text.length) & (dy + l.lineHeight > dY + F.voff) THEN Mark(F, FALSE);
+        IF (org < F.text.length) & (dy + l.lineHeight > dY + F.voff) THEN MarkThumb(F, FALSE);
           F.org := org;  F.voff := F.voff + dY - dy;
-          LastLine(F, F.sentinel);  Restore(F);  Mark(F, TRUE)
+          LastLine(F, F.sentinel);  Restore(F);  MarkThumb(F, TRUE)
         END
       END
     END
@@ -544,7 +544,7 @@ BEGIN
         IF k < K THEN lines[k] := l; INC(k) END
       END ;
       IF (org = F.org) & (dy < h) THEN ScrollDown(F, pos, 0, dy + F.voff, lines, 0, k)
-      ELSE Mark(F, FALSE); F.org := pos; F.voff := 0; LastLine(F, F.sentinel); Restore(F); Mark(F, TRUE)
+      ELSE MarkThumb(F, FALSE); F.org := pos; F.voff := 0; LastLine(F, F.sentinel); Restore(F); MarkThumb(F, TRUE)
       END
     ELSIF pos > F.org THEN
       org := F.org; L0 := F.sentinel; L := L0.next; dy := 0;
@@ -553,7 +553,7 @@ BEGIN
       END ;
       IF L # F.sentinel THEN ScrollUp(F, org, 0, dy - F.voff, L0)
       ELSIF pos < F.text.len THEN
-        Mark(F, FALSE); F.org := pos; F.voff := 0; LastLine(F, F.sentinel); Restore(F); Mark(F, TRUE)
+        MarkThumb(F, FALSE); F.org := pos; F.voff := 0; LastLine(F, F.sentinel); Restore(F); MarkThumb(F, TRUE)
       END
     ELSIF F.voff > 0 THEN ScrollDown(F, pos, 0, F.voff, lines, 0, 0)
     END
@@ -569,7 +569,14 @@ VAR
 BEGIN
   org  := F.org;
   line := F.sentinel.next;
-  WHILE (line.next # F.sentinel) & (y < line.baseline - line.ascent) DO
+  (*w.s("TextFrames.LocateLine y "); w.i(y); w.sl(".");*)
+  WHILE (line.next # F.sentinel) & (line.baseline + line.descent + line.lead < y) DO
+    (*
+    w.s("  baseline "); w.i(line.baseline);
+    w.s(", ascent ");   w.i(line.ascent);
+    w.s(", length ");   w.i(line.length);
+    w.sl(".");
+    *)
     org := org + line.length;  line := line.next
   END;
   loc.org  := org;
@@ -626,7 +633,7 @@ BEGIN
   UNTIL pos >= lim;
 changed to:*)
 
-    IF (rx < x) & (pos < lim) THEN
+    IF (rx DIV 256 < x) & (pos < lim) THEN
       lpos := pos;  lx := rx
     END
   UNTIL (rx >= x) OR (pos >= lim);
@@ -640,30 +647,34 @@ END LocateString;
 
 PROCEDURE LocateChar (F: Frame;  x, y: INTEGER;  VAR loc: Location);
 VAR
-  R: Texts.Reader;
+  R:   Texts.Reader;
   pos: INTEGER;  (* current position *)
   lim: INTEGER;  (* limit position   *)
   ox:  INTEGER;  (* character origin *)
   dx:  INTEGER;  (* character width  *)
 BEGIN
+  w.s("TextFrames.LocateChar at "); w.i(x); w.c(","); w.i(y); w.sl(".");
   LocateLine(F, y, loc);
   lim := loc.org + loc.line.length - 1;
   pos := loc.org;
-  ox  := F.left;
-  dx  := EolWidth;
+  ox  := F.left * 256;
+  dx  := EolWidth * 256;
+  w.s("  loc.org "); w.i(loc.org); w.s(", line length "); w.i(loc.line.length); w.sl(".");
   Texts.OpenReader(R, F.text, loc.org);
   WHILE pos < lim DO
     Texts.Read(R, NextCh);
     dx := Fonts.GetAdvance(R.fnt, ORD(NextCh));
-    IF ox + dx <= x THEN
+    w.s("  ox "); w.i(ox); w.s(", dx "); w.i(dx); w.s(", x"); w.i(x); w.sl(".");
+    IF (ox + dx) DIV 256 <= x THEN
       INC(pos);  INC(ox, dx);
       IF pos = lim THEN dx := EolWidth END
     ELSE lim := pos
     END
   END;
+  w.s("  found at pos "); w.i(pos); w.s(", ox "); w.i(ox); w.sl(".");
   loc.pos := pos;
-  loc.x   := ox;
-  loc.dx  := dx
+  loc.x   := ox DIV 256;
+  loc.dx  := dx DIV 256
 END LocateChar;
 
 
@@ -687,7 +698,7 @@ BEGIN
   loc.pos  := pos;
   loc.line := L;
   Texts.OpenReader(R, T, org);  Texts.Read(R, NextCh);
-  loc.x  := F.left + Width(R, pos - org);
+  loc.x  := F.left + Width(R, pos - org) DIV 256;
   loc.y  := L.baseline
 END  LocatePos;
 
@@ -700,42 +711,45 @@ RETURN loc.pos END Pos;
 
 (*------------------caret, selection, mouse tracking------------------------*)
 
-PROCEDURE FlipCaret (F: Frame);
+PROCEDURE ShowCaret (F: Frame);
 BEGIN
-  (*
+  w.s("TextFrames.ShowCaret for frame $"); w.h(SYSTEM.ADR(F^));
+  w.s(", caretLoc "); w.i(F.caretLoc.x); w.c(","); w.i(F.caretLoc.y);
+  w.s(", frame width "); w.i(F.W);
+  w.sl(".");
   IF (F.caretLoc.x < F.W) & (F.caretLoc.y >= 10) & (F.caretLoc.x + 12 < F.W) THEN
-    Display.CopyPatternClipped(Display.white, Display.hook, F.X + F.caretLoc.x,
-                               F.Y + F.caretLoc.y - 10, 0, 0, 0, 0, Display.invert)
+    w.s("  SetHookPos "); w.i(F.X + F.caretLoc.x); w.c(","); w.i(F.Y + F.caretLoc.y - 10); w.sl(".");
+    Oberon.SetHookPos(F.X + F.caretLoc.x,  F.Y + F.caretLoc.y)
   END
-  *)
-END FlipCaret;
+END ShowCaret;
 
-PROCEDURE SetCaret* (F: Frame;  pos: INTEGER);
-BEGIN (*LocatePos(F, pos, F.caretLoc);  FlipCaret(F);  F.hasCar := TRUE*)
-END SetCaret;
+PROCEDURE SetCaretPos* (F: Frame;  pos: INTEGER);
+BEGIN LocatePos(F, pos, F.caretLoc);  ShowCaret(F);  F.hasCaret := TRUE
+END SetCaretPos;
 
 PROCEDURE TrackCaret* (F: Frame;  X, Y: INTEGER;  VAR keysum: SET);
 VAR loc: Location;  keys: SET;
 BEGIN
-  (*
+  w.s("TextFrames.SetCaretPos for frame $"); w.h(SYSTEM.ADR(F^)); w.sl(".");
   IF F.sentinel.next # F.sentinel THEN
     LocateChar(F, X - F.X, Y - F.Y, F.caretLoc);
-    FlipCaret(F);
+    ShowCaret(F);
     keysum := {};
+    (*
     REPEAT
       Input.Mouse(keys, X, Y);
       keysum := keysum + keys;
       Oberon.DrawMouseArrow(X, Y);
       LocateChar(F, X - F.X, Y - F.Y, loc);
-      IF loc.pos # F.caretLoc.pos THEN FlipCaret(F);  F.caretLoc := loc;  FlipCaret(F) END
+      IF loc.pos # F.caretLoc.pos THEN ShowCaret(F);  F.caretLoc := loc;  ShowCaret(F) END
     UNTIL keys = {};
-    F.hasCar := TRUE
+    *)
+    F.hasCaret := TRUE
   END
-  *)
 END TrackCaret;
 
 PROCEDURE RemoveCaret* (F: Frame);
-BEGIN (*IF F.hasCar THEN FlipCaret(F);  F.hasCar := FALSE END*)
+BEGIN (*IF F.hasCar THEN ShowCaret(F);  F.hasCar := FALSE END*)
 END RemoveCaret;
 
 PROCEDURE FlipSelection (F: Frame;  VAR beg, end: Location);
@@ -785,7 +799,7 @@ BEGIN
   (*
   IF F.sentinel.next # F.sentinel THEN topY := F.Y + F.H - F.top;  botY := F.Y + F.bottom;
     IF F.hasSel THEN FlipSelection(F, F.selbeg, F.selend) END;
-    IF F.hasCar THEN FlipCaret(F) END;
+    IF F.hasCar THEN ShowCaret(F) END;
     LocateChar(F, X - F.X, Y - F.Y, loc);
     IF F.hasSel & (loc.pos = F.selbeg.pos) & (F.selend.pos = F.selbeg.pos + 1) THEN
       LocateChar(F, F.left, Y - F.Y, F.selbeg)
@@ -835,7 +849,7 @@ BEGIN
       END
     UNTIL keys = {};
     SetChangeMark(F, F.text.changed);  F.time := Oberon.Time();  F.hasSel := TRUE;
-    IF F.hasCar THEN SetCaret(F, F.caretLoc.pos) END
+    IF F.hasCar THEN SetCaretPos(F, F.caretLoc.pos) END
   END
   *)
 END TrackSelection;
@@ -953,7 +967,7 @@ BEGIN
     END
     *)
   END;
-  UpdateMark(F)
+  UpdateThumb(F)
 END Replace;
 
 
@@ -1008,7 +1022,7 @@ BEGIN
     END
   END;
   *)
-  UpdateMark(F)
+  UpdateThumb(F)
 END Insert;
 
 PROCEDURE Delete* (F: Frame;  beg, end: INTEGER);
@@ -1083,7 +1097,7 @@ BEGIN
     END
     *)
   END;
-  UpdateMark(F)
+  UpdateThumb(F)
 END Delete;
 
 PROCEDURE Recall*(VAR B: Texts.Buffer);
@@ -1112,7 +1126,7 @@ BEGIN ASSERT(F.hasCaret);
   CASE ch OF
   |BS:          IF F.caretLoc.pos > F.org THEN                               (*backspace*)
                   Texts.Delete(F.text, F.caretLoc.pos - 1, F.caretLoc.pos, DelBuf);
-                  SetCaret(F, F.caretLoc.pos - 1)
+                  SetCaretPos(F, F.caretLoc.pos - 1)
                 END
   |CtrlA:       IF F.hasSel THEN FlipSelection(F, F.selbeg, F.selend) END;   (*select all*)
                 F.selbeg.org := 0;  F.selbeg.pos := 0;  F.selbeg.x := F.left;
@@ -1126,28 +1140,28 @@ BEGIN ASSERT(F.hasCaret);
                 END
   |CtrlV:       NEW(buf);  Texts.OpenBuf(buf);  Texts.Copy(TBuf, buf);       (*paste*)
                 Texts.Insert(F.text, F.caretLoc.pos, buf);
-                SetCaret(F, F.caretLoc.pos + TBuf.length)
+                SetCaretPos(F, F.caretLoc.pos + TBuf.length)
   |CtrlX:       IF F.hasSel THEN                                             (*cut*)
                   NEW(TBuf);  Texts.OpenBuf(TBuf);
                   Texts.Delete(F.text, F.selbeg.pos, F.selend.pos, TBuf)
                 END
   |CursorLeft:  IF F.caretLoc.pos > 0 THEN
-                  RemoveCaret(F);  SetCaret(F, F.caretLoc.pos - 1)
+                  RemoveCaret(F);  SetCaretPos(F, F.caretLoc.pos - 1)
                 END
   |CursorRight: IF F.caretLoc.pos < F.text.length THEN
-                  RemoveCaret(F);  SetCaret(F, F.caretLoc.pos + 1)
+                  RemoveCaret(F);  SetCaretPos(F, F.caretLoc.pos + 1)
                 END
   |CursorUp:    RemoveCaret(F);
-                SetCaret(F, Pos(F, F.X + F.caretLoc.x,
-                                   F.Y + F.caretLoc.y + F.ascent + F.descent))
+                SetCaretPos(F, Pos(F, F.X + F.caretLoc.x,
+                                   F.Y + F.caretLoc.y - (F.ascent + F.descent + F.lead)))
   |CursorDown:  RemoveCaret(F);
-                SetCaret(F, Pos(F, F.X + F.caretLoc.x,
-                                   F.Y + F.caretLoc.y - F.ascent + F.descent))
+                SetCaretPos(F, Pos(F, F.X + F.caretLoc.x,
+                                   F.Y + F.caretLoc.y + F.ascent + F.descent + F.lead))
   |CR, TAB,
    " "..DEL:    KW.fnt := fnt;  KW.col := col;  KW.voff := voff;
                 Texts.Write(KW, ch);
                 Texts.Insert(F.text, F.caretLoc.pos, KW.buf);
-                SetCaret(F, F.caretLoc.pos + 1)
+                SetCaretPos(F, F.caretLoc.pos + 1)
   END
 END Write;
 
@@ -1163,7 +1177,7 @@ PROCEDURE Modify* (F: Frame;  id, Y, H: INTEGER);
 VAR dY: INTEGER;
 BEGIN
   w.sl("TextFrames Modify handler.");
-  Mark(F, FALSE);  RemoveMarks(F);  SetChangeMark(F, FALSE);
+  MarkThumb(F, FALSE);  RemoveMarks(F);  SetChangeMark(F, FALSE);
   IF id = Viewers.restore THEN Restore(F)
   ELSIF id = Viewers.modify THEN
     Restore(F);
@@ -1180,7 +1194,7 @@ BEGIN
     END
     *)
   END;
-  IF F.H > 0 THEN Mark(F, TRUE);  SetChangeMark(F, F.text.changed) END
+  IF F.H > 0 THEN MarkThumb(F, TRUE);  SetChangeMark(F, F.text.changed) END
 END Modify;
 
 PROCEDURE Open* (F: Frame;  H: Display.Handler;  T: Texts.Text;
@@ -1215,6 +1229,9 @@ BEGIN
   F.thumb      := 0;        F.time    := 0;
   F.hasCaret   := FALSE;    F.hasSel  := FALSE;
 
+  NEW(F.changeMark); Oberon.SetSpriteGlyph(F.changeMark, Oberon.BlockGlyph);
+  NEW(F.thumbMark);  Oberon.SetSpriteGlyph(F.thumbMark,  Oberon.ThumbGlyph);
+
   (*
   F.pool    := NIL;
   F.hasMark := FALSE;
@@ -1235,7 +1252,7 @@ BEGIN
   IF F.hasCaret THEN
     NEW(buf);  Texts.OpenBuf(buf);
     Texts.Save(text, beg, end, buf);  Texts.Insert(F.text, F.caretLoc.pos, buf);
-    SetCaret(F, F.caretLoc.pos + (end - beg))
+    SetCaretPos(F, F.caretLoc.pos + (end - beg))
   END
 END CopyOver;
 
@@ -1264,22 +1281,26 @@ BEGIN
 END Update;
 
 PROCEDURE Edit* (F: Frame;  X, Y: INTEGER;  Keys: SET);
-VAR M: CopyOverMsg;
-    text: Texts.Text;
-    buf: Texts.Buffer;
-    v: Viewers.Viewer;
-    beg, end, time, pos: INTEGER;
+VAR M:            CopyOverMsg;
+    text:         Texts.Text;
+    buf:          Texts.Buffer;
+    v:            Viewers.Viewer;
+    beg, end:     INTEGER;
+    time, pos:    INTEGER;
     keysum, keys: SET;
-    fnt: Fonts.Font;
-    col, voff, Y0, SL, SR: INTEGER;
+    fnt:          Fonts.Font;
+    col, voff:    INTEGER;
+    Y0, SL, SR:   INTEGER;
 BEGIN
-  (*
+  w.sl("TextFrames.Edit.");
   SL := F.X + Min(F.left, BarWidth);  keys := Keys;
   IF X < SL THEN  (*cursor starts in scroll bar*)
+    Oberon.SetMouseGlyph(Oberon.UpdownGlyph);
+    (*
     Oberon.DrawMouse(ScrollMarker, X, Y);
     keysum := Keys;
     IF Keys = {2} THEN  (*ML: continuous scroll*)
-      Y0 := F.Y + F.H - 1 - F.markH;  SR := SL + Min(100, F.W DIV 2);
+      Y0 := F.Y + F.H - 1 - F.thumb;  SR := SL + Min(100, F.W DIV 2);
       SetChangeMark(F, FALSE);  RemoveMarks(F);
       WHILE Keys # {} DO Oberon.DrawMouse(ScrollMarker, X, Y);
         IF Y # Y0 THEN Oberon.RemoveMarks(F.X, F.Y, F.W, F.H);
@@ -1316,15 +1337,17 @@ BEGIN
         END
       END
     END
+    *)
   ELSE  (*cursor is in text area*)
-    Oberon.DrawMouseArrow(X, Y);
+    (* Oberon.DrawMouseArrow(X, Y); (Mouse arrow is drawn by default *)
+    w.s("TextFrames.Edit cursor in text area, keys $"); w.h(SYSTEM.VAL(INTEGER, Keys)); w.sl(".");
     IF 0 IN Keys THEN  (*MR: select*)
       TrackSelection(F, X, Y, keysum);
       IF F.hasSel THEN
         IF keysum = {0, 2} THEN  (*MR, ML: delete text*)
           Oberon.GetSelection(text, beg, end, time);
           Texts.Delete(text, beg, end, TBuf);
-          Oberon.PassFocus(Viewers.This(F.X, F.Y));  SetCaret(F, beg)
+          Oberon.PassFocus(Viewers.This(F.X, F.Y));  SetCaretPos(F, beg)
         ELSIF keysum = {0, 1} THEN  (*MR, MM: copy to caret*)
           Oberon.GetSelection(text, beg, end, time);
           M.text := text;  M.beg := beg;  M.end := end;
@@ -1335,6 +1358,7 @@ BEGIN
       TrackWord(F, X, Y, pos, keysum);
       IF (pos >= 0) & ~(0 IN keysum) THEN Call(F, pos, 2 IN keysum) END
     ELSIF 2 IN Keys THEN  (*ML: set caret*)
+      w.sl("  ML: set caret");
       Oberon.PassFocus(Viewers.This(F.X, F.Y));
       TrackCaret(F, X, Y, keysum);
       IF keysum = {2, 1} THEN  (*ML, MM: copy from selection to caret*)
@@ -1343,11 +1367,11 @@ BEGIN
           NEW(TBuf);  Texts.OpenBuf(TBuf);
           Texts.Save(text, beg, end, TBuf);  Texts.Insert(F.text, F.caretLoc.pos, TBuf);
           SetSelection(F, F.caretLoc.pos, F.caretLoc.pos + (end  - beg));
-          SetCaret(F, F.caretLoc.pos + (end - beg))
+          SetCaretPos(F, F.caretLoc.pos + (end - beg))
         ELSIF TBuf # NIL THEN
           NEW(buf);  Texts.OpenBuf(buf);
           Texts.Copy(TBuf, buf);  Texts.Insert(F.text, F.caretLoc.pos, buf);
-          SetCaret(F, F.caretLoc.pos + buf.length)
+          SetCaretPos(F, F.caretLoc.pos + buf.length)
         END
       ELSIF keysum = {2, 0} THEN  (*ML, MR: copy looks*)
         Oberon.GetSelection(text, beg, end, time);
@@ -1358,6 +1382,7 @@ BEGIN
       END
     END
   END;
+  (*
   IF keys # {} THEN F.pool := NIL END
   *)
 END Edit;
@@ -1365,25 +1390,30 @@ END Edit;
 PROCEDURE Handle* (F: Display.Frame;  VAR M: Display.FrameMsg);
 VAR F1: Frame;
 BEGIN
+  w.sl("TextFrames.Handle:");
   CASE F OF Frame:
     CASE M OF
-    Oberon.InputMsg:
-      IF M.id = Oberon.track THEN Edit(F, M.X, M.Y, M.keys)
-      ELSIF M.id = Oberon.consume THEN
-        IF F.hasCaret THEN Write(F, M.ch, M.fnt, M.col, M.voff) END
-      END |
-    Oberon.ControlMsg:
-      IF M.id = Oberon.defocus THEN Defocus(F)
-      ELSIF M.id = Oberon.neutralize THEN Neutralize(F)
-      END |
-    Oberon.SelectionMsg:
-      GetSelection(F, M.text, M.beg, M.end, M.time) |
-    Oberon.CopyMsg: Copy(F, F1);  M.F := F1 |
-    Viewers.ViewerMsg: Modify(F, M.id, M.Y, M.H) |
-    CopyOverMsg: CopyOver(F, M.text, M.beg, M.end) |
-    UpdateMsg: IF F.text = M.text THEN Update(F, M) END
+    Oberon.InputMsg:     w.sl("  Oberon.InputMsg");
+                         IF    M.id = Oberon.track THEN Edit(F, M.X, M.Y, M.keys)
+                         ELSIF M.id = Oberon.consume THEN
+                           IF F.hasCaret THEN Write(F, M.ch, M.fnt, M.col, M.voff) END
+                         END |
+    Oberon.ControlMsg:   w.sl("  Oberon.ControlMsg");
+                         IF    M.id = Oberon.defocus THEN Defocus(F)
+                         ELSIF M.id = Oberon.neutralize THEN Neutralize(F)
+                         END |
+    Oberon.SelectionMsg: w.sl("  Oberon.SelectionMsg");
+                         GetSelection(F, M.text, M.beg, M.end, M.time) |
+    Oberon.CopyMsg:      w.sl("  Oberon.CopyMsg");
+                         Copy(F, F1);  M.F := F1 |
+    Viewers.ViewerMsg:   w.sl("  Viewers.ViewerMsg");
+                         Modify(F, M.id, M.Y, M.H) |
+    CopyOverMsg:         w.sl("  CopyOverMsg");
+                         CopyOver(F, M.text, M.beg, M.end) |
+    UpdateMsg:           w.sl("  UpdateMsg");
+                         IF F.text = M.text THEN Update(F, M) END
     END
-  END
+  END;
 END Handle;
 
 (*creation*)
@@ -1432,6 +1462,7 @@ BEGIN NEW(TBuf);  NEW(DelBuf);
   Ascent     := Fonts.Default.ascent;
   Descent    := Fonts.Default.descent;
   Lead       := Fonts.Default.lead;
+  EolWidth   := (Ascent + Descent) DIV 2;
   BarWidth   := Ascent + Descent;
   MenuHeight := Ascent + Descent + 1;
   Left       := BarWidth + (Ascent + Descent) DIV 2;
@@ -1451,4 +1482,5 @@ BEGIN NEW(TBuf);  NEW(DelBuf);
   Texts.OpenWriter(W);  Texts.SetColor(W,  Display.white);
   Texts.OpenWriter(KW); Texts.SetColor(KW, Display.white);
   w.sl("TextFrames initialised.");
+  w.s("BarWidth "); w.i(BarWidth); w.sl(".");
 END TextFrames.

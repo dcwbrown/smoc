@@ -678,16 +678,16 @@ END GetArg;
 
 
 (* -------------------------------------------------------------------------- *)
-(* --------- Time in 100nS ticks since since January 1, 1601 (UTC) ---------- *)
+(* ----- Time in ms and 100nS ticks since since January 1, 1601 (UTC) ------- *)
 (* -------------------------------------------------------------------------- *)
 
-PROCEDURE Time*(): INTEGER;
+PROCEDURE Ticks*(): INTEGER;
 VAR tick: INTEGER;
 BEGIN GetSystemTimePreciseAsFileTime(SYSTEM.ADR(tick));
-RETURN tick END Time;
+RETURN tick END Ticks;
 
-PROCEDURE TimeToMSecs*(time: INTEGER): INTEGER;
-RETURN time DIV 10000 END TimeToMSecs;
+PROCEDURE Time*(): INTEGER;
+RETURN Ticks() DIV 10000 END Time;
 
 
 (* -------------------------------------------------------------------------- *)

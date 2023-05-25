@@ -198,7 +198,7 @@ BEGIN
     B.Cleanup;
     G.Cleanup;  endTime := K.Time();
     intSep(G.pc,      10);   intSep(G.staticSize,  10);
-    intSep(G.varSize, 10);   intSep(K.TimeToMSecs(endTime - startTime), 5);
+    intSep(G.varSize, 10);   intSep(endTime - startTime, 5);
     w.s("ms");  w.l
   END
 END Compile;
@@ -301,7 +301,7 @@ BEGIN
   end := K.Time();
   w.sn("Total", LongestModname + LongestFilename + 2);
   intSep(codesize, 10);   intSep(staticsize,  10);
-  intSep(varsize,  10);   intSep(K.TimeToMSecs(end-start), 5);
+  intSep(varsize,  10);   intSep(end - start,  5);
   w.sl("ms")
 END Build;
 

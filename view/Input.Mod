@@ -36,6 +36,7 @@ VAR
   MY:       INTEGER;  (*mouse limits and coords*)
   MK:       SET;      (*mouse keys*)
 
+(*
 PROCEDURE Peek();
 BEGIN
   IF SYSTEM.BIT(msAdr, 28) THEN
@@ -65,6 +66,7 @@ BEGIN
   Recd := FALSE
 END Read;
 
+
 PROCEDURE Mouse*(VAR keys: SET;  VAR x, y: INTEGER);
 VAR w: INTEGER;
 BEGIN SYSTEM.GET(msAdr, w);
@@ -73,6 +75,7 @@ BEGIN SYSTEM.GET(msAdr, w);
   y    := (w DIV 1000H) MOD 400H;
   IF y >= MH THEN y := MH-1 END
 END Mouse;
+*)
 
 PROCEDURE SetMouseLimits*(w, h: INTEGER);
 BEGIN MW := w;  MH := h

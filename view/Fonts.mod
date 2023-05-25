@@ -326,7 +326,7 @@ BEGIN
 RETURN result END MakeAlphaMap;
 
 
-PROCEDURE GetAlphaMap(font: Font; ch: INTEGER; VAR glyph: Glyph);
+PROCEDURE GetAlphaMap*(font: Font; ch: INTEGER; VAR glyph: Glyph);
 VAR
   oldfont: INTEGER;
   res:     INTEGER;
@@ -362,6 +362,7 @@ BEGIN
     SYSTEM.ADR(matrix)
   );
   ASSERT(res > 0);
+  ASSERT(SelectObject(DisplayDC, oldfont) # 0);
 
   glyph.mapWidth  := glyphmetrics.blackBoxX;
   glyph.mapHeight := glyphmetrics.blackBoxY;
@@ -378,7 +379,11 @@ BEGIN
   w.DumpMem(2, SYSTEM.ADR(buffer), 0, res);
   *)
 
-  glyph.map := SYSTEM.ADR(AlphaMap[MakeAlphaMap(glyphmetrics.blackBoxX, glyphmetrics.blackBoxY, buffer)])
+  glyph.map := SYSTEM.ADR(AlphaMap[MakeAlphaMap(glyphmetrics.blackBoxX, glyphmetrics.blackBoxY, buffer)]);
+  (*
+  w.sl("Generated alphampap:");
+  w.DumpMem(2, glyph.map, 0, SYSTEM.ADR(AlphaMap[MapLen]) - glyph.map);
+  *)
 END GetAlphaMap;
 
 
@@ -409,7 +414,7 @@ RETURN glyph END GetGlyph;
 PROCEDURE ConvertOberonPattern*(obmp: INTEGER): Glyph;
 VAR i, j:   INTEGER;
     stride: INTEGER;
-    tbmp:   ARRAY 1024 OF BYTE;
+    tbmp:   ARRAY 2048 OF BYTE;
     ti:     INTEGER;
     width:  INTEGER;
     height: INTEGER;
