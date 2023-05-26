@@ -1,4 +1,4 @@
-MODULE ORB;  (*$CONSOLE*)
+MODULE Build;  (*$CONSOLE*)
 
 (* Oberon Recursive Build                                                     *)
 (*                                                                            *)
@@ -394,7 +394,7 @@ BEGIN
   END;
 
   IF Modulename = "" THEN
-    w.sl("ORB - Oberon-recursive builder.");
+    w.sl("Build - Oberon recursive builder.");
     w.sl("No parameters. Expected name of module to build.");
     K.Halt(99);
   END
@@ -410,4 +410,4 @@ BEGIN
   w.s("SourcePath: '");    w.s(SourcePath);
   w.s("', BuildPath: '");  w.s(BuildPath);  w.sl("'.");
   Build
-END ORB.
+END Build.
