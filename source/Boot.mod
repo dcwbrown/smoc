@@ -4,22 +4,22 @@ MODULE Boot;  (*$RTL-*)
 
 IMPORT SYSTEM;
 
-CONST
-
 TYPE
-  ModuleHeader* = POINTER [untraced] TO ModuleHeaderDesc;
+  ModuleName*       = ARRAY 32 OF CHAR;
+  ModuleHeader*     = POINTER [untraced] TO ModuleHeaderDesc;
   ModuleHeaderDesc* = RECORD
-    length*:      INTEGER;          (*   0                                *)
-    next*:        ModuleHeader;     (*   8                                *)
-    name*:        ARRAY 32 OF CHAR; (*  16                                *)
-    base*:        INTEGER;          (*  48                                *)
-    code*:        INTEGER;          (*  56                                *)
-    init*:        INTEGER;          (*  64                                *)
-    trap*:        INTEGER;          (*  72                                *)
-    key0*, key1*: INTEGER;          (*  80                                *)
-    importNames*: INTEGER;          (*  88 list of import names and keys  *)
-    imports*:     INTEGER;          (*  96 adr of start of import list    *)
-    exports*:     INTEGER           (* 104 array of export addresses      *)
+    length*:      INTEGER;       (*   0                                *)
+    next*:        ModuleHeader;  (*   8                                *)
+    name*:        ModuleName;    (*  16                                *)
+    base*:        INTEGER;       (*  48                                *)
+    code*:        INTEGER;       (*  56                                *)
+    init*:        INTEGER;       (*  64                                *)
+    trap*:        INTEGER;       (*  72                                *)
+    key0*, key1*: INTEGER;       (*  80                                *)
+    importNames*: INTEGER;       (*  88 list of import names and keys  *)
+    imports*:     INTEGER;       (*  96 adr of start of import list    *)
+    exports*:     INTEGER;       (* 104 array of export addresses      *)
+    commands*:    INTEGER
   END;
 
   PEImportTable* = POINTER [untraced] TO PEImportsDesc;
@@ -106,6 +106,7 @@ BEGIN
   IF header.trap        # 0 THEN INC(header.trap,        SYSTEM.ADR(header^)) END;
   IF header.importNames # 0 THEN INC(header.importNames, SYSTEM.ADR(header^)) END;
   IF header.exports     # 0 THEN INC(header.exports,     SYSTEM.ADR(header^)) END;
+  IF header.commands    # 0 THEN INC(header.commands,    SYSTEM.ADR(header^)) END;
 
   (* Set standard procedure addresses into module static data *)
   base := SYSTEM.VAL(ModuleBase, header.base);

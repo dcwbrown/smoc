@@ -474,8 +474,14 @@ BEGIN
 RETURN glyph END ConvertOberonPattern;
 
 PROCEDURE GetAdvance*(font: Font; ch: INTEGER): INTEGER;  (* Result in 1/256ths of a pixel *)
-BEGIN  ASSERT((ch >= 32) & (ch <= 126));
-RETURN font.face.widths[ch-32] * font.em * 256 DIV font.face.emsize END GetAdvance;
+VAR result: INTEGER;
+BEGIN
+  IF (ch >= 32) & (ch <= 126) THEN
+    result := font.face.widths[ch-32] * font.em * 256 DIV font.face.emsize
+  ELSE
+    result := 0
+  END
+RETURN result END GetAdvance;
 
 
 BEGIN

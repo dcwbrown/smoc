@@ -1,6 +1,6 @@
 MODULE Texts; (*JG 21.11.90 / NW 11.7.90 / 24.12.95 / 22.11.10 / 18.11.2014 / 10.1.2019 / AP 15.9.20 Extended Oberon / DCWB 7May23 *)
 
-IMPORT Files, Fonts, w := Writer;
+IMPORT Files, Fonts, Display, w := Writer;
 
 CONST (*scanner symbol classes*)
   Inval*  = 0;  (*invalid symbol*)
@@ -135,8 +135,12 @@ BEGIN f := Files.Old(name);
     IF tag = TextTag THEN Load(R, T)
     ELSE (*Ascii file*)
       length := Files.Length(f); Q := Trailer();
-      NEW(q); q.fnt := Fonts.Default; q.col := 1; q.voff := 0; q.f := f; q.offset := 0; q.length := length;
-      Q.next := q; q.prev := Q; q.next := Q; Q.prev := q; T.trailer := Q; T.length := length
+      NEW(q);
+      q.fnt     := Fonts.Default;
+      q.col     := Display.White;  q.voff := 0;
+      q.f       := f;  q.offset := 0;  q.length := length;
+      Q.next    := q;  q.prev   := Q;  q.next   := Q;   Q.prev := q;
+      T.trailer := Q;  T.length := length
     END
   ELSE (*create new text*)
     Q := Trailer(); Q.next := Q; Q.prev := Q; T.trailer := Q; T.length := 0

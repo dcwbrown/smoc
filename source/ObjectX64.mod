@@ -314,24 +314,43 @@ END WriteImportNames;
 
 (* -------------------------------------------------------------------------- *)
 
+PROCEDURE WriteCommands;
+VAR
+  export: B.ObjList;
+  proc:   B.Proc;
+BEGIN
+  Files.Set(X64, X64file, Header.commands);
+  export := B.expList;
+  WHILE export # NIL DO
+    IF export.obj IS B.Proc THEN
+      proc := export.obj(B.Proc);
+      IF (proc.type.nfpar = 0) & (proc.return = NIL) THEN  (* No parameters, no result *)
+        Files.WriteString(X64, proc.ident.name);
+        Files.WriteInt(X64, proc.adr + Header.code - Header.base)
+      END
+    END;
+    export := export.next
+  END;
+  Files.Write(X64, 0X)
+END WriteCommands;
+
+(* -------------------------------------------------------------------------- *)
+
 PROCEDURE WriteExports;
 VAR
   export: B.ObjList;
   adr:    INTEGER;
-(*i:      INTEGER;*)
 BEGIN
   Files.Set(X64, X64file, Header.exports);
 
   export := B.expList;
-(*i := 0;  IF export # NIL THEN w.sl("Exports:") END;*)
   WHILE export # NIL DO
     IF export.obj.class = B.cType THEN adr := export.obj.type.adr;
     ELSIF export.obj IS B.Var     THEN adr := export.obj(B.Var).adr;
     ELSIF export.obj IS B.Proc    THEN adr := export.obj(B.Proc).adr
-                                            + Header.code - Header.base;
+                                            + Header.code - Header.base
     END;
     Files.WriteInt(X64, adr);
-  (*w.s("  ["); w.i(i); w.s("] $"); w.h(adr); w.sl(".");  INC(i);*)
     export := export.next
   END;
   Files.WriteInt(X64, 8000000000000000H)
@@ -413,6 +432,9 @@ BEGIN
     Header.exports := Align(Files.Pos(X64), 16);
     WriteExports
   END;
+
+  Header.commands := Align(Files.Pos(X64), 16);
+  WriteCommands;
 
   (* Round file length to a mutiple of 16 bytes *)
   IF Files.Pos(X64) MOD 16 # 0 THEN

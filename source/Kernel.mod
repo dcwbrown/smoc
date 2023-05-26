@@ -64,7 +64,7 @@ VAR
 (* ------------ Unicode Transformation Formats UTF-8 and UTF-16 ------------- *)
 (* -------------------------------------------------------------------------- *)
 
-(* UTF8:                                                                                            *)
+(* UTF-8:                                                                                           *)
 (* -------------- codepoint --------------    ----------------------- bytes ----------------------- *)
 (* 0000 0000 0000 0000 0000 0000 0zzz zzzz    0zzzzzzz                                              *)
 (* 0000 0000 0000 0000 0000 0yyy yyzz zzzz    110yyyyy 10zzzzzz                                     *)
@@ -116,7 +116,7 @@ BEGIN
 END PutUtf8;
 
 
-(* UTF16:                                                                       *)
+(* UTF-16:                                                                      *)
 (* -------------- codepoint --------------    ------------- words ------------- *)
 (* 0000 0000 0000 0000 zzzz zzzz zzzz zzzz    zzzzzzzzzzzzzzzz                  *)
 (* 0000 0000 000x xxxx yyyy yyzz zzzz zzzz    110110wwwwyyyyyy 110111zzzzzzzzzz *)
@@ -740,7 +740,6 @@ BEGIN
   AddVectoredExceptionHandler(1, ExceptionHandler);
 
   (* Initialise Heap and GC *)
-
   Collect0 := Collect;
   InitHeap;
 

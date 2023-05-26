@@ -16,10 +16,10 @@ BEGIN
     ASSERT(FALSE);
   END;
   w.s("MenuViewer.DrawBorders viewer at "); Display.wfpos(V); w.s("; Y "); w.i(Y); w.s(", H "); w.i(H); w.sl(".");
-  Display.FillRectangle(V.X,           Y,         1,       H, Display.white);
-  Display.FillRectangle(V.X + V.W - 1, Y,         1,       H, Display.white);
-  Display.FillRectangle(V.X + 1,       Y,         V.W - 2, 1, Display.white);
-  Display.FillRectangle(V.X + 1,       Y + H - 1, V.W - 2, 1, Display.white);
+  Display.FillRectangle(V.X,           Y,         1,       H, Display.White);
+  Display.FillRectangle(V.X + V.W - 1, Y,         1,       H, Display.White);
+  Display.FillRectangle(V.X + 1,       Y,         V.W - 2, 1, Display.White);
+  Display.FillRectangle(V.X + 1,       Y + H - 1, V.W - 2, 1, Display.White);
 END DrawBorders;
 
 PROCEDURE Restore (V: Viewer);

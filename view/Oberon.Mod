@@ -113,7 +113,6 @@ VAR
   BlockGlyph*:  Fonts.Glyph;
   CrossGlyph*:  Fonts.Glyph;
   GreyGlyph*:   Fonts.Glyph;
-  ThumbGlyph*:  Fonts.Glyph;
 
   PrevX: INTEGER;
   PrevY: INTEGER;
@@ -638,13 +637,14 @@ BEGIN ch := S.nextCh;
   END
 END Scan;
 
-(*
 PROCEDURE Call*(F: Display.Frame;  T: Texts.Text;  pos: INTEGER;  new: BOOLEAN);
 VAR S: Texts.Scanner;  res, len: INTEGER;
 BEGIN Texts.OpenScanner(S, T, pos);  Skip(S, len);  Scan(S);
   IF (S.class = Texts.Name) & (S.line = 0) THEN
-    SetPar(F, T, pos, pos + len + S.len, 0);  Modules.Call(S.s, res);
-    IF (res > Modules.noerr) & (res < Modules.clients) & (Log # NIL) THEN
+    SetPar(F, T, pos, pos + len + S.length, 0);
+    o.s("Call '"); o.s(S.s); o.sl("'.");
+    Modules.Call(S.s, res);
+    IF (res > Modules.noerr) & (res <= Modules.badfin) & (Log # NIL) THEN
       Texts.WriteString(W, "Call error: ");
       CASE res OF
          Modules.nofile:     Texts.WriteString(W, Modules.importing);
@@ -673,6 +673,8 @@ BEGIN Texts.OpenScanner(S, T, pos);  Skip(S, len);  Scan(S);
   END
 END Call;
 
+
+(*
 PROCEDURE Execute(F: Display.Frame;  T: Texts.Text;  pos: INTEGER;  collect: BOOLEAN);  (*execute multiple commands separated by ~*)
 VAR S: Texts.Scanner;  len: INTEGER;  continue: BOOLEAN;
 BEGIN continue := pos >= 0;
@@ -742,9 +744,6 @@ BEGIN DumpDisplay := proc END SetDumpDisplay;
 PROCEDURE DoCharacter(ch: INTEGER);
 VAR N: ControlMsg;  V: Viewers.Viewer;  M: InputMsg;
 BEGIN
-
-  Windows.Invalidate(Display.Window);  (* Testing *)
-
   IF ch = 1BH THEN (* ESC - TestOberon specific ... *)
     Windows.Quit
   ELSIF ch = 19H THEN  (* Ctrl/Y - originally ESC *)
@@ -984,8 +983,6 @@ BEGIN
   BlockGlyph  := Fonts.ConvertOberonPattern(SYSTEM.ADR($ 0808 FFFF C3C3 C3C3 FFFF                                                        $));
   CrossGlyph  := Fonts.ConvertOberonPattern(SYSTEM.ADR($ 0F0F 0140 0220 0410 0808 1004 2002 4001 0000 4001 2002 1004 0808 0410 0220 0140 $));
   GreyGlyph   := Fonts.ConvertOberonPattern(SYSTEM.ADR($ 2002 5555 5555 AAAA AAAA                                                        $));
-  ThumbGlyph  := Fonts.ConvertOberonPattern(SYSTEM.ADR($ 0B14 FF07 FF07 FF07 FF07 FF07 FF07 FF07 FF07 FF07 FF07 FF07 FF07 FF07 FF07 FF07
-                                                                                                                FF07 FF07 FF07 FF07 FF07 $));
   StarGlyph   := Fonts.ConvertOberonPattern(SYSTEM.ADR($ 0F0F 8000 8220 8410 8808 9004 A002 C001 7F7F C001 A002 9004 8808 8410 8220 8000 $));
   StarGlyph.originX := -23;  StarGlyph.baseline := 7;
 
@@ -1000,13 +997,13 @@ BEGIN
   DH     := Display.Height;
   CL     := DW;
   CurFnt := Fonts.Default;
-  CurCol := Display.white;
+  CurCol := Display.White;
   CurOff := 0;
   ActCnt := 0;
 
   CurTask := NewTask(CollectGarbage, 2000);  Install(CurTask);
 
-  Texts.OpenWriter(W);  Texts.SetColor(W, Display.white);
+  Texts.OpenWriter(W);  Texts.SetColor(W, Display.White);
 
   Log := NIL;
 

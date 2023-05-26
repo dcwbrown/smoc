@@ -2,8 +2,8 @@ MODULE Display;  (*NW 5.11.2013 / 17.1.2019 / AP 15.9.20 Extended Oberon / DCWB 
 IMPORT SYSTEM, Windows, Fonts, w := Writer;
 
 CONST
-  black* = 0;        (*black = background*)
-  white* = 0FFFFFFH;
+  Black* = 0;        (*black = background*)
+  White* = 0FFFFFFH;
 
   replace* = 0; (*modes*)
   paint*   = 1;

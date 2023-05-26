@@ -208,7 +208,7 @@ BEGIN
   IF Viewers.CurDisplay # NIL THEN
 
     w.sl("System.OpenViewers creating System.Log viewer.");
-    Texts.SetColor(W, Display.white);
+    Texts.SetColor(W, Display.White);
     Texts.WriteString(W, Version);
     Texts.WriteString(W, " / Display ");
     Texts.WriteInt(W, Viewers.CurDisplay.id, 1);
@@ -217,19 +217,12 @@ BEGIN
     Texts.WriteString(W, "'.");
     EndLine;
 
-    w.sl("Calling Oberon.AllocateSystemViewer for System.Log.");
     Oberon.AllocateSystemViewer(0, X, Y);
-    w.sl("Oberon.AllocateSystemViewer for System.Log completed.");
-
     menu := TextFrames.NewMenu("System.Log", LogMenu);
-
     main := TextFrames.NewText(Oberon.Log, 0);
-
     logV := MenuViewers.New(menu, main, TextFrames.MenuHeight, X, Y);
 
     Oberon.AllocateSystemViewer(0, X, Y);
-    w.sl("Oberon.AllocateSystemViewer for System.Tool completed.");
-
     menu := TextFrames.NewMenu("System.Tool", StandardMenu);
     main := TextFrames.NewText(TextFrames.Text("System.Tool"), 0);
     toolV := MenuViewers.New(menu, main, TextFrames.MenuHeight, X, Y)
@@ -741,7 +734,7 @@ END Batch;
 
 BEGIN
   w.sl("System initialisation starting.");
-  Texts.OpenWriter(W);  Texts.SetColor(W, Display.white);
+  Texts.OpenWriter(W);  Texts.SetColor(W, Display.White);
   Oberon.OpenLog(TextFrames.Text(""));
   CreateDisplay("Oberon");
   (*Run("System.Batch")*)

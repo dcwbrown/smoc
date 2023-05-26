@@ -1,6 +1,6 @@
 MODULE TextFrames; (*JG 8.10.90 / NW 16.11.2015 / AP 30.12.20 Extended Oberon / DCWB 8May23 *)
 
-IMPORT Input, Display, Viewers, Fonts, Texts, Oberon, w := Writer, SYSTEM;
+IMPORT Windows, Display, Viewers, Fonts, Texts, Oberon, w := Writer, Input, SYSTEM;
 
 CONST
   replace* = Texts.replace; (*message ids*)
@@ -35,7 +35,7 @@ TYPE
     width:    INTEGER;  (* Line width in whole pixels                *)
     ascent:   INTEGER;  (* Largest font ascent in line               *)
     descent:  INTEGER;  (* largest font descent in line              *)
-    lead:     INTEGER;  (* largest font lead in line                 *)
+    height:   INTEGER;  (* largest ascent+descent+lead in line       *)
     baseline: INTEGER;  (* Y offset in frame determined by PlaceLine *)
     eot:      BOOLEAN;  (* If eof at end of line                     *)
     next:     Line
@@ -78,15 +78,7 @@ TYPE
     selend*:    Location;
     time*:      INTEGER;  (* Time of last selection                          *)
 
-    changeMark: Oberon.Sprite;
-    thumbMark:  Oberon.Sprite
-
-    (*
-    markH*:        INTEGER;  (* thumb                                           *)
-    hasMark:       BOOLEAN;  (*                                                 *)
-    hasChangeMark: BOOLEAN;  (*                                                 *)
-    pool:          Line      (* line pool to minimize heap space consumption during continuous scrolling *)
-    *)
+    changeMark: Oberon.Sprite
   END;
 
   UpdateMsg* = RECORD (Display.FrameMsg)
@@ -111,6 +103,7 @@ VAR
   Lead:        INTEGER;
   EolWidth:    INTEGER;
   BarWidth:    INTEGER;  (* Size of scroll bar *)
+  ThumbWidth:  INTEGER;
   MenuHeight*: INTEGER;
   Left*:       INTEGER;
   Right*:      INTEGER;
@@ -122,12 +115,6 @@ VAR
   KW:     Texts.Writer;  (* Keyboard writer used to prepare text to be inserted *)
   W:      Texts.Writer;  (* Writer for composing menus *)
 
-
-(*
-  selH:         INTEGER;
-  markW:        INTEGER;
-  ScrollMarker: Oberon.Marker;
-*)
 
 PROCEDURE Min (i, j: INTEGER): INTEGER;
 BEGIN IF i < j THEN j := i END;  RETURN j END Min;
@@ -160,10 +147,9 @@ PROCEDURE MarkThumb* (F: Frame;  on: BOOLEAN);  (*in scroll bar*)
 BEGIN
   IF (F.H > 0) & (F.left >= BarWidth) THEN
     IF on THEN
-      Oberon.SetSpritePos(F.thumbMark, F.X + 3, F.Y + F.thumb + 2);
-      Oberon.EnableSprite(F.thumbMark)
+      Windows.FillRectangle(Display.Window.bmp, F.X + 3, F.Y + F.thumb + 2, ThumbWidth, 20, 0FFFFFFFFH);
     ELSE
-      Oberon.DisableSprite(F.thumbMark)
+      Windows.FillRectangle(Display.Window.bmp, F.X + 3, F.Y + F.thumb + 2, ThumbWidth, 20, 0FF000000H);
     END
   END
 END MarkThumb;
@@ -210,19 +196,21 @@ RETURN ox END Width;
 
 
 PROCEDURE MeasureLine (l: Line;  VAR R: Texts.Reader);
-VAR ascent, descent, lead, length: INTEGER;
+VAR ascent, descent, below, length: INTEGER;
 BEGIN
-  ascent := 1;  descent := 1;  lead := 1;  length := 0;
+  ascent := 1;  descent := 0;  below := 0;  length := 0;
   WHILE (NextCh # CR) & (R.fnt # NIL) DO
     IF R.fnt.ascent  > ascent  THEN ascent  := R.fnt.ascent  END;
     IF R.fnt.descent > descent THEN descent := R.fnt.descent END;
-    IF R.fnt.lead    > lead    THEN lead    := R.fnt.lead    END;
+    IF R.fnt.descent + R.fnt.lead > below THEN
+      below := R.fnt.descent + R.fnt.lead
+    END;
     INC(length);  Texts.Read(R, NextCh)
   END;
   l.length  := length + 1;
   l.ascent  := ascent;
   l.descent := descent;
-  l.lead    := lead;
+  l.height  := ascent + below;
   l.eot     := R.fnt = NIL;
   Texts.Read(R, NextCh)
 END MeasureLine;
@@ -252,19 +240,21 @@ VAR
   glyph:    Fonts.Glyph;
 BEGIN
   w.s("DisplayLine, R.col = $"); w.h(R.col); w.s(" '");
-  X      := X * 256;                     (* switch to subpixels *)
-  xLim   := (F.X + F.W - F.right) * 256; (* x Limit in pixels   *)
+  X    := X * 256;                      (* switch to subpixels *)
+  xLim := (F.X + F.W - F.right) * 256;  (* x Limit in pixels   *)
   WHILE (NextCh # CR) & (R.fnt # NIL) DO
     w.c(NextCh);
-    glyph := Fonts.GetGlyph  (R.fnt, ORD(NextCh));
-    dx    := Fonts.GetAdvance(R.fnt, ORD(NextCh));
-    IF (glyph.map # 0) & ((X + dx) < xLim) THEN
-      Display.RenderAlphaMap(
-        X DIV 64 + glyph.originX,  Y - glyph.baseline,
-        glyph.mapWidth,            glyph.mapHeight,
-        glyph.map,                 R.col)
+    dx := Fonts.GetAdvance(R.fnt, ORD(NextCh));
+    IF (NextCh >= 20X) & (NextCh <= 7EX) & ((X + dx) < xLim) THEN
+      glyph := Fonts.GetGlyph(R.fnt, ORD(NextCh));
+      IF glyph.map # 0 THEN
+        Display.RenderAlphaMap(
+          X DIV 64 + glyph.originX,  Y - glyph.baseline,
+          glyph.mapWidth,            glyph.mapHeight,
+          glyph.map,                 R.col)
+      END
     END;
-    X := X + dx;
+    INC(X, dx);
     INC(length);
     Texts.Read(R, NextCh)
   END;
@@ -272,7 +262,8 @@ BEGIN
   L.length := length + 1;
   L.width  := (X+255) DIV 256 + EolWidth - (F.X + F.left);
   L.eot    := R.fnt = NIL;
-  Texts.Read(R, NextCh)
+  Texts.Read(R, NextCh);
+  Windows.InvalidateRect(Display.Window, F.X + F.left, F.Y + L.baseline - L.ascent, L.width, L.height)
 END DisplayLine;
 
 
@@ -305,7 +296,7 @@ BEGIN
   w.s("Restore frame at "); Display.wfpos(F); w.sl(".");
   Display.FillRectangle(F.X, F.Y, F.W, F.H, F.colour);
   IF F.left >= BarWidth THEN  (* white line between left side bar and content *)
-    Display.FillRectangle(F.X + BarWidth - 1, F.Y, 1, F.H, Display.white)
+    Display.FillRectangle(F.X + BarWidth - 1, F.Y, 1, F.H, Display.White)
   END;
 
   Validate(F.text, F.org);
@@ -570,7 +561,7 @@ BEGIN
   org  := F.org;
   line := F.sentinel.next;
   (*w.s("TextFrames.LocateLine y "); w.i(y); w.sl(".");*)
-  WHILE (line.next # F.sentinel) & (line.baseline + line.descent + line.lead < y) DO
+  WHILE (line.next # F.sentinel) & (line.baseline + line.height - line.ascent < y) DO
     (*
     w.s("  baseline "); w.i(line.baseline);
     w.s(", ascent ");   w.i(line.ascent);
@@ -595,16 +586,14 @@ VAR
   lpos:  INTEGER;     (* char position at left end of non-blank run *)
   lx:    INTEGER;     (* subpixel position at left end of non-blank run *)
   dx:    INTEGER;     (* subpixel count of non-blank run *)
-  rpos:  INTEGER;     (* char position at right end of run *)
   rx:    INTEGER;     (* subpixel position at right end of run *)
 BEGIN
   LocateLine(F, y, loc);
   lim  := loc.org + loc.line.length - 1;
-  lx   := F.left * 256;
+  lx   := F.left * 256;  (* horizontal offsets are in 256ths os a pixel *)
   pos  := loc.org;
   rx   := lx;
   lpos := pos;
-  rpos := pos;
   dx   := 0;
   Texts.OpenReader(R, F.text, loc.org);
   Texts.Read(R, NextCh);
@@ -620,6 +609,13 @@ BEGIN
       INC(pos);
       Texts.Read(R, NextCh)
     END;
+    (* lx - left edge of non-blank run                      *)
+    (* dx - width of non-blank run                          *)
+    (* rx - right edge of blank run following non-blank run *)
+    IF (rx DIV 256 < x) & (pos < lim) THEN
+      w.sl(".. next token.");
+      lpos := pos;  lx := rx
+    END
 
 (* Was:
     IF (rx >= x) OR (pos >= lim) THEN  (* x is in this run *)
@@ -631,17 +627,18 @@ BEGIN
       Texts.Read(R, NextCh)
     END
   UNTIL pos >= lim;
-changed to:*)
+*)
 
-    IF (rx DIV 256 < x) & (pos < lim) THEN
-      lpos := pos;  lx := rx
-    END
-  UNTIL (rx >= x) OR (pos >= lim);
+  UNTIL (rx DIV 256 >= x) OR (pos >= lim);
 (**)
 
   loc.pos := lpos;
   loc.x   := (lx + 255) DIV 256;
   loc.dx  := (dx + 255) DIV 256;
+  w.s("LocateString line org "); w.i(loc.org);
+  w.s(", pos "); w.i(loc.pos);
+  w.s(", x "); w.i(loc.x);
+  w.s(", dx "); w.i(loc.dx); w.sl(".");
 END LocateString;
 
 
@@ -890,9 +887,11 @@ END TrackLine;
 PROCEDURE TrackWord* (F: Frame;  X, Y: INTEGER;  VAR pos: INTEGER;  VAR keysum: SET);
 VAR old, new: Location;  keys: SET;
 BEGIN
-  (*
+  w.sl("TextFrames.TrackWord.");
   IF F.sentinel.next # F.sentinel THEN
     LocateString(F, X - F.X, Y - F.Y, old);
+    pos := old.pos
+    (*
     ReplConst(Display.white, F, F.X + old.x,
               F.Y + old.y - old.lin.descent, old.dx, 2, Display.invert);
     keysum := {};
@@ -911,9 +910,9 @@ BEGIN
     ReplConst(Display.white, F, F.X + new.x,
               F.Y + new.y - new.lin.descent, new.dx, 2, Display.invert);
     pos := new.pos
+    *)
   ELSE pos := 0
   END
-  *)
 END TrackWord;
 
 (*------------------text modifiers------------------------*)
@@ -1117,8 +1116,7 @@ BEGIN
 END NotifyDisplay;
 
 PROCEDURE Call* (F: Frame;  pos: INTEGER;  new: BOOLEAN);
-BEGIN  (*Oberon.Call(F, F.text, pos, new)*)
-END Call;
+BEGIN Oberon.Call(F, F.text, pos, new) END Call;
 
 PROCEDURE Write* (F: Frame;  ch: CHAR;  fnt: Fonts.Font;  col, voff: INTEGER);
 VAR buf: Texts.Buffer;
@@ -1216,8 +1214,8 @@ BEGIN
   l.eot        := FALSE;
   l.next       := l;
   l.ascent     := 1;
-  l.descent    := 1;
-  l.lead       := 1;
+  l.descent    := 0;
+  l.height     := 1;
   F.sentinel   := l;
 
   F.handle     := H;        F.text    := T;
@@ -1230,7 +1228,6 @@ BEGIN
   F.hasCaret   := FALSE;    F.hasSel  := FALSE;
 
   NEW(F.changeMark); Oberon.SetSpriteGlyph(F.changeMark, Oberon.BlockGlyph);
-  NEW(F.thumbMark);  Oberon.SetSpriteGlyph(F.thumbMark,  Oberon.ThumbGlyph);
 
   (*
   F.pool    := NIL;
@@ -1423,7 +1420,7 @@ VAR T: Texts.Text;
 BEGIN NEW(T);
   T.notify := NotifyDisplay;
   Texts.Open(T, "");
-  Texts.SetColor(W, Display.black);
+  Texts.SetColor(W, Display.Black);
   Texts.WriteString(W, name);
   Texts.WriteString(W, " | ");
   Texts.WriteString(W, commands);
@@ -1439,7 +1436,7 @@ PROCEDURE NewMenu* (name, commands: ARRAY OF CHAR): Frame;
 VAR F: Frame;  T: Texts.Text;
 BEGIN NEW(F);  T := Menu(name, commands);
   Open(F, Handle, T,
-       0, Display.white, 0,
+       0, Display.White, 0,
        Left DIV 4, 0, 0, 0,
        Ascent, Descent, Lead);
 RETURN F END NewMenu;
@@ -1448,7 +1445,7 @@ PROCEDURE NewText* (text: Texts.Text;  pos: INTEGER): Frame;
 VAR F: Frame;
 BEGIN NEW(F);
   Open(F, Handle, text,
-       pos, Display.black, 0,
+       pos, Display.Black, 0,
        Left, Right, Top, Bottom,
        Ascent, Descent, Lead);
 RETURN F END NewText;
@@ -1464,23 +1461,15 @@ BEGIN NEW(TBuf);  NEW(DelBuf);
   Lead       := Fonts.Default.lead;
   EolWidth   := (Ascent + Descent) DIV 2;
   BarWidth   := Ascent + Descent;
+  ThumbWidth := BarWidth - 7;
   MenuHeight := Ascent + Descent + 1;
   Left       := BarWidth + (Ascent + Descent) DIV 2;
   Right      := (Ascent + Descent) DIV 2;
   Top        := (Ascent + Descent) DIV 2;
   Bottom     := (Ascent + Descent) DIV 2;
 
-  (*
-  selH  := lsp;
-  markW := BarWidth - 5;
-  EolWidth  := lsp DIV 2;
-
-  ScrollMarker.Fade := FlipUpDown;
-  ScrollMarker.Draw := FlipUpDown;
-  *)
-
-  Texts.OpenWriter(W);  Texts.SetColor(W,  Display.white);
-  Texts.OpenWriter(KW); Texts.SetColor(KW, Display.white);
+  Texts.OpenWriter(W);  Texts.SetColor(W,  Display.White);
+  Texts.OpenWriter(KW); Texts.SetColor(KW, Display.White);
   w.sl("TextFrames initialised.");
   w.s("BarWidth "); w.i(BarWidth); w.sl(".");
 END TextFrames.
