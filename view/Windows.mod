@@ -269,7 +269,8 @@ PROCEDURE RenderAlphaMapToBitmap*(
   mapadr:    INTEGER;
   paint:     ARGB;
   bitmapadr: INTEGER;
-  stride:    INTEGER
+  stride:    INTEGER;
+  bitmaplim: INTEGER
 );
 VAR
   alpha, len: BYTE;
@@ -293,7 +294,7 @@ BEGIN
   sp       := 0;
 
   SYSTEM.GET(mapadr, len);  INC(mapadr);
-  WHILE len # 0 DO
+  WHILE (mp < bitmaplim) & (len # 0) DO
     CASE len DIV 64 OF
     | 0: alpha := len;        len := 1
     | 1: len := len MOD 40H;  alpha := 0;
@@ -317,7 +318,7 @@ BEGIN
         INC(mp, 4);
       END;
       INC(sp);
-      IF sp >= width THEN
+      IF (mp < bitmaplim) & (sp >= width) THEN
         IF alphasum > 0 THEN  (* write remaining partial pixel *)
           SYSTEM.GET(mp, pixel);
           SYSTEM.PUT(mp, BlendPixel(paint, pixel, alphasum));
@@ -360,8 +361,13 @@ BEGIN
   w.s(", h "); w.i(glyph.mapHeight); w.sl(".");
   FOR i := 0 TO LEN(maskbits)-1 DO maskbits[i] := 0FFH END;
   ZeroFill(colourbits);
-  RenderAlphaMapToBitmap(0,0, glyph.mapWidth, glyph.mapHeight, glyph.map, 0FFFFFFFFH,
-                         SYSTEM.ADR(colourbits), 32);
+  RenderAlphaMapToBitmap(
+    0, 0,
+    glyph.mapWidth, glyph.mapHeight,
+    glyph.map, 0FFFFFFFFH,
+    SYSTEM.ADR(colourbits), 32,
+    SYSTEM.ADR(colourbits) + 4 * LEN(colourbits)
+  );
   IconInfo.fIcon    := 1;
   IconInfo.xHotspot := 0;
   IconInfo.yHotspot := 0;

@@ -1,5 +1,5 @@
-System.Open ^ System.Recall System.Flush System.Watch System.Collect
-Edit.Open ^  Edit.Recall                            System.ShowDisplays
+System.Open ^  System.Recall  System.Flush  System.Watch  System.Collect  Windows.Quit
+Edit.Open ^     Edit.Recall                     System.ShowDisplays
 Edit.ChangeFont Oberon8.Scn.Fnt            System.OpenDisplay name
 Edit.ChangeFont Oberon10i.Scn.Fnt         System.SetDisplayName 1 new
 Edit.ChangeFont Oberon10b.Scn.Fnt        System.SetDisplay 1

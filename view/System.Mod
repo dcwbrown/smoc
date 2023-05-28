@@ -208,7 +208,6 @@ BEGIN
   IF Viewers.CurDisplay # NIL THEN
 
     w.sl("System.OpenViewers creating System.Log viewer.");
-    Texts.SetColor(W, Display.White);
     Texts.WriteString(W, Version);
     Texts.WriteString(W, " / Display ");
     Texts.WriteInt(W, Viewers.CurDisplay.id, 1);

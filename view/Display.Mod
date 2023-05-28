@@ -2,8 +2,8 @@ MODULE Display;  (*NW 5.11.2013 / 17.1.2019 / AP 15.9.20 Extended Oberon / DCWB 
 IMPORT SYSTEM, Windows, Fonts, w := Writer;
 
 CONST
-  Black* = 0;        (*black = background*)
-  White* = 0FFFFFFH;
+  Black* = 0FF000000H;        (*black = background*)
+  White* = 0FFFFFFFFH;
 
   replace* = 0; (*modes*)
   paint*   = 1;
@@ -56,10 +56,13 @@ PROCEDURE RenderAlphaMap*(
   mapadr:    INTEGER;
   paint:     ARGB
 );
-BEGIN Windows.RenderAlphaMapToBitmap(
-        x, y, width, height,
-        mapadr, paint,
-        Window.bmp.address, Window.bmp.width)
+BEGIN
+  Windows.RenderAlphaMapToBitmap(
+    x, y, width, height,
+    mapadr, paint,
+    Window.bmp.address, Window.bmp.width,
+    Window.bmp.address + 4 * Window.bmp.width * Window.bmp.height
+  )
 END RenderAlphaMap;
 
 

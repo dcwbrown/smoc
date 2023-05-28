@@ -67,15 +67,20 @@ TYPE
     right*:     INTEGER;  (* Right margin                                    *)
     bottom*:    INTEGER;  (* Offset from top to start of bottom margin       *)
 
-    thumb*:     INTEGER;  (* Scroll thumb vertical offset                    *)
+(*  thumb*:     INTEGER;  (* Scroll thumb vertical offset                    *)  *)
     sentinel:   Line;     (* Sentinel for circular list of rendered lines    *)
 
     hasCaret*:  BOOLEAN;
     caretLoc*:  Location; (* Caret location                                  *)
 
+    selStart:   INTEGER;  (* First selected character                        *)
+    selLimit:   INTEGER;  (* First character beyond selection                *)
+
+    (*
     hasSel*:    BOOLEAN;
     selbeg*:    Location;
     selend*:    Location;
+    *)
     time*:      INTEGER;  (* Time of last selection                          *)
 
     changeMark: Oberon.Sprite
@@ -143,6 +148,7 @@ END LastLine;
 
 (*------------------display support------------------------*)
 
+(*
 PROCEDURE MarkThumb* (F: Frame;  on: BOOLEAN);  (*in scroll bar*)
 BEGIN
   IF (F.H > 0) & (F.left >= BarWidth) THEN
@@ -154,17 +160,31 @@ BEGIN
   END
 END MarkThumb;
 
+PROCEDURE CalcThumb(F: Frame);
+BEGIN F.thumb := Max(F.org * (F.H - 24) DIV (F.text.length + 1), 0) END CalcThumb;
 
 PROCEDURE UpdateThumb (F: Frame);  (*in scroll bar*)
 BEGIN
-  F.thumb := Max(F.org * (F.H - 24) DIV (F.text.length + 1), 0);
+  CalcThumb(F);
   w.s("UpdateThumb: F.org "); w.i(F.org);
   w.s(", F.text.length ");    w.i(F.H);
   w.s(", F.H ");              w.i(F.H);
   w.s("-> F.thumb ");         w.i(F.thumb); w.sl(".");
   MarkThumb(F, TRUE)
 END UpdateThumb;
+*)
 
+PROCEDURE DrawThumb(F: Frame);
+BEGIN
+  IF (F.H > 0) & (F.left >= BarWidth) THEN
+    Windows.FillRectangle(
+      Display.Window.bmp,
+      F.X + 3,  F.Y + Max(F.org * (F.H - 24) DIV (F.text.length + 1), 0) + 2,
+      ThumbWidth,  20,
+      0FFFFFFFFH
+    );
+  END
+END DrawThumb;
 
 PROCEDURE SetChangeMark (F: Frame;  on: BOOLEAN);  (*in corner*)
 BEGIN
@@ -239,7 +259,9 @@ VAR
   dx, xLim: INTEGER;
   glyph:    Fonts.Glyph;
 BEGIN
-  w.s("DisplayLine, R.col = $"); w.h(R.col); w.s(" '");
+  w.s("DisplayLine, X "); w.i(X);
+  w.s(" Y "); w.i(Y);
+  w.s(" R.col $"); w.h(R.col); w.s(" '");
   X    := X * 256;                      (* switch to subpixels *)
   xLim := (F.X + F.W - F.right) * 256;  (* x Limit in pixels   *)
   WHILE (NextCh # CR) & (R.fnt # NIL) DO
@@ -263,11 +285,59 @@ BEGIN
   L.width  := (X+255) DIV 256 + EolWidth - (F.X + F.left);
   L.eot    := R.fnt = NIL;
   Texts.Read(R, NextCh);
-  Windows.InvalidateRect(Display.Window, F.X + F.left, F.Y + L.baseline - L.ascent, L.width, L.height)
 END DisplayLine;
 
 
-PROCEDURE Validate (T: Texts.Text;  VAR pos: INTEGER);
+
+
+PROCEDURE DisplaySelectionBackground(  (*pass 2*)
+  F:       Frame;
+  L:       Line;
+  VAR R:   Texts.Reader;
+  X:       INTEGER;  (* In whole pixels relative to screen *)
+  Y:       INTEGER;  (* In whole pixels, baseline will be placed at Y *)
+  length:  INTEGER   (* 0 unless displaying trailing part of line *)
+);
+VAR
+  xLim:  INTEGER;
+  selx:  INTEGER;  (* Left edge of selection *)
+  seldx: INTEGER;  (* Width of selection *)
+BEGIN
+  w.s("DisplaySelectionBackground, X "); w.i(X);
+  w.s(" Y "); w.i(Y);
+  w.s(" on line from "); w.i(Texts.Pos(R)-1);
+  w.s(" to ");       w.i(Texts.Pos(R)-1 + L.length);
+  w.s(" selStart "); w.i(F.selStart);
+  w.s(" selLimit "); w.i(F.selLimit); w.sl(".");
+
+  X     := X * 256;                      (* switch to subpixels *)
+  xLim  := (F.X + F.W - F.right) * 256;  (* x Limit in pixels   *)
+  selx  := X;
+  seldx := xLim - selx;
+  WHILE (NextCh # CR) & (R.fnt # NIL) DO
+    IF (Texts.Pos(R)-1 = F.selStart) THEN selx  := X        END;
+    IF (Texts.Pos(R)-1 = F.selLimit) THEN seldx := X - selx END;
+    INC(X, Fonts.GetAdvance(R.fnt, ORD(NextCh)));
+    INC(length);
+    Texts.Read(R, NextCh)
+  END;
+  IF selx < xLim THEN
+    IF selx + seldx > xLim THEN seldx := xLim - selx END;
+    Windows.FillRectangle(
+      Display.Window.bmp,
+      selx DIV 256,  F.Y + L.baseline - L.ascent,
+      (seldx + 255) DIV 256, L.height,
+      0FF808080H)
+  END;
+  L.length := length + 1;
+  L.width  := (X+255) DIV 256 + EolWidth - (F.X + F.left);
+  L.eot    := R.fnt = NIL;
+  Texts.Read(R, NextCh);
+END DisplaySelectionBackground;
+
+
+PROCEDURE ValidateSOL(T: Texts.Text;  VAR pos: INTEGER);
+(* Ensure pos at start of line *)
 VAR R: Texts.Reader;
 BEGIN
   IF pos > T.length THEN pos := T.length
@@ -277,7 +347,8 @@ BEGIN
     REPEAT Texts.Read(R, NextCh);  INC(pos) UNTIL R.eot OR (NextCh = CR)
   ELSE pos := 0
   END
-END Validate;
+END ValidateSOL;
+
 
 (*------------------frame modifiers------------------------*)
 
@@ -293,13 +364,17 @@ VAR
   y:        INTEGER;  (* current top of available space for next line    *)
   baseline: INTEGER;  (* evaluated baseline position for line            *)
 BEGIN
-  w.s("Restore frame at "); Display.wfpos(F); w.sl(".");
+  w.s("Restore frame at "); Display.wfpos(F);
+  w.s(" top "); w.i(F.top); w.s(" bottom "); w.i(F.bottom); w.sl(".");
+
   Display.FillRectangle(F.X, F.Y, F.W, F.H, F.colour);
+  Windows.InvalidateRect(Display.Window, F.X, F.Y, F.W, F.H);
+
   IF F.left >= BarWidth THEN  (* white line between left side bar and content *)
     Display.FillRectangle(F.X + BarWidth - 1, F.Y, 1, F.H, Display.White)
   END;
 
-  Validate(F.text, F.org);
+  ValidateSOL(F.text, F.org);
   top     := F.top;
   bottom  := F.H - F.bottom;
   prevl   := F.sentinel;
@@ -314,27 +389,32 @@ BEGIN
       NewLine(F, line);
       MeasureLine(line, R);
       PlaceLine(F, line, y);
-      Texts.OpenReader(R, F.text, org);  (* Reset reader to start of line for display *)
-      Texts.Read(R, NextCh);
-      DisplayLine(F, line, R, F.X + F.left, F.Y + line.baseline, 0);
-      y          := line.baseline + line.descent;
+      y := line.baseline + line.descent;
+      w.s("  y "); w.i(y); w.s(", bottom "); w.i(bottom); w.sl(".");
+      IF y <= bottom THEN
+        IF (F.selStart < org + line.length) & (F.selLimit > org) THEN
+          Texts.OpenReader(R, F.text, org);  (* Reset reader to start of line for display *)
+          Texts.Read(R, NextCh);
+          DisplaySelectionBackground(F, line, R, F.X + F.left, F.Y + line.baseline, 0)
+        END;
+        Texts.OpenReader(R, F.text, org);  (* Reset reader to start of line for display *)
+        Texts.Read(R, NextCh);
+        DisplayLine(F, line, R, F.X + F.left, F.Y + line.baseline, 0)
+      END;
       prevl.next := line;
       prevl      := line;
       org        := org + line.length;
     END
   END;
   prevl.next := F.sentinel;
-  F.thumb    := F.H * F.org DIV (F.text.length + 1);
+  DrawThumb(F)
 END Restore;
-
-PROCEDURE Suspend* (F: Frame);
-BEGIN F.sentinel.next := F.sentinel;  (*F.pool := NIL*)
-END Suspend;
 
 PROCEDURE Extend* (F: Frame;  newY: INTEGER);
 VAR R: Texts.Reader;  L, l: Line;
     org: INTEGER;  curY, topY, botY, botY0: INTEGER;
 BEGIN
+  Restore(F);
   (*
   Display.ReplConst(F.col, F.X, newY, F.W, F.Y - newY, Display.replace);
   IF F.left >= BarWidth THEN
@@ -342,7 +422,7 @@ BEGIN
   END;
   topY := F.Y + F.H - F.top;  botY0 := F.Y + F.bottom;
   F.H := F.H + F.Y - newY;  F.Y := newY;  botY := F.Y + F.bottom;
-  IF F.sentinel.next = F.sentinel THEN Validate(F.text, F.org) END;
+  IF F.sentinel.next = F.sentinel THEN ValidateSOL(F.text, F.org) END;
   L := F.sentinel;  org := F.org;  curY := topY + F.voff;
   WHILE (L.next # F.sentinel) & (curY > botY0) DO
     L := L.next;  org := org + L.length;  curY := curY - L.lineHeight
@@ -362,13 +442,14 @@ BEGIN
     END
   END;
   L.next := F.sentinel;
-  F.thumb := F.org * F.H DIV (F.text.length + 1)
+  CalcThumb
   *)
 END Extend;
 
 PROCEDURE Reduce* (F: Frame;  newY: INTEGER);
 VAR L: Line;  curY, topY, botY: INTEGER;
 BEGIN
+  Restore(F);
   (*
   F.H := F.H + F.Y - newY;  F.Y := newY;
   topY := F.Y + F.H - F.top;  botY := F.Y + F.bottom;  L := F.sentinel;
@@ -383,7 +464,8 @@ BEGIN
   ELSIF F.H > F.top THEN Display.ReplConst(F.col, F.X + F.left, F.Y, F.W - F.left,
                                            F.H - F.top, Display.replace)
   END;
-  F.thumb := F.org * F.H DIV (F.text.length + 1);  MarkThumb(F, TRUE)
+  CalcThumb(F);
+  MarkThumb(F, TRUE)
   *)
 END Reduce;
 
@@ -394,6 +476,7 @@ PROCEDURE ScrollDown (F: Frame;  org: INTEGER;  voff, dY: INTEGER;
 VAR R: Texts.Reader;  L, L0, l: Line;
     curY, topY, botY, Y0, Y1, Y2, h, k: INTEGER;
 BEGIN
+  Restore(F);
   (*
   topY := F.Y + F.H - F.top;  botY := F.Y + F.bottom;
   curY := topY + F.voff - dY;  Y0 := Max(curY, botY);
@@ -428,6 +511,7 @@ PROCEDURE ScrollUp (F: Frame;  org: INTEGER;  voff, dY: INTEGER;  skipto: Line);
 VAR R: Texts.Reader;  L, l: Line;
     curY, topY, botY, Y0, Y1, h: INTEGER;
 BEGIN
+  Restore(F);
   (*
   topY := F.Y + F.H - F.top;  botY := F.Y + F.bottom;  curY := topY + voff - dY;
   F.org := org;  F.voff := voff;  L := F.sentinel;  PoolLines(F, L, skipto);
@@ -469,7 +553,7 @@ BEGIN (*dY # 0*)
       ELSIF F.org = 0 THEN ScrollDown(F, 0, 0, F.voff, lines, 0, 0)
       ELSE (*F.org > 0 & dY > F.voff*) k := F.sentinel.next.lineHeight;
         q := F.org - length*((dY - F.voff + k - 1) DIV k - 1);  (*first guess backward*)
-        REPEAT DEC(q, length);  org := q;  Validate(F.text, org) UNTIL org < F.org;
+        REPEAT DEC(q, length);  org := q;  ValidateSOL(F.text, org) UNTIL org < F.org;
         REPEAT org0 := org;  k := 0;  dy := 0;
           Texts.OpenReader(R, F.text, org);  Texts.Read(R, NextCh);
           WHILE org < F.org DO
@@ -485,7 +569,7 @@ BEGIN (*dY # 0*)
               ScrollDown(F, org, F.voff + dy - dY, dY, lines, i, k);  org := -1
             END
           ELSIF org0 > 0 THEN  (*next guess backward*)
-            REPEAT DEC(q, length);  org := q;  Validate(F.text, org) UNTIL org < org0
+            REPEAT DEC(q, length);  org := q;  ValidateSOL(F.text, org) UNTIL org < org0
           ELSE (*reached beginning of text*) org := -1;
             IF dy + F.voff > 0 THEN ScrollDown(F, 0, 0, dy + F.voff, lines, 0, k) END
           END
@@ -518,38 +602,6 @@ BEGIN
   Restore(F)
 END Show;
 
-(*
-CONST K = 100;  (*assumed number of lines*)
-VAR R: Texts.Reader; L, L0: Line; l: LineDesc;
-  org: INTEGER; dy, h, k: INTEGER;
-  lines: ARRAY K OF LineDesc;  (*cache to prevent re-reading of lines*)
-BEGIN
-  IF F.sentinel.next # F.sentinel THEN
-    Validate(F.text, pos);
-    IF pos < F.org THEN
-      org := pos; h := F.H - F.top - F.bottom + F.voff; k := 0; dy := 0;
-      Texts.OpenReader(R, F.text, org); Texts.Read(R, nextCh);
-      WHILE (org < F.org) & (dy < h) DO
-        MeasureLine(l, R);
-        org := org + l.len; dy := dy + l.lsp;
-        IF k < K THEN lines[k] := l; INC(k) END
-      END ;
-      IF (org = F.org) & (dy < h) THEN ScrollDown(F, pos, 0, dy + F.voff, lines, 0, k)
-      ELSE MarkThumb(F, FALSE); F.org := pos; F.voff := 0; LastLine(F, F.sentinel); Restore(F); MarkThumb(F, TRUE)
-      END
-    ELSIF pos > F.org THEN
-      org := F.org; L0 := F.sentinel; L := L0.next; dy := 0;
-      WHILE (L # F.sentinel) & (org < pos) DO
-        org := org + L.len; dy := dy + L.lsp; L0 := L; L := L.next
-      END ;
-      IF L # F.sentinel THEN ScrollUp(F, org, 0, dy - F.voff, L0)
-      ELSIF pos < F.text.len THEN
-        MarkThumb(F, FALSE); F.org := pos; F.voff := 0; LastLine(F, F.sentinel); Restore(F); MarkThumb(F, TRUE)
-      END
-    ELSIF F.voff > 0 THEN ScrollDown(F, pos, 0, F.voff, lines, 0, 0)
-    END
-  END
-*)
 
 (*------------------locators------------------------*)
 
@@ -965,8 +1017,7 @@ BEGIN
       END
     END
     *)
-  END;
-  UpdateThumb(F)
+  END
 END Replace;
 
 
@@ -1021,7 +1072,6 @@ BEGIN
     END
   END;
   *)
-  UpdateThumb(F)
 END Insert;
 
 PROCEDURE Delete* (F: Frame;  beg, end: INTEGER);
@@ -1095,8 +1145,7 @@ BEGIN
       END
     END
     *)
-  END;
-  UpdateThumb(F)
+  END
 END Delete;
 
 PROCEDURE Recall*(VAR B: Texts.Buffer);
@@ -1126,23 +1175,29 @@ BEGIN ASSERT(F.hasCaret);
                   Texts.Delete(F.text, F.caretLoc.pos - 1, F.caretLoc.pos, DelBuf);
                   SetCaretPos(F, F.caretLoc.pos - 1)
                 END
-  |CtrlA:       IF F.hasSel THEN FlipSelection(F, F.selbeg, F.selend) END;   (*select all*)
+  |CtrlA:       (*
+                IF F.hasSel THEN FlipSelection(F, F.selbeg, F.selend) END;   (*select all*)
                 F.selbeg.org := 0;  F.selbeg.pos := 0;  F.selbeg.x := F.left;
                 F.selend.org := F.text.length;  F.selend.pos := F.text.length;
                 F.selend.x := F.left;
                 FlipSelection(F, F.selbeg, F.selend);
                 F.time := Oberon.Time();  F.hasSel := TRUE
-  |CtrlC:       IF F.hasSel THEN                                             (*copy*)
+                *)
+  |CtrlC:       (*
+                IF F.hasSel THEN                                             (*copy*)
                   NEW(TBuf);  Texts.OpenBuf(TBuf);
                   Texts.Save(F.text, F.selbeg.pos, F.selend.pos, TBuf)
                 END
+                *)
   |CtrlV:       NEW(buf);  Texts.OpenBuf(buf);  Texts.Copy(TBuf, buf);       (*paste*)
                 Texts.Insert(F.text, F.caretLoc.pos, buf);
                 SetCaretPos(F, F.caretLoc.pos + TBuf.length)
-  |CtrlX:       IF F.hasSel THEN                                             (*cut*)
+  |CtrlX:       (*
+                IF F.hasSel THEN                                             (*cut*)
                   NEW(TBuf);  Texts.OpenBuf(TBuf);
                   Texts.Delete(F.text, F.selbeg.pos, F.selend.pos, TBuf)
                 END
+                *)
   |CursorLeft:  IF F.caretLoc.pos > 0 THEN
                   RemoveCaret(F);  SetCaretPos(F, F.caretLoc.pos - 1)
                 END
@@ -1175,7 +1230,7 @@ PROCEDURE Modify* (F: Frame;  id, Y, H: INTEGER);
 VAR dY: INTEGER;
 BEGIN
   w.sl("TextFrames Modify handler.");
-  MarkThumb(F, FALSE);  RemoveMarks(F);  SetChangeMark(F, FALSE);
+  RemoveMarks(F);  SetChangeMark(F, FALSE);
   IF id = Viewers.restore THEN Restore(F)
   ELSIF id = Viewers.modify THEN
     Restore(F);
@@ -1192,7 +1247,10 @@ BEGIN
     END
     *)
   END;
-  IF F.H > 0 THEN MarkThumb(F, TRUE);  SetChangeMark(F, F.text.changed) END
+  IF F.H > 0 THEN
+    DrawThumb(F);
+    SetChangeMark(F, F.text.changed)
+  END
 END Modify;
 
 PROCEDURE Open* (F: Frame;  H: Display.Handler;  T: Texts.Text;
@@ -1208,7 +1266,7 @@ BEGIN
   w.sl(".");
 
 
-  NEW(l);  (* Create a sentinel line for a closed  list of lines *)
+  NEW(l);  (* Create a sentinel line for a closed list of lines *)
   l.length     := 0;
   l.width      := 0;
   l.eot        := FALSE;
@@ -1224,8 +1282,8 @@ BEGIN
   F.colour     := col;      F.voff    := voff;
   F.top        := top;      F.left    := left;
   F.right      := right;    F.bottom  := bottom;
-  F.thumb      := 0;        F.time    := 0;
-  F.hasCaret   := FALSE;    F.hasSel  := FALSE;
+(*F.thumb      := 0;*)      F.time    := 0;
+  F.hasCaret   := FALSE;  (*F.hasSel  := FALSE;*)
 
   NEW(F.changeMark); Oberon.SetSpriteGlyph(F.changeMark, Oberon.BlockGlyph);
 
@@ -1255,6 +1313,7 @@ END CopyOver;
 
 PROCEDURE GetSelection* (F: Frame;  VAR text: Texts.Text;  VAR beg, end, time: INTEGER);
 BEGIN
+  (*
   IF F.hasSel THEN
     IF F.text = text THEN
       IF F.selbeg.pos < beg THEN beg := F.selbeg.pos END;  (*leftmost*)
@@ -1263,6 +1322,7 @@ BEGIN
       text := F.text;  beg := F.selbeg.pos;  end := F.selend.pos;  time := F.time
     END
   END
+  *)
 END GetSelection;
 
 PROCEDURE Update* (F: Frame;  VAR M: UpdateMsg);
@@ -1288,57 +1348,38 @@ VAR M:            CopyOverMsg;
     fnt:          Fonts.Font;
     col, voff:    INTEGER;
     Y0, SL, SR:   INTEGER;
+    loc:          Location;
 BEGIN
   w.sl("TextFrames.Edit.");
   SL := F.X + Min(F.left, BarWidth);  keys := Keys;
   IF X < SL THEN  (*cursor starts in scroll bar*)
     Oberon.SetMouseGlyph(Oberon.UpdownGlyph);
-    (*
-    Oberon.DrawMouse(ScrollMarker, X, Y);
     keysum := Keys;
-    IF Keys = {2} THEN  (*ML: continuous scroll*)
-      Y0 := F.Y + F.H - 1 - F.thumb;  SR := SL + Min(100, F.W DIV 2);
-      SetChangeMark(F, FALSE);  RemoveMarks(F);
-      WHILE Keys # {} DO Oberon.DrawMouse(ScrollMarker, X, Y);
-        IF Y # Y0 THEN Oberon.RemoveMarks(F.X, F.Y, F.W, F.H);
-          IF X < SR THEN Show(F, (F.Y + F.H - Y) * (F.text.length) DIV F.H) ELSE Scroll(F, Y0 - Y) END;
-          Y0 := Y
-        END;
-        Input.Mouse(Keys, X, Y)
-      END;
-      SetChangeMark(F, F.text.changed)
-    ELSIF Keys = {1} THEN  (*MM: positional scrolling*) keysum := Keys;
-      REPEAT Input.Mouse(Keys, X, Y);  keysum := keysum + Keys;
-        Oberon.DrawMouse(ScrollMarker, X, Y)
-      UNTIL Keys = {};
-      IF keysum # {0, 1, 2} THEN
-        IF 0 IN keysum THEN pos := 0
-        ELSIF 2 IN keysum THEN pos := Max(F.text.length - 40, 0)
-        ELSE pos := (F.Y + F.H - Y) * (F.text.length) DIV F.H
-        END;
-        SetChangeMark(F, FALSE);
-        RemoveMarks(F);  Oberon.RemoveMarks(F.X, F.Y, F.W, F.H);
-        Show(F, pos);  SetChangeMark(F, F.text.changed)
-      END
-    ELSIF Keys = {0} THEN  (*MR: track line and scroll up or down*)
-      TrackLine(F, X, Y, pos, keysum);
-      IF keysum # {0, 1, 2} THEN
-        IF (pos >= 0) & (keysum = {0}) THEN  (*MR, scroll up*)
-          SetChangeMark(F, FALSE);
-          RemoveMarks(F);  Oberon.RemoveMarks(F.X, F.Y, F.W, F.H);
-          Show(F, pos);  SetChangeMark(F, F.text.changed)
-        ELSIF (keysum = {0,1}) THEN  (*MR and MM, scroll down*)
-          SetChangeMark(F, FALSE);
-          RemoveMarks(F);  Oberon.RemoveMarks(F.X, F.Y, F.W, F.H);
-          Show(F, F.org*2 - pos - 100);  SetChangeMark(F, F.text.changed)
-        END
-      END
+    IF    Keys = {2}   THEN (* ML: scroll line at Y to top *)
+                            LocateLine(F, Y - F.Y, loc);
+                            Show(F, loc.org)
+    ELSIF Keys = {1}   THEN (* MM: positional scrolling *)
+                            Show(F, (Y - F.Y) * F.text.length DIV F.H)
+    ELSIF Keys = {0,1} THEN (* MM,MR: to top *)
+                            Show(F, 0)
+    ELSIF Keys = {0}   THEN (* MR: to top *)
+                            Show(F, 0)
+    ELSIF Keys = {1,2} THEN (* MM,ML: to bottom *)
+                            Show(F, Max(F.text.length - 40, 0))
     END
-    *)
   ELSE  (*cursor is in text area*)
     (* Oberon.DrawMouseArrow(X, Y); (Mouse arrow is drawn by default *)
     w.s("TextFrames.Edit cursor in text area, keys $"); w.h(SYSTEM.VAL(INTEGER, Keys)); w.sl(".");
-    IF 0 IN Keys THEN  (*MR: select*)
+    IF 0 IN Keys THEN  (* MR: select *)
+      IF F.sentinel.next # F.sentinel THEN
+        LocateChar(F, X - F.X, Y - F.Y, loc);
+        F.selStart := loc.pos;
+        F.selLimit := F.selStart + 1;
+        w.s("Selected selStart "); w.i(F.selStart);
+        w.s(" selLimit ");         w.i(F.selLimit); w.sl(".");
+        Restore(F);
+      END
+      (*
       TrackSelection(F, X, Y, keysum);
       IF F.hasSel THEN
         IF keysum = {0, 2} THEN  (*MR, ML: delete text*)
@@ -1351,6 +1392,7 @@ BEGIN
           Viewers.FocusViewer.handle(Viewers.FocusViewer, M)
         END
       END
+      *)
     ELSIF 1 IN Keys THEN  (*MM: call*)
       TrackWord(F, X, Y, pos, keysum);
       IF (pos >= 0) & ~(0 IN keysum) THEN Call(F, pos, 2 IN keysum) END
@@ -1420,7 +1462,6 @@ VAR T: Texts.Text;
 BEGIN NEW(T);
   T.notify := NotifyDisplay;
   Texts.Open(T, "");
-  Texts.SetColor(W, Display.Black);
   Texts.WriteString(W, name);
   Texts.WriteString(W, " | ");
   Texts.WriteString(W, commands);
@@ -1468,8 +1509,8 @@ BEGIN NEW(TBuf);  NEW(DelBuf);
   Top        := (Ascent + Descent) DIV 2;
   Bottom     := (Ascent + Descent) DIV 2;
 
-  Texts.OpenWriter(W);  Texts.SetColor(W,  Display.White);
-  Texts.OpenWriter(KW); Texts.SetColor(KW, Display.White);
+  Texts.OpenWriter(W);  Texts.SetColor(W,  Display.Black);  (* For composing menus *)
+  Texts.OpenWriter(KW); Texts.SetColor(KW, Display.White);  (* For keyboard entry  *)
   w.sl("TextFrames initialised.");
   w.s("BarWidth "); w.i(BarWidth); w.sl(".");
 END TextFrames.

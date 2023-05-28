@@ -259,24 +259,30 @@ END RemoveMarks;
 PROCEDURE SaveRect(bmp: Windows.Bitmap; x, y, wi, h: INTEGER; VAR buf: ARRAY OF ARGB);
 VAR sadr, i, ilim, ylim: INTEGER;
 BEGIN ASSERT(wi * h <= LEN(buf));
-  (*o.s("SaveRect "); Display.wxy(x,y); o.s(" size "); Display.wxy(wi,h); o.sl(".");*)
-  i := 0;  ylim := y + h;
-  WHILE y < ylim DO
-    sadr := bmp.address + 4 * (bmp.width * y + x);  ilim := i + wi;
-    WHILE i < ilim DO SYSTEM.GET(sadr, buf[i]);  INC(i);  INC(sadr, 4); END;
-    INC(y);
+  IF (x < bmp.width) & (y < bmp.height) THEN
+    (*o.s("SaveRect "); Display.wxy(x,y); o.s(" size "); Display.wxy(wi,h); o.sl(".");*)
+    i := 0;  ylim := y + h;  IF ylim > bmp.height THEN ylim := bmp.height END;
+    IF x + wi > bmp.width THEN wi := bmp.width - x END;
+    WHILE y < ylim DO
+      sadr := bmp.address + 4 * (bmp.width * y + x);  ilim := i + wi;
+      WHILE i < ilim DO SYSTEM.GET(sadr, buf[i]);  INC(i);  INC(sadr, 4); END;
+      INC(y);
+    END
   END
 END SaveRect;
 
 PROCEDURE RestoreRect(buf: ARRAY OF ARGB; bmp: Windows.Bitmap; x, y, wi, h: INTEGER);
 VAR tadr, i, ilim, ylim: INTEGER;
 BEGIN ASSERT(wi * h <= LEN(buf));
-  (*o.s("RestoreRect "); Display.wxy(x,y); o.s(" size "); Display.wxy(wi,h); o.sl(".");*)
-  i := 0;  ylim := y + h;
-  WHILE y < ylim DO
-    tadr := bmp.address + 4 * (bmp.width * y + x);  ilim := i + wi;
-    WHILE i < ilim DO SYSTEM.PUT(tadr, buf[i]);  INC(i);  INC(tadr, 4); END;
-    INC(y)
+  IF (x < bmp.width) & (y < bmp.height) THEN
+    (*o.s("RestoreRect "); Display.wxy(x,y); o.s(" size "); Display.wxy(wi,h); o.sl(".");*)
+    i := 0;  ylim := y + h;  IF ylim > bmp.height THEN ylim := bmp.height END;
+    IF x + wi > bmp.width THEN wi := bmp.width - x END;
+    WHILE y < ylim DO
+      tadr := bmp.address + 4 * (bmp.width * y + x);  ilim := i + wi;
+      WHILE i < ilim DO SYSTEM.PUT(tadr, buf[i]);  INC(i);  INC(tadr, 4); END;
+      INC(y)
+    END
   END
 END RestoreRect;
 
