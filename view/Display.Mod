@@ -46,7 +46,10 @@ PROCEDURE DrawPixel*(x, y: INTEGER; colour: ARGB);
 BEGIN Windows.DrawPixel(Window.bmp, x, y, colour) END DrawPixel;
 
 PROCEDURE FillRectangle*(x, y, w, h: INTEGER; colour: ARGB);
-BEGIN Windows.FillRectangle(Window.bmp, x, y, w, h, colour) END FillRectangle;
+BEGIN
+  Windows.FillRectangle(Window.bmp, x, y, w, h, colour);
+  Windows.InvalidateRect(Window, x, y, w, h)
+END FillRectangle;
 
 PROCEDURE RenderAlphaMap*(
   x:         INTEGER;  (* In 1/4 pixels   *)
@@ -82,8 +85,8 @@ BEGIN wxy(f.X, f.Y);  w.s(" size ");  wxy(f.W, f.H); END wfpos;
 
 BEGIN
   w.sl("Display initialising.");
-  Width  := 1920;
+  Width  := 1800;
   Height := 1280;
-  Window := Windows.NewWindow(50, 50, Width, Height);
+  Window := Windows.NewWindow(700, 50, Width, Height);
   w.sl("Display initialised.");
 END Display.

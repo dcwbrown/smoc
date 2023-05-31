@@ -255,13 +255,13 @@ BEGIN
   unit := 1;
   size := 0;
   WHILE (i >= 0) & (name[i] >= '0') & (name[i] <= '9') DO
-    size := size + unit * ORD(name[i]) - ORD('0');
+    size := size + unit * (ORD(name[i]) - ORD('0'));
     unit := unit * 10;
     DEC(i)
   END;
-  WHILE (i >= 0) & (name[i] = ' ') DO DEC(i) END;
+  WHILE (i >= 0) & ((name[i] = ' ') OR (name[i] = '.')) DO DEC(i) END;
   ASSERT(i > 0);
-  name[i] := 0X;
+  name[i+1] := 0X;
 RETURN GetFont(name, size) END Load;
 
 PROCEDURE WriteMap(alpha: BYTE; len: INTEGER);
@@ -498,6 +498,7 @@ BEGIN
   (*Default := GetFont("Avrile Serif Medium", 13);*)
   (*Default := GetFont("Cambria", 16);*)
   (*Default := GetFont("Arial", 15);*)
-  Default := GetFont("Calibri", 17);
+  (*Default := GetFont("Calibri", 17);*)
+  Default := GetFont("Consolas", 17);
 
 END Fonts.

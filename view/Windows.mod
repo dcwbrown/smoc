@@ -559,7 +559,6 @@ BEGIN
   class.wndproc   := SYSTEM.VAL(INTEGER, WndProc);
   class.className := SYSTEM.ADR(classname);
   class.hIcon     := MakeIcon();
-  class.hCursor   := 0;  (*LoadCursorW(0, 32512);  (* IDC_ARROW *)  ASSERT(class.hCursor # 0);*)
   classAtom       := RegisterClassExW(SYSTEM.ADR(class));
   ASSERT(classAtom # 0);
 
@@ -580,8 +579,6 @@ BEGIN
     0,                       (* Extended window style *)
     SYSTEM.ADR(classname),
     SYSTEM.ADR(windowname),
-  (*10CF0000H,               (* WS_OVERLAPPEDWINDOW|WS_VISIBLE *) *)
-  (*90000000H,               (* WS_POPUP|WS_VISIBLE *) *)
     80000000H,               (* WS_POPUP *)
     x, y, width, height,     (* Initial position *)
     0, 0, 0, 0               (* hWndParent, hMenu, hInstance, lpParam *)
@@ -589,6 +586,8 @@ BEGIN
   ASSERT(hwnd # 0);
 
   w.s("Created window. hwnd $");  w.h(hwnd);  w.sl(".");
+
+  K.SetHWnd(hwnd);  (* Make sure kernel error message boxes stop the message pump *)
 
   EnsureBitmap(width, height, window.bmp);
 

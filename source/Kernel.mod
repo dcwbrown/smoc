@@ -58,6 +58,9 @@ VAR
   ExecutablePath*:    ARRAY 1024 OF CHAR;
   InitialDirectory*:  ARRAY 1024 OF CHAR;
 
+  (* hwnd for messagebox owning window, if any. Set by SetHWnd. *)
+  HWnd: INTEGER;
+
 
 
 (* -------------------------------------------------------------------------- *)
@@ -175,7 +178,7 @@ VAR
 BEGIN
   res := Utf8ToUtf16(title, title16);
   res := Utf8ToUtf16(msg,   msg16);
-  res := MessageBoxW(0, SYSTEM.ADR(msg16), SYSTEM.ADR(title16), 0)
+  res := MessageBoxW(HWnd, SYSTEM.ADR(msg16), SYSTEM.ADR(title16), 0)
 END MessageBox;
 
 
@@ -719,7 +722,12 @@ BEGIN
   END;
 END GetWindowsPaths;
 
+PROCEDURE SetHWnd*(h: INTEGER);
+BEGIN HWnd := h END SetHWnd;
+
 BEGIN
+  HWnd := 0;
+
   (* Set up some useful exports from standard procedures. *)
   Kernel := Boot.PEImports.LoadLibraryA(SYSTEM.ADR("kernel32.dll"));
   Gdi    := Boot.PEImports.LoadLibraryA(SYSTEM.ADR("gdi32.dll"));

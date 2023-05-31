@@ -40,7 +40,7 @@ BEGIN
     Main.X := V.X + 1;
     Main.Y := V.Y + V.menuH + 1;
     Main.W := V.W - 2;
-    Main.H := V.H - V.menuH - 1;
+    Main.H := V.H - V.menuH - 2;
 
     w.s(" Menu at "); Display.wfpos(Menu); w.sl(".");
     w.s(" Main at "); Display.wfpos(Main); w.sl(".");
@@ -73,7 +73,7 @@ BEGIN
       (* Fill remainder with main *)
       Viewers.Adjust(Main, Viewers.modify, Y + V.menuH + 1, H - V.menuH - 1)
     ELSE
-      (* Top not changing or moving down *)
+      (* Top not changing, or moving down *)
       (* Put main at bottom *)
       Viewers.Adjust(Main, Viewers.modify, Y + V.menuH + 1, H - V.menuH - 1);
       (* Put menu at top *)
@@ -91,6 +91,7 @@ BEGIN
 
   DrawBorders(V, Y, H)
 END Modify;
+
 
 PROCEDURE Suspend (V: Viewer);
 VAR Menu, Main: Display.Frame;

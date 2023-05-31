@@ -1,5 +1,5 @@
 MODULE Viewers; (*JG 14.9.90 / NW 15.9.13 / AP 13.2.20 Extended Oberon / DCWB 8May23 *)
-IMPORT Display, w := Writer, SYSTEM;
+IMPORT Display, w := Writer, SYSTEM, Windows;
 
 CONST
   restore*  = 0; (*message ids*)
@@ -98,22 +98,20 @@ BEGIN
   IF D = CurDisplay THEN FocusViewer := V END
 END SetFocus;
 
+
 PROCEDURE GetFocus* (D: DisplayArea): Viewer;
 BEGIN RETURN D.focus
 END GetFocus;
+
 
 PROCEDURE Adjust* (F: Display.Frame; id, Y, H: INTEGER);
 VAR M: ViewerMsg;
 BEGIN
   IF Y+H > Display.Height THEN
-    w.s("Viewers.Adjust Y "); w.i(Y);
-    w.s(", H ");                       w.i(H);
-    IF F IS Viewer THEN
-      w.s(", viewer state ");          w.i(F(Viewer).state);
-    END;
-    w.s(", viewer adr $");             w.i(SYSTEM.ADR(F));
-    w.sl(".");
-    ASSERT(FALSE);
+    w.s("Viewers.Adjust Y "); w.i(Y); w.s(", H "); w.i(H);
+    IF F IS Viewer THEN w.s(", viewer state "); w.i(F(Viewer).state) END;
+    w.s(", viewer adr $"); w.i(SYSTEM.ADR(F)); w.sl(".");
+    ASSERT(FALSE)
   END;
   M.Y := Y;  M.H := H;  M.id := id;  F.handle(F, M);
   F.Y := Y;  F.H := H
@@ -125,7 +123,7 @@ BEGIN
   IF f IS Viewer THEN
     w.s(" state ");
     IF    f(Viewer).state < -1 THEN w.s("suspended")
-    ELSIF f(Viewer).state = -1 THEN w.s("track or suspended filler")
+    ELSIF f(Viewer).state = -1 THEN w.s("track, or suspended filler")
     ELSIF f(Viewer).state =  0 THEN w.s("closed")
     ELSIF f(Viewer).state =  1 THEN w.s("filler")
     ELSIF f(Viewer).state >  1 THEN w.s("displayed")
@@ -141,13 +139,16 @@ BEGIN
   IF (V.state = Closed) & (X < inf) THEN
     IF Y > D.H THEN Y := D.H END;
 
+    w.sl("a");
     T := D.child.next; (* first track *)
     WHILE X >= T.X + T.W DO T := T.next END;
 
+    w.sl("b");
     (* Find viewer containing Y *)
     v := T.child.next;
-    WHILE v.Y + v.H <= Y DO v := v.next END;
+    WHILE Y >= v.Y + v.H DO v := v.next END;
 
+    w.sl("c");
     ASSERT(Y >= v.Y);  ASSERT(Y < v.Y + v.H);
 
     IF Y + V.minH > v.Y + v.H THEN
@@ -308,20 +309,29 @@ END RestoreTrack;
 PROCEDURE Close* (V: Viewer);
 VAR D: DisplayArea; T, U: Display.Frame; M: ViewerMsg;
 BEGIN
-  w.sl("Viewers.Close called - not yet integrated.");  ASSERT(FALSE);
-  IF V.state > 1 THEN D := ThisDisplay(V);
-    U := V.next; T := D.child;
+  w.sl("Viewers.Close.");
+  IF V.state > 1 THEN
+    D := ThisDisplay(V);
+    U := V.next;
+    T := D.child;
     REPEAT T := T.next UNTIL V.X < T.X + T.W;
     IF (T(Track).under = NIL) OR (U.next # V) THEN
-      M.id := suspend; M.state := Closed; V.handle(V, M); V.state := Closed;
+      M.id := suspend;  M.state := Closed;  V.handle(V, M);
+      V.state := Closed;
       Adjust(U, modify, V.Y, V.H + U.H);
-      V.prev.next := V.next; V.next(Viewer).prev := V.prev; D.backup := V
+      V.prev.next := V.next;
+      V.next(Viewer).prev := V.prev;
+      D.backup := V
     ELSE (*close track*)
-      M.id := suspend; M.state := Closed; V.handle(V, M); V.state := Closed;
-      U.handle(U, M); U(Viewer).state := Closed; D.backup := V;
+      M.id := suspend;  M.state := Closed;  V.handle(V, M);
+      V.state := Closed;
+      U.handle(U, M);
+      U(Viewer).state := Closed;
+      D.backup := V;
       RestoreTrack(T)
     END;
-    V.next := NIL; V.prev := NIL; (*make other viewers unreachable from V*)
+    V.next := NIL;  (*make other viewers unreachable from V*)
+    V.prev := NIL;
     IF D.focus = V THEN SetFocus(D, ThisViewer(D, 0, 0)) END
   END
 END Close;
@@ -331,11 +341,12 @@ END Close;
 PROCEDURE Recall* (D: DisplayArea; VAR V: Viewer); (*last closed viewer*)
 BEGIN V := D.backup
 END Recall;
+*)
+
 
 PROCEDURE Flush* (D: DisplayArea); (*last closed viewer*)
 BEGIN D.backup := NIL
 END Flush;
-*)
 
 
 PROCEDURE Locate* (D: DisplayArea; X, H: INTEGER;

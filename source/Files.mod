@@ -310,10 +310,12 @@ BEGIN
   IF bRes # 0 THEN res := 0 ELSE res := -1 END
 END Delete;
 
-PROCEDURE Rename*(old, new: ARRAY OF SYSTEM.CARD16; VAR res: INTEGER);
-VAR bRes: Bool;
+PROCEDURE Rename*(old, new: ARRAY OF CHAR; VAR res: INTEGER);
+VAR bRes: Bool;  old16, new16: PathStr16;  len: INTEGER;
 BEGIN
-  bRes := MoveFileExW(old, new, ORD(MOVEFILE_COPY_ALLOWED));
+  len := K.Utf8ToUtf16(old, old16);
+  len := K.Utf8ToUtf16(new, new16);
+  bRes := MoveFileExW(old16, new16, ORD(MOVEFILE_COPY_ALLOWED));
   IF bRes # 0 THEN res := 0 ELSE res := -1 END
 END Rename;
 

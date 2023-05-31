@@ -1,5 +1,5 @@
 MODULE Oberon; (*JG 6.9.90 / 23.9.93 / 13.8.94 / NW 14.4.2013 / 22.12.2015 / AP 1.9.22 Extended Oberon / DCWB 8May23 *)
-IMPORT SYSTEM, Kernel,  Windows, Files, Modules, Input,   Display,
+IMPORT SYSTEM, Kernel,  Windows, Files, Modules, Input, Display,
                Viewers, Fonts, Texts,   o := Writer;
 
 CONST
@@ -113,9 +113,6 @@ VAR
   BlockGlyph*:  Fonts.Glyph;
   CrossGlyph*:  Fonts.Glyph;
   GreyGlyph*:   Fonts.Glyph;
-
-  PrevX: INTEGER;
-  PrevY: INTEGER;
 
   (* There are at most one of each of these 3 sprites                    *)
   Mouse*: Sprite;  (* Mouse pointer represented by Arrow/UpdownGlyph     *)
@@ -508,41 +505,57 @@ PROCEDURE SystemTrack*(X: INTEGER): INTEGER;
 BEGIN RETURN X DIV DW * DW + DW DIV 8 * 5
 END SystemTrack;
 
-PROCEDURE UY (X: INTEGER): INTEGER;
+PROCEDURE UserNewY (X: INTEGER): INTEGER;
 VAR y: INTEGER;
     fil, top, bot, alt, max: Display.Frame;
-BEGIN Viewers.Locate(Viewers.CurDisplay, X, 0, fil, top, bot, alt, max);
-  IF fil.H >= DH DIV 8 THEN y := DH ELSE y := max.Y + max.H DIV 2 END;
+BEGIN
+  Viewers.Locate(Viewers.CurDisplay, X, 0, fil, top, bot, alt, max);
+  IF fil.H >= DH DIV 8 THEN y := 0 ELSE y := max.Y + max.H DIV 2 END;
+  o.s("  UserNewY returning Y "); o.i(y); o.sl(".");
   RETURN y
-END UY;
+END UserNewY;
 
 PROCEDURE AllocateUserViewer*(DX: INTEGER;  VAR X, Y: INTEGER);
 BEGIN
   IF Enabled(Star) THEN X := Star.x;  Y := Star.y
-  ELSE X := DX DIV DW * DW;  Y := UY(X)
+  ELSE X := DX DIV DW * DW;  Y := UserNewY(X)
   END
 END AllocateUserViewer;
 
-PROCEDURE SplitY (X: INTEGER): INTEGER;
+
+(*  SystemNewY - allocate new viewer position in system track               *)
+(*                                                                          *)
+(*  If track filler is > 1/8 display height, place new viewer at top,       *)
+(*  else place new viewer inside tallest existing viewer as follows:        *)
+(*                                                                          *)
+(*  If existing viewer   place new viewer above   leaving what was the      *)
+(*  is taller than:      bottom of tallest by:    tallest reduced to:       *)
+(*  ------------------   ----------------------   ------------------------  *)
+(*  90% display height   66% display height       24% - 34% display height  *)
+(*  56% display height   33% display height       23% - 57% display height  *)
+(*  23% display height   20% display height        3% - 36% display height  *)
+(*  or else              50% viewer height        50% max viewer height     *)
+
+PROCEDURE SystemNewY (X: INTEGER): INTEGER;
 VAR
   H0,  H1,  H2,  H3,  y:   INTEGER;
   fil, top, bot, alt, max: Display.Frame;
 BEGIN
-  o.s("Oberon.SplitY(X "); o.i(X); o.s(") starting.");
+  o.s("Oberon.SystemNewY(X "); o.i(X); o.s(") starting.");
   Viewers.Locate(Viewers.CurDisplay, X, DH, fil, top, bot, alt, max);
   H3 := DH - DH DIV 3;  (* H3 = 2/3  DH *)  (* DH = Display.Height *)
   H2 := H3 - H3 DIV 2;  (* H2 = 1/3  DH *)
   H1 := DH DIV 5;       (* H1 = 1/5  DH *)
   H0 := DH DIV 10;      (* H0 = 1/10 DH *)
-  IF    fil.H >= DH DIV 8 THEN y := fil.Y
+  IF    fil.H >= DH DIV 8 THEN y := 0
   ELSIF max.H >= DH - H0  THEN y := max.Y + max.H - H3
   ELSIF max.H >= H3 - H0  THEN y := max.Y + max.H - H2
   ELSIF max.H >= H2 - H0  THEN y := max.Y + max.H - H1
                           ELSE y := max.Y + max.H DIV 2
   END;
-  o.s("Oberon.SplitY returning "); o.i(y); o.sl(".");
+  o.s("Oberon.SystemNewY returning "); o.i(y); o.sl(".");
   RETURN y
-END SplitY;
+END SystemNewY;
 
 PROCEDURE AllocateSystemViewer*(DX: INTEGER;  VAR X, Y: INTEGER);
 BEGIN
@@ -558,7 +571,7 @@ BEGIN
     INC(X, DW DIV 8 * 5);
     o.sl("3.");
 
-    Y := SplitY(X)
+    Y := SystemNewY(X)
   END;
   o.s("Oberon.AllocateSystemViewer returning X ");  o.i(X);
   o.s(", Y ");  o.i(Y);  o.sl(".");
@@ -643,7 +656,7 @@ BEGIN ch := S.nextCh;
   END
 END Scan;
 
-PROCEDURE Call*(F: Display.Frame;  T: Texts.Text;  pos: INTEGER;  new: BOOLEAN);
+PROCEDURE Call*(F: Display.Frame;  T: Texts.Text;  pos: INTEGER);
 VAR S: Texts.Scanner;  res, len: INTEGER;
 BEGIN Texts.OpenScanner(S, T, pos);  Skip(S, len);  Scan(S);
   IF (S.class = Texts.Name) & (S.line = 0) THEN
@@ -750,7 +763,9 @@ BEGIN DumpDisplay := proc END SetDumpDisplay;
 PROCEDURE DoCharacter(ch: INTEGER);
 VAR N: ControlMsg;  V: Viewers.Viewer;  M: InputMsg;
 BEGIN
-  IF ch = 1BH THEN (* ESC - TestOberon specific ... *)
+  IF ch = 4 THEN (* Ctrl/D *)
+    DumpDisplay
+  ELSIF ch = 1BH THEN (* ESC - TestOberon specific ... *)
     Windows.Quit
   ELSIF ch = 19H THEN  (* Ctrl/Y - originally ESC *)
     N.id := neutralize;  Viewers.Broadcast(N);
@@ -795,6 +810,8 @@ BEGIN
 
   InvalidateSpriteRect(Mouse);  (* Make sure erasure of old mouse position gets displayed *)
 
+  IF y >= DH THEN y := DH END;
+
   Mouse.glyph := ArrowGlyph;  (* Default shape - viewers may override this *)
   Mouse.x := x;
   Mouse.y := y;
@@ -804,18 +821,10 @@ BEGIN
   IF 4 IN flags THEN INCL(M.keys, 1) END;  (* MM *)
   IF 0 IN flags THEN INCL(M.keys, 2) END;  (* ML *)
 
-  IF (M.keys # {}) THEN
-    V := Viewers.This(x, y);  V.handle(V, M);
-    DEC(ActCnt)
-  ELSE
-    IF (x # PrevX) OR (y # PrevY) THEN
-      M.id := track;
-      IF y >= DH THEN y := DH END;
-      M.Y := y;
-      V := Viewers.This(x, y);  V.handle(V, M);
-      PrevX := x;  PrevY := y
-    END
-  END;
+  IF (M.keys # {}) THEN DEC(ActCnt) END;
+
+  V := Viewers.This(x, y);
+  V.handle(V, M);
 
   InvalidateSpriteRect(Mouse);  (* Make sure any updated mouse position gets displayed *)
 END DoMouse;
@@ -990,13 +999,15 @@ BEGIN
   CrossGlyph  := Fonts.ConvertOberonPattern(SYSTEM.ADR($ 0F0F 0140 0220 0410 0808 1004 2002 4001 0000 4001 2002 1004 0808 0410 0220 0140 $));
   GreyGlyph   := Fonts.ConvertOberonPattern(SYSTEM.ADR($ 2002 5555 5555 AAAA AAAA                                                        $));
   StarGlyph   := Fonts.ConvertOberonPattern(SYSTEM.ADR($ 0F0F 8000 8220 8410 8808 9004 A002 C001 7F7F C001 A002 9004 8808 8410 8220 8000 $));
-  StarGlyph.originX := -23;  StarGlyph.baseline := 7;
+
+  UpdownGlyph.originX := -4;   UpdownGlyph.baseline := 7;
+  StarGlyph.originX   := -23;  StarGlyph.baseline   := 7;
 
   NEW(Hook);  SetSpriteGlyph(Hook,  HookGlyph);   (* Text position marker *)
   NEW(Star);  SetSpriteGlyph(Star,  StarGlyph);   (* Viewer marker        *)
   NEW(Mouse); SetSpriteGlyph(Mouse, ArrowGlyph);  (* Mouse pointer        *)
-  Mouse.x := 10;  PrevX := 10;
-  Mouse.y := 10;  PrevY := 10;
+  Mouse.x := 10;
+  Mouse.y := 10;
   EnableSprite(Mouse);
 
   DW     := Display.Width;

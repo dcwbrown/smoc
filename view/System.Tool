@@ -1,11 +1,23 @@
 System.Open ^  System.Recall  System.Flush  System.Watch  System.Collect  Windows.Quit
 Edit.Open ^     Edit.Recall                     System.ShowDisplays
+
+Modules.Mod  Fonts.Mod  Windows.Mod  Display.Mod  Texts.Mod  Viewers.Mod
+Oberon.Mod    TextFrames.Mod  MenuViewers.Mod  Edit.Mod  System.Mod
+
 Edit.ChangeFont Oberon8.Scn.Fnt            System.OpenDisplay name
 Edit.ChangeFont Oberon10i.Scn.Fnt         System.SetDisplayName 1 new
 Edit.ChangeFont Oberon10b.Scn.Fnt        System.SetDisplay 1
 Edit.ChangeFont Oberon12.Scn.Fnt          System.CloseDisplay 1
 Edit.ChangeFont Oberon16.Scn.Fnt          System.NextDisplay
 Edit.ChangeFont Times24.Scn.Fnt             System.PrevDisplay
+
+
+Edit.ChangeFont Cambria.16
+Edit.ChangeFont Arial.15
+Edit.ChangeFont Calibri.17
+Edit.ChangeFont Consolas.17
+Edit.ChangeFont "Avrile Serif Medium 13"
+
 
 System.Directory ^
   *.Mod  *.Bak  *.Tool  *.Text  *.Scn.Fnt  *.smb  *.rsc  *.bin  *.mem

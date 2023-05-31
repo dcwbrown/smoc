@@ -1,6 +1,6 @@
 MODULE System; (*JG 3.10.90 / NW 12.10.93 / NW 20.6.2016 / AP 1.9.22 Extended Oberon*)
 IMPORT SYSTEM, Kernel, (*Disk, FileDir,*)
-       Files, Modules,
+       Files, Boot, Modules,
        Input, Display,
        Viewers, Fonts, Texts,
        Oberon, MenuViewers, TextFrames,
@@ -114,20 +114,22 @@ END OpenLog;
 PROCEDURE Clear*;  (*clear Log*)
 VAR T: Texts.Text; F: Display.Frame; buf: Texts.Buffer;
 BEGIN F := Oberon.Par.frame;
-  IF (F # NIL) & (F.next IS TextFrames.Frame) & (F = Oberon.Par.vwr.dsc) THEN
+  IF (F # NIL) & (F.next IS TextFrames.Frame) & (F = Oberon.Par.vwr.child) THEN
     NEW(buf); Texts.OpenBuf(buf); T := F.next(TextFrames.Frame).text; Texts.Delete(T, 0, T.len, buf)
   END
 END Clear;
+*)
 
 PROCEDURE Close*;  (*viewer*)
 VAR V: Viewers.Viewer;
 BEGIN
-  IF Oberon.Par.frame = Oberon.Par.vwr.dsc THEN V := Oberon.Par.vwr
+  IF Oberon.Par.frame = Oberon.Par.vwr.child THEN V := Oberon.Par.vwr
   ELSE V := Oberon.MarkedViewer()
   END;
   Viewers.Close(V)
 END Close;
 
+(*
 PROCEDURE CloseSelf*;
 BEGIN Viewers.Close(Oberon.Par.vwr)
 END CloseSelf;
@@ -648,22 +650,23 @@ BEGIN Texts.WriteString(W, "System.Watch"); Texts.WriteLn(W);
   Texts.WriteInt(W, Disk.NofSectors * 100 DIV 10000H, 4); Texts.Write(W, "%"); EndLine;
   Texts.WriteString(W, "  Tasks"); Texts.WriteInt(W, Oberon.NofTasks, 4); EndLine
 END Watch;
+*)
 
 PROCEDURE ShowModules*;
 VAR T: Texts.Text;
     V: Viewers.Viewer;
-    M: Modules.Module;
+    M: Boot.ModuleHeader;
     X, Y: INTEGER;
 BEGIN T := TextFrames.Text("");
   Oberon.AllocateSystemViewer(Oberon.Par.vwr.X, X, Y);
   V := MenuViewers.New(TextFrames.NewMenu("System.ShowModules", StandardMenu),
       TextFrames.NewText(T, 0), TextFrames.MenuHeight, X, Y);
-  Modules.Collect;
+  (*Modules.Collect;*)
   M := Modules.root;
   WHILE M # NIL DO
     IF M.name[0] # 0X THEN
-      Texts.WriteString(W, M.name); Texts.WriteInt(W, M.num, 4); Texts.Write(W, Input.TAB);
-      Texts.WriteHex(W, ORD(M)); Texts.WriteHex(W, M.prg); Texts.WriteInt(W, M.refcnt, 4)
+      Texts.WriteString(W, M.name); Texts.Write(W, Input.TAB);
+      Texts.WriteHex(W, SYSTEM.VAL(INTEGER, M)); Texts.WriteHex(W, M.base);
     ELSE Texts.WriteString(W, "---")
     END ;
     Texts.WriteLn(W); M := M.next
@@ -671,6 +674,7 @@ BEGIN T := TextFrames.Text("");
   Texts.Append(T, W.buf)
 END ShowModules;
 
+(*
 PROCEDURE ShowCommands*;
 VAR M: Modules.Module;
     comadr: INTEGER; ch: CHAR;

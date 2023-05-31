@@ -1,6 +1,6 @@
 MODULE TestOberon;
 IMPORT SYSTEM, Display, Viewers, System, Oberon, Texts,
-       MenuViewers, TextFrames, w := Writer;
+       MenuViewers, TextFrames, Edit, w := Writer;
 
 PROCEDURE wpair(x, y: INTEGER);
 BEGIN w.i(x);  w.c(",");  w.i(y) END wpair;
