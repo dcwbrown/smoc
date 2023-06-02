@@ -52,6 +52,7 @@ BEGIN
   newmod := mod
 END Load;
 
+
 PROCEDURE ThisCommand(mod: Module;  command: ARRAY OF CHAR): Command;
 VAR
   cmd:  INTEGER;

@@ -69,6 +69,8 @@ BEGIN
 END RenderAlphaMap;
 
 
+PROCEDURE Invalidate*;
+BEGIN Windows.Invalidate(Window) END Invalidate;
 
 
 (* ------------------------------ Debug/Trace ------------------------------- *)

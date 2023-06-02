@@ -51,6 +51,7 @@ VAR
   FocusViewer*: Viewer;
   nextId:       INTEGER;
 
+
 PROCEDURE ThisViewer* (D: DisplayArea; X, Y: INTEGER): Viewer;
 VAR T, V: Display.Frame;
 BEGIN
@@ -64,6 +65,7 @@ BEGIN
   RETURN V(Viewer)
 END ThisViewer;
 
+
 PROCEDURE This* (X, Y: INTEGER): Viewer;  (*for backward compatibility*)
 VAR V: Viewer;
 BEGIN
@@ -71,11 +73,13 @@ BEGIN
   RETURN V
 END This;
 
+
 PROCEDURE ThisDisplay* (V: Viewer): DisplayArea;
 BEGIN
   WHILE (V # NIL) & (V.parent # NIL) (*~display*) DO V := V.parent END;
   RETURN V(DisplayArea)
 END ThisDisplay;
+
 
 PROCEDURE Next* (V: Viewer): Viewer;
 BEGIN
@@ -86,9 +90,11 @@ BEGIN
   RETURN V
 END Next;
 
+
 PROCEDURE Prev* (V: Viewer): Viewer;
 BEGIN RETURN V.prev(Viewer)
 END Prev;
+
 
 PROCEDURE SetFocus* (D: DisplayArea; V: Viewer);
 BEGIN
@@ -266,6 +272,7 @@ BEGIN (*Y, H validated*)
   END
 END Change;
 
+
 (*
 PROCEDURE Spread* (D: DisplayArea; X, W: INTEGER); (*redistribute viewers vertically*)
 VAR T, t, v, fil: Display.Frame; M: ViewerMsg; Y, H: INTEGER;
@@ -384,6 +391,7 @@ BEGIN
   w.s("  max $"); w.h(SYSTEM.ADR(max^)); w.s(" at "); w.i(max.X); w.c(","); w.i(max.Y); w.s(" size ");w.i(max.W); w.c(","); w.i(max.H); w.sl(".");
 END Locate;
 
+
 PROCEDURE Install* (parent, F: Display.Frame); (*frame F as a subframe into parent frame*)
 VAR f: Display.Frame;
 BEGIN F.next := NIL;
@@ -394,6 +402,7 @@ BEGIN F.next := NIL;
   END
 END Install;
 
+
 PROCEDURE Remove* (parent, F: Display.Frame); (*subframe F from its parent frame*)
 VAR f, f0: Display.Frame;
 BEGIN
@@ -403,6 +412,7 @@ BEGIN
     IF f # NIL THEN f0.next := f.next END
   END
 END Remove;
+
 
 PROCEDURE InitFiller (X, Y, W, H, minH: INTEGER; Filler: Viewer); (*except fields handle, parent, dsc*)
 BEGIN
@@ -415,6 +425,7 @@ BEGIN
   Filler.next  := Filler;
   Filler.prev  := Filler
 END InitFiller;
+
 
 PROCEDURE InitTrack* (D: DisplayArea; W, H: INTEGER; Filler: Viewer);
 VAR T, fillerTrack: Track; fillerViewer: Viewer;
@@ -441,6 +452,7 @@ BEGIN
   fillerTrack.prev := T;
   D.curW           := D.curW + W
 END InitTrack;
+
 
 PROCEDURE OpenTrack* (D: DisplayArea; X, W: INTEGER; Filler: Viewer);
 VAR newT: Track; S, T, t, v: Display.Frame; M: ViewerMsg; v0: Viewer;
@@ -482,6 +494,7 @@ BEGIN
   END
 END OpenTrack;
 
+
 (*
 PROCEDURE CloseTrack* (D: DisplayArea; X: INTEGER);
 VAR T, V: Display.Frame; M: ViewerMsg; hasFocus: BOOLEAN;
@@ -501,25 +514,20 @@ BEGIN
 END CloseTrack;
 *)
 
+
 PROCEDURE Broadcast* (VAR M: Display.FrameMsg); (*to current display*)
 VAR T, V: Display.Frame;
 BEGIN
-  w.sl("Viewers.Broadcast to:");
   IF CurDisplay # NIL THEN
     T := CurDisplay.child.next;
     WHILE T # CurDisplay.child DO
       V := T.child;
-      REPEAT V := V.next;
-        CASE V OF
-        | Viewer: w.sl("  Viewer.");
-        | Display.Frame: w.sl("  Display.Frame");
-        END;
-        V.handle(V, M)
-      UNTIL V = T.child;
+      REPEAT V := V.next;  V.handle(V, M) UNTIL V = T.child;
       T := T.next
     END
   END
 END Broadcast;
+
 
 PROCEDURE InitDisplay* (D: DisplayArea; W, H: INTEGER; name: ARRAY OF CHAR);
 VAR fillerTrack: Track; fillerViewer: Viewer;
@@ -550,6 +558,7 @@ BEGIN
   nextId    := nextId + 1
 END InitDisplay;
 
+
 PROCEDURE SetDisplay* (D: DisplayArea);
 VAR M: ViewerMsg;
 BEGIN
@@ -563,6 +572,7 @@ BEGIN
   M.id := restore; Broadcast(M)
 END SetDisplay;
 
+
 PROCEDURE GetDisplay* (id: INTEGER): DisplayArea;
 VAR D: DisplayArea;
 BEGIN D := root;
@@ -570,12 +580,16 @@ BEGIN D := root;
   RETURN D
 END GetDisplay;
 
+
 PROCEDURE CloseDisplay* (D: DisplayArea; hint: INTEGER); (*except last display*)
 BEGIN
   IF root.next # NIL THEN D.state := Closed;
-    IF D = root (*first*) THEN D.next(Viewer).prev := D.prev; root := D.next(DisplayArea)
-    ELSIF D = root.prev (*last*) THEN root.prev := D.prev; D.prev.next := NIL
-    ELSE D.next(Viewer).prev := D.prev; D.prev.next := D.next
+    IF    D = root      (*first*) THEN  D.next(Viewer).prev := D.prev;
+                                        root := D.next(DisplayArea)
+    ELSIF D = root.prev (*last*)  THEN  root.prev := D.prev;
+                                        D.prev.next := NIL
+                                  ELSE  D.next(Viewer).prev := D.prev;
+                                        D.prev.next := D.next
     END;
     IF D = CurDisplay THEN D := GetDisplay(hint);
       IF D = NIL THEN SetDisplay(root) ELSE SetDisplay(D) END

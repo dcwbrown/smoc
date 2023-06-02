@@ -2,6 +2,61 @@ MODULE Windows;
 
 IMPORT SYSTEM, w := Writer, K := Kernel, Boot, WindowsMessageNames, Fonts;
 
+CONST
+  Lin12Table = $
+    00 00  01 00  02 00  04 00  05 00  06 00  07 00  09 00  0A 00  0B 00  0C 00  0E 00  0F 00  10 00  12 00  14 00
+    15 00  17 00  19 00  1B 00  1D 00  1F 00  21 00  23 00  25 00  28 00  2A 00  2D 00  30 00  32 00  35 00  38 00
+    3B 00  3E 00  42 00  45 00  48 00  4C 00  4F 00  53 00  57 00  5B 00  5F 00  63 00  67 00  6B 00  70 00  74 00
+    79 00  7E 00  83 00  88 00  8D 00  92 00  97 00  9C 00  A2 00  A8 00  AD 00  B3 00  B9 00  BF 00  C5 00  CC 00
+    D2 00  D8 00  DF 00  E6 00  ED 00  F4 00  FB 00  02 01  09 01  11 01  18 01  20 01  28 01  30 01  38 01  40 01
+    49 01  51 01  5A 01  62 01  6B 01  74 01  7D 01  86 01  90 01  99 01  A3 01  AC 01  B6 01  C0 01  CA 01  D5 01
+    DF 01  EA 01  F4 01  FF 01  0A 02  15 02  20 02  2B 02  37 02  42 02  4E 02  5A 02  66 02  72 02  7F 02  8B 02
+    98 02  A4 02  B1 02  BE 02  CB 02  D8 02  E6 02  F3 02  01 03  0F 03  1D 03  2B 03  39 03  48 03  56 03  65 03
+    74 03  83 03  92 03  A1 03  B1 03  C0 03  D0 03  E0 03  F0 03  00 04  11 04  21 04  32 04  43 04  54 04  65 04
+    76 04  87 04  99 04  AB 04  BD 04  CF 04  E1 04  F3 04  06 05  18 05  2B 05  3E 05  51 05  65 05  78 05  8C 05
+    A0 05  B3 05  C8 05  DC 05  F0 05  05 06  1A 06  2E 06  43 06  59 06  6E 06  84 06  99 06  AF 06  C5 06  DB 06
+    F2 06  08 07  1F 07  36 07  4D 07  64 07  7C 07  93 07  AB 07  C3 07  DB 07  F3 07  0B 08  24 08  3D 08  55 08
+    6F 08  88 08  A1 08  BB 08  D4 08  EE 08  08 09  23 09  3D 09  58 09  73 09  8E 09  A9 09  C4 09  DF 09  FB 09
+    17 0A  33 0A  4F 0A  6C 0A  88 0A  A5 0A  C2 0A  DF 0A  FC 0A  19 0B  37 0B  55 0B  73 0B  91 0B  AF 0B  CE 0B
+    EC 0B  0B 0C  2A 0C  4A 0C  69 0C  89 0C  A8 0C  C8 0C  E8 0C  09 0D  29 0D  4A 0D  6B 0D  8C 0D  AD 0D  CF 0D
+    F0 0D  12 0E  34 0E  56 0E  79 0E  9B 0E  BE 0E  E1 0E  04 0F  27 0F  4B 0F  6E 0F  92 0F  B6 0F  DB 0F  FF 0F
+  $;
+
+  SRGBtable = $
+    21 00  A7 00  D4 00  F5 00  0F 00  27 00  3B 00  4E 00  60 00  70 00  7F 00  8D 00  9A 00  A7 00  B4 00  BF 00
+    CB 00  D6 00  E0 00  EA 00  F4 00  FE 00  07 01  10 01  19 01  22 01  2A 01  33 01  3B 01  43 01  4B 01  52 01
+    5A 01  61 01  68 01  6F 01  76 01  7D 01  84 01  8B 01  91 01  98 01  9E 01  A4 01  AB 01  B1 01  B7 01  BD 01
+    C3 01  C8 01  CE 01  D4 01  DA 01  DF 01  E5 01  EA 01  EF 01  F5 01  FA 01  FF 01  04 02  0A 02  0F 02  14 02
+    19 02  1E 02  22 02  27 02  2C 02  31 02  36 02  3A 02  3F 02  43 02  48 02  4D 02  51 02  56 02  5A 02  5E 02
+    63 02  67 02  6B 02  70 02  74 02  78 02  7C 02  80 02  85 02  89 02  8D 02  91 02  95 02  99 02  9D 02  A1 02
+    A5 02  A9 02  AC 02  B0 02  B4 02  B8 02  BC 02  BF 02  C3 02  C7 02  CB 02  CE 02  D2 02  D6 02  D9 02  DD 02
+    E0 02  E4 02  E8 02  EB 02  EF 02  F2 02  F6 02  F9 02  FC 02  00 03  03 03  07 03  0A 03  0D 03  11 03  14 03
+    17 03  1B 03  1E 03  21 03  25 03  28 03  2B 03  2E 03  31 03  35 03  38 03  3B 03  3E 03  41 03  44 03  47 03
+    4B 03  4E 03  51 03  54 03  57 03  5A 03  5D 03  60 03  63 03  66 03  69 03  6C 03  6F 03  72 03  75 03  77 03
+    7A 03  7D 03  80 03  83 03  86 03  89 03  8C 03  8E 03  91 03  94 03  97 03  9A 03  9C 03  9F 03  A2 03  A5 03
+    A8 03  AA 03  AD 03  B0 03  B2 03  B5 03  B8 03  BB 03  BD 03  C0 03  C3 03  C5 03  C8 03  CB 03  CD 03  D0 03
+    D2 03  D5 03  D8 03  DA 03  DD 03  DF 03  E2 03  E4 03  E7 03  EA 03  EC 03  EF 03  F1 03  F4 03  F6 03  F9 03
+    FB 03  FE 03  00 04  03 04  05 04  08 04  0A 04  0C 04  0F 04  11 04  14 04  16 04  19 04  1B 04  1D 04  20 04
+    22 04  25 04  27 04  29 04  2C 04  2E 04  30 04  33 04  35 04  37 04  3A 04  3C 04  3E 04  41 04  43 04  45 04
+    48 04  4A 04  4C 04  4E 04  51 04  53 04  55 04  57 04  5A 04  5C 04  5E 04  60 04  63 04  65 04  67 04  69 04
+    6C 04  6E 04  70 04  72 04  74 04  77 04  79 04  7B 04  7D 04  7F 04  81 04  84 04  86 04  88 04  8A 04  8C 04
+    8E 04  90 04  92 04  95 04  97 04  99 04  9B 04  9D 04  9F 04  A1 04  A3 04  A5 04  A7 04  AA 04  AC 04  AE 04
+    B0 04  B2 04  B4 04  B6 04  B8 04  BA 04  BC 04  BE 04  C0 04  C2 04  C4 04  C6 04  C8 04  CA 04  CC 04  CE 04
+    D0 04  D2 04  D4 04  D6 04  D8 04  DA 04  DC 04  DE 04  E0 04  E2 04  E4 04  E6 04  E8 04  EA 04  EC 04  EE 04
+    F0 04  F2 04  F4 04  F5 04  F7 04  F9 04  FB 04  FD 04  FF 04  01 05  03 05  05 05  07 05  09 05  0A 05  0C 05
+    0E 05  10 05  12 05  14 05  16 05  18 05  19 05  1B 05  1D 05  1F 05  21 05  23 05  25 05  26 05  28 05  2A 05
+    2C 05  2E 05  30 05  31 05  33 05  35 05  37 05  39 05  3B 05  3C 05  3E 05  40 05  42 05  44 05  45 05  47 05
+    49 05  4B 05  4C 05  4E 05  50 05  52 05  54 05  55 05  57 05  59 05  5B 05  5C 05  5E 05  60 05  62 05  63 05
+    65 05  67 05  69 05  6A 05  6C 05  6E 05  70 05  71 05  73 05  75 05  76 05  78 05  7A 05  7C 05  7D 05  7F 05
+    81 05  82 05  84 05  86 05  87 05  89 05  8B 05  8C 05  8E 05  90 05  92 05  93 05  95 05  97 05  98 05  9A 05
+    9C 05  9D 05  9F 05  A1 05  A2 05  A4 05  A5 05  A7 05  A9 05  AA 05  AC 05  AE 05  AF 05  B1 05  B3 05  B4 05
+    B6 05  B7 05  B9 05  BB 05  BC 05  BE 05  C0 05  C1 05  C3 05  C4 05  C6 05  C8 05  C9 05  CB 05  CC 05  CE 05
+    D0 05  D1 05  D3 05  D4 05  D6 05  D8 05  D9 05  DB 05  DC 05  DE 05  DF 05  E1 05  E3 05  E4 05  E6 05  E7 05
+    E9 05  EA 05  EC 05  ED 05  EF 05  F1 05  F2 05  F4 05  F5 05  F7 05  F8 05  FA 05  FB 05  FD 05  FE 05  00 06
+    02 06  03 06  05 06  06 06  08 06  09 06  0B 06  0C 06  0E 06  0F 06  11 06  12 06  14 06  15 06  17 06  18 06
+    1A 06  1B 06  1D 06  1E 06  20 06  21 06  23 06  24 06  26 06  27 06  29 06  2A 06  2C 06  2D 06  2F 06  30 06
+  $;
+
 TYPE
   UINT16 = SYSTEM.CARD16;
   UINT32 = SYSTEM.CARD32;  INT32 = SYSTEM.INT32;
@@ -50,6 +105,9 @@ TYPE
     lPrivate: UINT32
   END;
 
+  Card16x256Array = POINTER TO RECORD lookup: ARRAY 256 OF SYSTEM.CARD16 END;
+  Card16x512Array = POINTER TO RECORD lookup: ARRAY 512 OF SYSTEM.CARD16 END;
+
 VAR
   CreateDIBSection:   PROCEDURE(hdc, pbmi, usage, ppvbits, hsection, offset: INTEGER): INTEGER;
   SelectObject:       PROCEDURE(hdc, hobject: INTEGER): INTEGER;
@@ -86,6 +144,9 @@ VAR
   SetProcessDpiAwarenessContext: PROCEDURE(context: INTEGER): INTEGER;
 
   FirstWindow: Window;
+
+  Lin12: Card16x256Array;
+  SRGB:  Card16x512Array;
 
 
 PROCEDURE LastError;
@@ -201,23 +262,37 @@ END Resize;
 (* -------------------------- Rendering primitives -------------------------- *)
 
 
-PROCEDURE u8sqrt(x: INTEGER): INTEGER;
-VAR c, d: INTEGER;
+PROCEDURE ToSRGB8(lin: INTEGER): BYTE;
+VAR result: BYTE;
 BEGIN
-  c := 0;  d := 16384;
-  WHILE d # 0 DO
-    IF x >= c + d THEN
-      DEC(x, c + d);  c := c DIV 2 + d
-    ELSE
-      c := c DIV 2
-    END;
-    d := d DIV 4
+  IF    lin <  10 THEN result := (lin * 13 + 10) DIV 16
+  ELSIF lin < 512 THEN result := (SRGB.lookup[lin] + 8) DIV 16
+  ELSE                 result := 21 + ((9718 * SRGB.lookup[lin DIV 8] - 35000) DIV 65536);
   END
-RETURN c END u8sqrt;
+RETURN result END ToSRGB8;
 
 
+PROCEDURE TestSRGB;
+VAR l: INTEGER;  b: BYTE;
+BEGIN
+  w.sl("SRGB test.");
+  b := 0;
+  REPEAT
+    w.in(b,3);
+    l := Lin12.lookup[b];
+    w.s(" lin ");   w.in(l, 4);
+    w.s(" srgb ");  w.in(ToSRGB8(l), 3);
+    IF ToSRGB8(l) # b THEN w.s(" *****") END;
+    w.l;
+    INC(b)
+  UNTIL b = 0
+END TestSRGB;
+
+
+(*
 PROCEDURE AlphaMultiplyChannel(p, a: BYTE): INTEGER;
-RETURN (p * p * a) DIV 256 END AlphaMultiplyChannel;
+RETURN (Lin12.lookup[p] * a) DIV 256 END AlphaMultiplyChannel;
+*)
 
 
 PROCEDURE AlphaMultiplyPixel(pixel: INTEGER; alpha: BYTE): INTEGER;
@@ -226,9 +301,9 @@ BEGIN
   IF    alpha = 0   THEN result := 0
   ELSIF alpha = 255 THEN result := pixel
   ELSE
-    result := (u8sqrt(AlphaMultiplyChannel((pixel DIV 10000H) MOD 100H, alpha)) * 10000H)
-            + (u8sqrt(AlphaMultiplyChannel((pixel DIV   100H) MOD 100H, alpha)) *   100H)
-            + (u8sqrt(AlphaMultiplyChannel( pixel             MOD 100H, alpha))         )
+    result := (ToSRGB8(Lin12.lookup[(pixel DIV 10000H) MOD 100H] * alpha DIV 256) * 10000H)
+            + (ToSRGB8(Lin12.lookup[(pixel DIV   100H) MOD 100H] * alpha DIV 256) *   100H)
+            + (ToSRGB8(Lin12.lookup[ pixel             MOD 100H] * alpha DIV 256)         )
             + 0FF000000H;
   END
 RETURN result END AlphaMultiplyPixel;
@@ -239,9 +314,7 @@ RETURN result END AlphaMultiplyPixel;
 (*          bg    - 8 bit gamma encoded background intensity           *)
 (*          alpha - 8 bit linear alpha                                 *)
 PROCEDURE BlendChannel(fg, bg, alpha: BYTE): BYTE;
-BEGIN
-  RETURN u8sqrt(  AlphaMultiplyChannel(fg, alpha)
-                + AlphaMultiplyChannel(bg, 255 - alpha))
+BEGIN RETURN ToSRGB8((Lin12.lookup[fg] * alpha + Lin12.lookup[bg] * (255 - alpha)) DIV 256)
 END BlendChannel;
 
 
@@ -258,7 +331,6 @@ BEGIN
             + 0FF000000H;
   END
 RETURN result END BlendPixel;
-
 
 
 PROCEDURE RenderAlphaMapToBitmap*(
@@ -712,6 +784,10 @@ BEGIN InvalidateRect(w, 0, 0, w.bmp.width, w.bmp.height) END Invalidate;
 
 BEGIN
   w.sl("Hello teapots.");
+
+  Lin12 := SYSTEM.VAL(Card16x256Array, SYSTEM.ADR(Lin12Table));
+  SRGB  := SYSTEM.VAL(Card16x512Array, SYSTEM.ADR(SRGBtable));
+  TestSRGB;
 
   K.GetProc(K.Kernel, "GetLastError",       GetLastError);        ASSERT(GetLastError       # NIL);
   K.GetProc(K.Kernel, "Sleep",              Sleep);               ASSERT(Sleep              # NIL);

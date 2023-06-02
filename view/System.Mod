@@ -129,6 +129,7 @@ BEGIN
   Viewers.Close(V)
 END Close;
 
+
 (*
 PROCEDURE CloseSelf*;
 BEGIN Viewers.Close(Oberon.Par.vwr)
@@ -136,7 +137,10 @@ END CloseSelf;
 
 PROCEDURE CloseTrack*;
 VAR D: Viewers.DisplayArea; V: Viewers.Viewer;
-BEGIN V := Oberon.MarkedViewer(); D := Viewers.ThisDisplay(V); Viewers.CloseTrack(D, V.X)
+BEGIN
+  V := Oberon.MarkedViewer();
+  D := Viewers.ThisDisplay(V);
+  Viewers.CloseTrack(D, V.X)
 END CloseTrack;
 
 PROCEDURE Flush*;  (*clear the last closed viewer of the current display*)
@@ -181,13 +185,20 @@ END Grow;
 
 PROCEDURE Expand*;  (*expand the viewer vertically as much as possible*)
 VAR V: Viewers.Viewer; y, h: INTEGER;
-BEGIN V := Oberon.Par.vwr; y := 0; h := Oberon.DisplayHeight(0);
-  Viewers.Validate(V, y, h); Viewers.Change(V, y, h)
+BEGIN
+  V := Oberon.Par.vwr;
+  y := 0;
+  h := Oberon.DisplayHeight(0);
+  Viewers.Validate(V, y, h);
+  Viewers.Change(V, y, h)
 END Expand;
 
 PROCEDURE Spread*;  (*redistribute viewers vertically*)
 VAR D: Viewers.DisplayArea; V: Viewers.Viewer;
-BEGIN V := Oberon.Par.vwr; D := Viewers.ThisDisplay(V); Viewers.Spread(D, V.X, V.W)
+BEGIN
+  V := Oberon.Par.vwr;
+  D := Viewers.ThisDisplay(V);
+  Viewers.Spread(D, V.X, V.W)
 END Spread;
 
 PROCEDURE MakeDisplayName(prefix: ARRAY OF CHAR; id: INTEGER; VAR name: ARRAY OF CHAR);  (*0 <= id < 10^5*)

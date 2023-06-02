@@ -55,37 +55,32 @@ TYPE
   Frame* = POINTER TO FrameDesc;
   FrameDesc* = RECORD (Display.FrameDesc)
     text*:      Texts.Text;
-    org*:       INTEGER;  (* pos in text for first character in current view *)
-    colour*:    ARGB;     (* background colour                               *)
-    voff:       INTEGER;  (* current character vertical offset               *)
+    org*:       INTEGER;  (* pos in text for first character in current view  *)
+    colour*:    ARGB;     (* background colour                                *)
+    voff:       INTEGER;  (* current character vertical offset                *)
 
-    (* The line height is represented by three components                    *)
-    ascent:     INTEGER;  (* Baseline offset within line space               *)
-    descent:    INTEGER;  (* Common extension of characters below baseline   *)
-    lead:       INTEGER;  (* Recommended extra space between lines           *)
-    (*
-    lineHeight: INTEGER;
-    *)
+    lineHeight: INTEGER;  (* Overall vertical advance from line to line       *)
+    baseline:   INTEGER;  (* Distance of baseline down from top of line space *)
 
-    top*:       INTEGER;  (* Top margin                                      *)
-    left*:      INTEGER;  (* Left margin                                     *)
-    right*:     INTEGER;  (* Right margin                                    *)
-    bottom*:    INTEGER;  (* Offset from top to start of bottom margin       *)
+    top*:       INTEGER;  (* Top margin                                       *)
+    left*:      INTEGER;  (* Left margin                                      *)
+    right*:     INTEGER;  (* Right margin                                     *)
+    bottom*:    INTEGER;  (* Offset from top to start of bottom margin        *)
 
-    sentinel:   Line;     (* Sentinel for circular list of rendered lines    *)
+    headLine:   Line;     (* Sentinel for circular list of rendered lines     *)
 
     hasCaret*:  BOOLEAN;
-    caretLoc*:  Location; (* Caret location                                  *)
+    caretLoc*:  Location; (* Caret location                                   *)
 
-    selStart:   INTEGER;  (* First selected character                        *)
-    selLimit:   INTEGER;  (* First character beyond selection                *)
-    time*:      INTEGER;  (* Time of last selection                          *)
+    selStart:   INTEGER;  (* First selected character                         *)
+    selLimit:   INTEGER;  (* First character beyond selection                 *)
+    time*:      INTEGER;  (* Time of last selection                           *)
 
-    trkStart:   INTEGER;  (* First tracked character                         *)
-    trkLimit:   INTEGER;  (* First character beyond track                    *)
+    trkStart:   INTEGER;  (* First tracked character                          *)
+    trkLimit:   INTEGER;  (* First character beyond track                     *)
 
-    tracktext:  BOOLEAN;  (* FALSE: tracking scroll op, TRUE: text           *)
-    firstkey:   INTEGER;  (* initial mouse key press                         *)
+    tracktext:  BOOLEAN;  (* FALSE: tracking scroll op, TRUE: text            *)
+    firstkey:   INTEGER;  (* initial mouse key press                          *)
     keysum:     SET;
 
     changeMark: Oberon.Sprite
@@ -108,9 +103,8 @@ VAR
   NextCh:     CHAR;
 
   (* Default frame metrics *)
-  Ascent:      INTEGER;  (* default ascent = position of baseline *)
-  Descent:     INTEGER;
-  Lead:        INTEGER;
+  LineHeight:  INTEGER;
+  Baseline:    INTEGER;
   EolWidth:    INTEGER;
   BarWidth:    INTEGER;  (* Size of scroll bar *)
   ThumbWidth:  INTEGER;
@@ -198,11 +192,10 @@ END MeasureLine;
 PROCEDURE PlaceLine(f: Frame;  l: Line;  top: INTEGER);
 (* Determines the first available baseline in the frame at which to place *)
 (* line l such that the line's ascent does not reach higher than top.     *)
-VAR linenum, lineheight: INTEGER;
+VAR linenum: INTEGER;
 BEGIN
-  lineheight := f.ascent + f.descent + f.lead;
-  linenum    := (top - f.top - 1) DIV lineheight;
-  l.baseline := f.top + (linenum + 1) * lineheight + f.ascent
+  linenum    := (top - f.top - 1) DIV f.lineHeight;
+  l.baseline := f.top + (linenum + 1) * f.lineHeight + f.baseline
 END PlaceLine;
 
 
@@ -296,8 +289,7 @@ BEGIN
 
   IF F.selLimit > pos THEN seldx := X - selx + 256 * EolWidth END;
   IF seldx > 0 THEN
-    Windows.FillRectangle(
-      Display.Window.bmp,
+    Display.FillRectangle(
       selx DIV 256,  F.Y + L.baseline - L.ascent,
       (seldx + 255) DIV 256, L.height,
       0FF606060H)
@@ -305,8 +297,7 @@ BEGIN
 
   IF F.trkLimit > pos THEN trkdx := X - trkx + 256 * EolWidth END;
   IF trkdx > 0 THEN
-    Windows.FillRectangle(
-      Display.Window.bmp,
+    Display.FillRectangle(
       trkx DIV 256,  F.Y + L.baseline + 1,
       (trkdx + 255) DIV 256, 4,
       0FFE0E0E0H)
@@ -359,7 +350,7 @@ BEGIN
   EnsureSOL(F.text, F.org);
   top     := F.top;
   bottom  := F.H - F.bottom;
-  prevl   := F.sentinel;
+  prevl   := F.headLine;
 
   IF top < bottom THEN
     y   := top;
@@ -392,7 +383,7 @@ BEGIN
       org        := org + line.length;
     END
   END;
-  prevl.next := F.sentinel;
+  prevl.next := F.headLine;
   DrawThumb(F)
 END Render;
 
@@ -410,8 +401,8 @@ VAR
   org:  INTEGER;
 BEGIN
   org  := F.org;
-  line := F.sentinel.next;
-  WHILE (line.next # F.sentinel) & (line.baseline - line.ascent + line.height < y) DO
+  line := F.headLine.next;
+  WHILE (line.next # F.headLine) & (line.baseline - line.ascent + line.height < y) DO
     org := org + line.length;  line := line.next
   END;
   loc.org  := org;
@@ -516,9 +507,9 @@ VAR
 BEGIN
   T    := F.text;
   org  := F.org;
-  L    := F.sentinel.next;
+  L    := F.headLine.next;
   IF pos < org THEN pos := org END;
-  WHILE (L.next # F.sentinel) & (pos >= org + L.length) DO
+  WHILE (L.next # F.headLine) & (pos >= org + L.length) DO
     org  := org + L.length;
     L    := L.next
   END;
@@ -613,9 +604,9 @@ BEGIN ASSERT(F.hasCaret); w.sl("TextFrames.Write ch $"); w.h(ORD(ch)); w.sl(".")
                   SetCaretPos(F, F.caretLoc.pos + 1)
                 END
   |CursorUp:    SetCaretPos(F, Pos(F, F.X + F.caretLoc.x,
-                                   F.Y + F.caretLoc.y - (F.ascent + F.descent + F.lead)))
+                                   F.Y + F.caretLoc.y - F.lineHeight))
   |CursorDown:  SetCaretPos(F, Pos(F, F.X + F.caretLoc.x,
-                                   F.Y + F.caretLoc.y + F.ascent + F.descent + F.lead))
+                                   F.Y + F.caretLoc.y + F.lineHeight))
   |CR, TAB,
    " "..DEL:    KW.fnt := fnt;  KW.col := col;  KW.voff := voff;
                 Texts.Write(KW, ch);
@@ -638,7 +629,7 @@ END Modify;
 PROCEDURE Open* (F: Frame;  H: Display.Handler;  T: Texts.Text;
                  org,  col,   voff:        INTEGER;
                  left, right, top, bottom: INTEGER;
-                 ascent, descent, lead:    INTEGER);
+                 lineHeight,  baseline:    INTEGER);
 VAR l: Line;
 BEGIN
   w.s("TextFrames.Open l "); w.i(left);
@@ -648,25 +639,21 @@ BEGIN
   w.sl(".");
 
 
-  NEW(l);  (* Create a sentinel line for a closed list of lines *)
-  l.length     := 0;
-  l.width      := 0;
-  l.eot        := FALSE;
-  l.next       := l;
-  l.ascent     := 1;
-  l.descent    := 0;
+  NEW(l);  (* Create a headLine line for a closed list of lines *)
+  l.length     := 0;        l.width      := 0;
+  l.eot        := FALSE;    l.next       := l;
+  l.ascent     := 1;        l.descent    := 0;
   l.height     := 1;
-  F.sentinel   := l;
 
-  F.handle     := H;        F.text     := T;
-  F.org        := org;      F.ascent   := ascent;
-  F.descent    := descent;  F.lead     := lead;
-  F.colour     := col;      F.voff     := voff;
-  F.top        := top;      F.left     := left;
-  F.right      := right;    F.bottom   := bottom;
-  F.hasCaret   := FALSE;    F.time     := 0;
-  F.selStart   := 0;        F.selLimit := 0;
-  F.trkStart   := 0;        F.trkLimit := 0;
+  F.headLine   := l;        F.org        := org;
+  F.handle     := H;        F.text       := T;
+  F.baseline   := baseline; F.lineHeight := lineHeight;
+  F.colour     := col;      F.voff       := voff;
+  F.top        := top;      F.left       := left;
+  F.right      := right;    F.bottom     := bottom;
+  F.hasCaret   := FALSE;    F.time       := 0;
+  F.selStart   := 0;        F.selLimit   := 0;
+  F.trkStart   := 0;        F.trkLimit   := 0;
 
   F.tracktext  := FALSE;
   F.firstkey   := -1;        F.keysum   := {};
@@ -679,7 +666,7 @@ PROCEDURE Copy* (F: Frame;  VAR F1: Frame);
 BEGIN NEW(F1);
   Open(F1, F.handle, F.text,    F.org, F.colour, F.voff,
            F.left,   F.right,   F.top, F.bottom,
-           F.ascent, F.descent, F.lead)
+           F.lineHeight,        F.baseline)
 END Copy;
 
 
@@ -738,7 +725,7 @@ BEGIN
   ELSIF M.id = delete  THEN UpdatePositions(F, M.beg, M.end - M.beg, 0)
   END;
   SetChangeMark(F, F.text.changed);
-  F.sentinel.next := F.sentinel;
+  F.headLine.next := F.headLine;  (* Free all cached lines *)
   IF M.end > F.org THEN Render(F) END
 END Update;
 
@@ -940,7 +927,7 @@ BEGIN NEW(F);  T := Menu(name, commands);
   Open(F, Handle, T,
        0, Display.White, 0,
        Left DIV 4, 0, 0, 0,
-       Ascent, Descent, Lead);
+       LineHeight, Baseline);
 RETURN F END NewMenu;
 
 PROCEDURE NewText* (text: Texts.Text;  pos: INTEGER): Frame;
@@ -949,7 +936,7 @@ BEGIN NEW(F);
   Open(F, Handle, text,
        pos, Display.Black, 0,
        Left, Right, Top, Bottom,
-       Ascent, Descent, Lead);
+       LineHeight, Baseline);
 RETURN F END NewText;
 
 BEGIN
@@ -958,17 +945,16 @@ BEGIN
   NEW(DelBuf);  Texts.OpenBuf(DelBuf);
 
   (* Set default frame metrics *)
-  Ascent     := Fonts.Default.ascent;
-  Descent    := Fonts.Default.descent;
-  Lead       := Fonts.Default.lead;
-  EolWidth   := (Ascent + Descent) DIV 2;
-  BarWidth   := Ascent + Descent;
+  LineHeight := Fonts.Default.ascent + Fonts.Default.descent + Fonts.Default.lead;
+  Baseline   := Fonts.Default.ascent;
+  EolWidth   := (Fonts.Default.ascent + Fonts.Default.descent) DIV 2;
+  BarWidth   := Fonts.Default.ascent + Fonts.Default.descent;
   ThumbWidth := BarWidth - 7;
-  MenuHeight := Ascent + Descent + 1;
-  Left       := BarWidth + (Ascent + Descent) DIV 2;
-  Right      := (Ascent + Descent) DIV 2;
-  Top        := (Ascent + Descent) DIV 2;
-  Bottom     := (Ascent + Descent) DIV 2;
+  MenuHeight := Fonts.Default.ascent + Fonts.Default.descent + 1;
+  Left       := BarWidth + (Fonts.Default.ascent + Fonts.Default.descent) DIV 2;
+  Right      := (Fonts.Default.ascent + Fonts.Default.descent) DIV 2;
+  Top        := (Fonts.Default.ascent + Fonts.Default.descent) DIV 2;
+  Bottom     := (Fonts.Default.ascent + Fonts.Default.descent) DIV 2;
 
   Texts.OpenWriter(W);  Texts.SetColor(W,  Display.Black);  (* For composing menus *)
   Texts.OpenWriter(KW); Texts.SetColor(KW, Display.White);  (* For keyboard entry  *)
@@ -977,3 +963,5 @@ BEGIN
   w.s(", EolWidth "); w.i(EolWidth);
   w.sl(".");
 END TextFrames.
+
+

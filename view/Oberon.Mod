@@ -95,9 +95,6 @@ VAR
   DeferTask:  Task;
   DW, DH, CL: INTEGER;
   ActCnt:     INTEGER; (*action count for garbage collector*)
-  (*
-  Mod:        Modules.Module;
-  *)
 
   defer: BOOLEAN;
   last:  INTEGER;
@@ -117,7 +114,7 @@ VAR
   (* There are at most one of each of these 3 sprites                    *)
   Mouse*: Sprite;  (* Mouse pointer represented by Arrow/UpdownGlyph     *)
   Star*:  Sprite;  (* Viewer mark represented by StarGlyph               *)
-  Hook*:  Sprite;  (* Text position mark represented by HookGlyph        *)
+  Hook*:  Sprite;  (* Text position (caret) represented by HookGlyph     *)
 
   EnabledSprites: Sprite;  (* List of sprites showing *)
 
@@ -170,19 +167,19 @@ END Time;
 (* enabling/disabling them.                                                   *)
 
 
-PROCEDURE GetPixelGlyphBox(g: Fonts.Glyph; gx, gy: INTEGER; VAR x, y, w, h: INTEGER);
+PROCEDURE GetGlyphPixelBox(g: Fonts.Glyph; gx, gy: INTEGER; VAR x, y, w, h: INTEGER);
 BEGIN  (* Return pixel box relative to origin that contains all glyph subpixels *)
   x := (gx * 4 + g.originX) DIV 4;
   w := (gx * 4 + g.originX + g.mapWidth + 3) DIV 4 - x;
   y := gy - g.baseline;
   h := g.mapHeight;
-END GetPixelGlyphBox;
+END GetGlyphPixelBox;
 
 
 PROCEDURE InvalidateSpriteRect(s: Sprite);
 VAR x, y, w, h: INTEGER;
 BEGIN
-  GetPixelGlyphBox(s.glyph, s.x, s.y, x, y, w, h);
+  GetGlyphPixelBox(s.glyph, s.x, s.y, x, y, w, h);
   Windows.InvalidateRect(Display.Window, x, y, w, h);
 END InvalidateSpriteRect;
 
@@ -227,7 +224,7 @@ PROCEDURE SetSpriteGlyph*(s: Sprite; g: Fonts.Glyph);
 BEGIN s.glyph := g END SetSpriteGlyph;
 
 
-(* Convenience functions *)
+(* ---------------------- Sprite convenience functions ---------------------- *)
 
 
 PROCEDURE SetMouseGlyph* (g: Fonts.Glyph);
@@ -268,6 +265,7 @@ BEGIN ASSERT(wi * h <= LEN(buf));
   END
 END SaveRect;
 
+
 PROCEDURE RestoreRect(buf: ARRAY OF ARGB; bmp: Windows.Bitmap; x, y, wi, h: INTEGER);
 VAR tadr, i, ilim, ylim: INTEGER;
 BEGIN ASSERT(wi * h <= LEN(buf));
@@ -292,7 +290,7 @@ BEGIN
   p := EnabledSprites;  EnabledSprites := NIL;
   WHILE p # NIL DO
     (*o.s("Pre-render sprite $"); o.h(SYSTEM.ADR(p^)); o.s(" at ");  Display.wxy(p.x, p.y); o.sl(".");*)
-    GetPixelGlyphBox(p.glyph, p.x, p.y,  x, y, w, h);
+    GetGlyphPixelBox(p.glyph, p.x, p.y,  x, y, w, h);
     SaveRect(Display.Window.bmp,  x, y, w, h,  p.save);
     Display.RenderAlphaMap(
       p.x * 4 + p.glyph.originX, p.y - p.glyph.baseline,
@@ -313,7 +311,7 @@ BEGIN
   p := EnabledSprites;  EnabledSprites := NIL;
   WHILE p # NIL DO
     (*o.s("Post-render sprite $"); o.h(SYSTEM.ADR(p^)); o.s(" at ");  Display.wxy(p.x, p.y); o.sl(".");*)
-    GetPixelGlyphBox(p.glyph, p.x, p.y, x, y, w, h);
+    GetGlyphPixelBox(p.glyph, p.x, p.y, x, y, w, h);
     RestoreRect(p.save, Display.Window.bmp, x, y, w, h);
     (* Put sprites back on the EnabledSprites list in reverse order *)
     q := p.next;
@@ -322,75 +320,6 @@ BEGIN
     p := q
   END
 END PostRenderSprites;
-
-(* -------------------------------------------------------------------------- *)
-
-
-
-
-(* PROCEDURE DrawMouse*(s: Sprite;  x, y: INTEGER);                             *)
-(* BEGIN DrawSprite(Mouse, s, x, y)                                             *)
-(* END DrawMouse;                                                               *)
-(*                                                                              *)
-(* PROCEDURE DrawMouseArrow*(x, y: INTEGER);                                    *)
-(* BEGIN                                                                        *)
-(*   o.s("Oberon.DrawMouseArrow("); o.i(x); o.c(","); o.i(y); o.sl(").");       *)
-(*   DrawSprite(Mouse, Arrow, x, y)                                             *)
-(* END DrawMouseArrow;                                                          *)
-(*                                                                              *)
-(* PROCEDURE DrawMouseStar*(x, y: INTEGER);                                     *)
-(* BEGIN DrawSprite(Mouse, Star, x, y)                                          *)
-(* END DrawMouseStar;                                                           *)
-(*                                                                              *)
-(* PROCEDURE FadeMouse*;                                                        *)
-(* BEGIN FadeSprite(Mouse)                                                      *)
-(* END FadeMouse;                                                               *)
-(*                                                                              *)
-(* PROCEDURE MouseOn*(): BOOLEAN;                                               *)
-(* BEGIN RETURN Mouse.on                                                        *)
-(* END MouseOn;                                                                 *)
-(*                                                                              *)
-(* PROCEDURE DrawPointer*(s: Sprite;  x, y: INTEGER);                           *)
-(* BEGIN DrawSprite(Pointer, s, x, y)                                           *)
-(* END DrawPointer;                                                             *)
-(*                                                                              *)
-(* PROCEDURE DrawPointerArrow*(x, y: INTEGER);                                  *)
-(* BEGIN DrawSprite(Pointer, Arrow, x, y)                                       *)
-(* END DrawPointerArrow;                                                        *)
-(*                                                                              *)
-(* PROCEDURE DrawPointerStar*(x, y: INTEGER);                                   *)
-(* BEGIN DrawSprite(Pointer, Star, x, y)                                        *)
-(* END DrawPointerStar;                                                         *)
-(*                                                                              *)
-(* PROCEDURE FadePointer*;                                                      *)
-(* BEGIN FadeSprite(Pointer)                                                    *)
-(* END FadePointer;                                                             *)
-(*                                                                              *)
-(*                                                                              *)
-(* PROCEDURE PointerOn*(): BOOLEAN;                                             *)
-(* BEGIN o.sl("PointerOn.");                                                    *)
-(*   o.s("Pointer at $"); o.h(SYSTEM.ADR(Pointer)); o.sl(".");                  *)
-(*   o.s("Pointer is ");  IF Pointer.on THEN o.sl("on.") ELSE o.sl("off.") END; *)
-(*   RETURN Pointer.on                                                          *)
-(* END PointerOn;                                                               *)
-(*                                                                              *)
-(* PROCEDURE RemoveMarks*(X, Y, W, H: INTEGER);                                 *)
-(* BEGIN                                                                        *)
-(*   (*                                                                         *)
-(*   IF (Mouse.x > X     - 16)                                                  *)
-(*    & (Mouse.x < X + W + 16)                                                  *)
-(*    & (Mouse.y > Y     - 16)                                                  *)
-(*    & (Mouse.y < Y + H + 16) THEN                                             *)
-(*     FadeSprite(Mouse)                                                        *)
-(*   END;                                                                       *)
-(*   IF (Pointer.X > X     - 8)                                                 *)
-(*    & (Pointer.X < X + W + 8)                                                 *)
-(*    & (Pointer.Y > Y     - 8)                                                 *)
-(*    & (Pointer.Y < Y + H + 8) THEN                                            *)
-(*     FadeSprite(Pointer)                                                      *)
-(*   END                                                                        *)
-(*   *)                                                                         *)
-(* END RemoveMarks;                                                             *)
 
 
 (* ----------------------------- Current looks ------------------------------ *)
@@ -407,39 +336,50 @@ PROCEDURE SetOffset*(voff: INTEGER);
 BEGIN CurOff := voff
 END SetOffset;
 
-(*logs and text selections*)
+
+(* ------------------------ Logs and text selections ------------------------ *)
 
 PROCEDURE OpenLog*(T: Texts.Text);
 BEGIN Log := T
 END OpenLog;
 
-PROCEDURE GetSelection*(VAR text: Texts.Text;  VAR beg, end, time: INTEGER); (*from current display*)
+PROCEDURE GetSelection*(VAR text: Texts.Text;  VAR beg, end, time: INTEGER);
+(* Get selection from current display *)
 VAR M: SelectionMsg;
 BEGIN M.time := -1;  Viewers.Broadcast(M);  time := M.time;
   IF time >= 0 THEN text := M.text;  beg := M.beg;  end := M.end END
 END GetSelection;
 
-(*display management*)
+
+(* --------------------------- Display management --------------------------- *)
 
 PROCEDURE HandleFiller (V: Display.Frame;  VAR M: Display.FrameMsg);
 BEGIN
   o.sl("Oberon.HandleFiller.");
   CASE M OF
-  | InputMsg:   IF M.id = track THEN (* Mouse position is updated by top level handler *)END
-  | ControlMsg: IF M.id = mark  THEN SetSpritePos(Star,  M.X, M.Y);  EnableSprite(Star) END
+  | ControlMsg: IF M.id = mark THEN SetSpritePos(Star, M.X, M.Y);  EnableSprite(Star) END
   | Viewers.ViewerMsg:
-    IF (M.id = Viewers.restore) & (V.W > 0) & (V.H > 0) THEN
-      RemoveMarks(V.X, V.Y, V.W, V.H);
-      Windows.FillRectangle(Display.Window.bmp, V.X, V.Y, V.W, V.H, 0)
-    ELSIF M.id = Viewers.modify THEN
-      IF M.Y < V.Y THEN
-        RemoveMarks(V.X, M.Y, V.W, V.Y - M.Y);
-        Windows.FillRectangle(Display.Window.bmp, V.X, M.Y, V.W, V.Y - M.Y, 0)
-      ELSIF M.Y > V.Y THEN RemoveMarks(V.X, V.Y, V.W, M.Y - V.Y)
+      o.s("Oberon.HandleFiller Viewers.ViewerMsg: V.Y "); o.i(V.Y);
+      o.s(" V.H "); o.i(V.H);  o.s(" M.Y "); o.i(M.Y);  o.s(" M.H "); o.i(M.H);
+      IF (M.id = Viewers.restore) & (V.W > 0) & (V.H > 0) THEN
+        o.sl(" M.id = Viewers.restore.");
+        RemoveMarks(V.X, V.Y, V.W, V.H);
+        Display.FillRectangle(V.X, V.Y, V.W, V.H, 0)
+      ELSIF M.id = Viewers.modify THEN
+        o.sl(" M.id = Viewers.modify.");
+        ASSERT(M.Y = V.Y);  (* Expect top of view to remain unmoved *)
+        IF    M.H > V.H THEN (* Viewer has grown, clear new space at bottom *)
+                             RemoveMarks(V.X, V.Y+V.H, V.W, M.H-V.H);
+                             Display.FillRectangle(V.X, V.Y+V.H, V.W, M.H-V.H, 0)
+        ELSIF M.H < V.H THEN (* Viewer has shrunk *)
+                             RemoveMarks(V.X, V.Y+M.H, V.W, V.H-M.H)
+        END
+      ELSE
+        o.sl(".")
       END
-    END
   END
 END HandleFiller;
+
 
 PROCEDURE InitTrack*(D: Viewers.DisplayArea;  W, H: INTEGER); (*add new track to the right*)
 VAR Filler: Viewers.Viewer;
