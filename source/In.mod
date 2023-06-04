@@ -106,9 +106,9 @@ BEGIN
 END Int;
 
 PROCEDURE Init;
-BEGIN (* Init *)
-  SYSTEM.GetProcAddress(GetStdHandle, K.Kernel, SYSTEM.ADR("GetStdHandle")); ASSERT(GetStdHandle # NIL);
-  SYSTEM.GetProcAddress(ReadConsoleA, K.Kernel, SYSTEM.ADR("ReadConsoleA")); ASSERT(ReadConsoleA # NIL);
+BEGIN
+  K.GetProcAddress(K.Kernel, "GetStdHandle", GetStdHandle); ASSERT(GetStdHandle # NIL);
+  K.GetProcAddress(K.Kernel, "ReadConsoleA", ReadConsoleA); ASSERT(ReadConsoleA # NIL);
 END Init;
 
 BEGIN Init; Open

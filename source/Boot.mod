@@ -22,19 +22,9 @@ TYPE
     commands*:    INTEGER
   END;
 
-  PEImportTable* = POINTER [untraced] TO PEImportsDesc;
-  PEImportsDesc = RECORD
-    GetProcAddress*: PROCEDURE(module, procname: INTEGER): INTEGER;
-    LoadLibraryA*:   PROCEDURE(filename: INTEGER): INTEGER;
-    ExitProcess*:    PROCEDURE(result: INTEGER);
-    New*:            PROCEDURE(VAR ptr: INTEGER;  tdAdr: INTEGER)
-                     (* Initially zero, kernel patches with impl of New *)
-  END;
-
   ModuleBase = POINTER [untraced] TO ModuleBaseDesc;
   ModuleBaseDesc* = RECORD
-    (*   0 00 *) GetProcAddress:  PROCEDURE(module, procname: INTEGER): INTEGER;
-    (*   8 08 *) LoadLibraryA:    PROCEDURE(filename: INTEGER): INTEGER;
+    (*   0 00 *) r0, r1:          INTEGER;
     (*  16 10 *) ExitProcess:     PROCEDURE(result: INTEGER);
     (*  24 18 *) z1, z2, z3, z4:  INTEGER;
     (*  56 38 *) ModHdrOffset*:   INTEGER;
@@ -49,8 +39,12 @@ VAR
   oneByteBeforeBase: CHAR; (* MUST BE THE FIRST GLOBAL VARIABLE        *)
                            (* - its address locates this module's base *)
 
+  GetProcAddress*: PROCEDURE(module, procname: INTEGER): INTEGER;
+  LoadLibraryA*:   PROCEDURE(filename: INTEGER): INTEGER;
+  ExitProcess*:    PROCEDURE(result: INTEGER);
+  New*:            PROCEDURE(VAR ptr: INTEGER;  tdAdr: INTEGER);
+
   FirstModule*: ModuleHeader;
-  PEImports*:   PEImportTable;
 
   WinBase:      ModuleBase;
   WinHdr:       ModuleHeader;
@@ -110,10 +104,8 @@ BEGIN
 
   (* Set standard procedure addresses into module static data *)
   base := SYSTEM.VAL(ModuleBase, header.base);
-  base.GetProcAddress := PEImports.GetProcAddress;
-  base.LoadLibraryA   := PEImports.LoadLibraryA;
-  base.ExitProcess    := PEImports.ExitProcess;
-  base.New            := PEImports.New;
+  base.ExitProcess    := ExitProcess;
+  base.New            := New;
   IF base.ModulePtrTable # 0 THEN INC(base.ModulePtrTable, header.base) END;
 
   (* Convert export offsets to absolute *)
@@ -175,6 +167,18 @@ END Link;
 (* ----------- Win PE pre-initialisation code - Oberon bootstrap ------------ *)
 (* -------------------------------------------------------------------------- *)
 
+
+PROCEDURE LoadPointers;
+VAR base, header, p: INTEGER;
+BEGIN
+  base := SYSTEM.ADR(oneByteBeforeBase) + 1;
+  SYSTEM.GET(base + 56, header);  header := base - header;  (* Start of module image *)
+  SYSTEM.GET(header - 32, p);  SYSTEM.PUT(SYSTEM.ADR(GetProcAddress), p);
+  SYSTEM.GET(header - 24, p);  SYSTEM.PUT(SYSTEM.ADR(LoadLibraryA),   p);
+  SYSTEM.GET(header - 16, p);  SYSTEM.PUT(SYSTEM.ADR(ExitProcess),    p);  SYSTEM.PUT(base + 16, p);
+END LoadPointers;
+
+
 BEGIN
   (* Initialisation code for the first module - this is the first code that   *)
   (* runs when the PE is loaded. It runs before it has been linked in and it  *)
@@ -186,14 +190,11 @@ BEGIN
   WinBase := SYSTEM.VAL(ModuleBase, SYSTEM.ADR(oneByteBeforeBase) + 1);
 
   IF WinBase.ModHdrOffset # 0 THEN  (* If loaded as PE bootstrap *)
+    LoadPointers;
 
     (* The WinBase block includes the offset from the module header to the   *)
     (* WinBase block.                                                        *)
     WinHdr := SYSTEM.VAL(ModuleHeader, SYSTEM.ADR(WinBase^) - WinBase.ModHdrOffset);
-
-    (* A minimal set of Win32 function addresses sits just before the first     *)
-    (* module header.                                                           *)
-    PEImports := SYSTEM.VAL(PEImportTable, SYSTEM.ADR(WinHdr^) - SYSTEM.SIZE(PEImportsDesc));
 
     (* Link this module - the Windows PE bootstrap *)
     FirstModule := WinHdr;
@@ -218,6 +219,6 @@ BEGIN
       module      := nextModule
     END;
 
-    PEImports.ExitProcess(0)
+    ExitProcess(0)
   END
 END Boot.

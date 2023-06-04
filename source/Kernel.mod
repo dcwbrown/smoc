@@ -5,8 +5,8 @@ IMPORT SYSTEM, Boot;
 CONST
   MarkedListSentinel = 2;  (* Used to mark end of list of marked heap blocks during GC *)
   HeapReserve = 80000000H; (* 2GB   *)
-  HeapCommit  = 80000H;    (* 512KB *)
-(*HeapCommit  = 2000000H;  (* 32MB *) *)
+(*HeapCommit  = 80000H;    (* 512KB *) *)
+  HeapCommit  = 2000000H;  (* 32MB *)
 
 TYPE
   ExceptionHandlerProc = PROCEDURE(p: INTEGER): INTEGER;
@@ -331,7 +331,7 @@ BEGIN
   END;
 
   MessageBox("Exception", report);
-  Boot.PEImports.ExitProcess(99)  (* Immediate exit - bypass GC finalisation *)
+  Boot.ExitProcess(99)  (* Immediate exit - bypass GC finalisation *)
 RETURN 0 END ExceptionHandler;
 
 
@@ -698,7 +698,7 @@ RETURN Ticks() DIV 10000 END Time;
 (* -------------------------------------------------------------------------- *)
 
 PROCEDURE Halt*(exitCode: INTEGER);
-BEGIN  Finalise;  Boot.PEImports.ExitProcess(exitCode) END Halt;
+BEGIN  Finalise;  Boot.ExitProcess(exitCode) END Halt;
 
 
 (* -------------------------------------------------------------------------- *)
@@ -707,7 +707,7 @@ BEGIN  Finalise;  Boot.PEImports.ExitProcess(exitCode) END Halt;
 
 PROCEDURE GetProc*(dll: INTEGER; name: ARRAY OF CHAR; VAR proc: ARRAY OF BYTE);
 BEGIN
-  SYSTEM.PUT(SYSTEM.ADR(proc), Boot.PEImports.GetProcAddress(dll, SYSTEM.ADR(name)))
+  SYSTEM.PUT(SYSTEM.ADR(proc), Boot.GetProcAddress(dll, SYSTEM.ADR(name)))
 END GetProc;
 
 PROCEDURE GetWindowsPaths;
@@ -729,11 +729,11 @@ BEGIN
   HWnd := 0;
 
   (* Set up some useful exports from standard procedures. *)
-  Kernel := Boot.PEImports.LoadLibraryA(SYSTEM.ADR("kernel32.dll"));
-  Gdi    := Boot.PEImports.LoadLibraryA(SYSTEM.ADR("gdi32.dll"));
-  User   := Boot.PEImports.LoadLibraryA(SYSTEM.ADR("user32.dll"));
-  Shell  := Boot.PEImports.LoadLibraryA(SYSTEM.ADR("shell32.dll"));
-  ShCore := Boot.PEImports.LoadLibraryA(SYSTEM.ADR("shCore.dll"));
+  Kernel := Boot.LoadLibraryA(SYSTEM.ADR("kernel32.dll"));
+  Gdi    := Boot.LoadLibraryA(SYSTEM.ADR("gdi32.dll"));
+  User   := Boot.LoadLibraryA(SYSTEM.ADR("user32.dll"));
+  Shell  := Boot.LoadLibraryA(SYSTEM.ADR("shell32.dll"));
+  ShCore := Boot.LoadLibraryA(SYSTEM.ADR("shCore.dll"));
 
   GetProc(User,   "MessageBoxW",                    MessageBoxW);
   GetProc(Kernel, "AddVectoredExceptionHandler",    AddVectoredExceptionHandler);
@@ -758,5 +758,5 @@ BEGIN
   GetWindowsPaths;
 
   (* Install New *)
-  SYSTEM.PUT(SYSTEM.ADR(Boot.PEImports.New), New)
+  SYSTEM.PUT(SYSTEM.ADR(Boot.New), New)
 END Kernel.

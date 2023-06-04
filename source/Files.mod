@@ -518,22 +518,22 @@ END FileAttributes;
 
 PROCEDURE InitWin32;
 BEGIN
-  SYSTEM.GetProcAddress(GetFileAttributesW,      K.Kernel, SYSTEM.ADR("GetFileAttributesW"));      ASSERT(GetFileAttributesW      # NIL);
-  SYSTEM.GetProcAddress(CreateFileW,             K.Kernel, SYSTEM.ADR("CreateFileW"));             ASSERT(CreateFileW             # NIL);
-  SYSTEM.GetProcAddress(CloseHandle,             K.Kernel, SYSTEM.ADR("CloseHandle"));             ASSERT(CloseHandle             # NIL);
-  SYSTEM.GetProcAddress(MoveFileExW,             K.Kernel, SYSTEM.ADR("MoveFileExW"));             ASSERT(MoveFileExW             # NIL);
-  SYSTEM.GetProcAddress(DeleteFileW,             K.Kernel, SYSTEM.ADR("DeleteFileW"));             ASSERT(DeleteFileW             # NIL);
-  SYSTEM.GetProcAddress(ReadFile,                K.Kernel, SYSTEM.ADR("ReadFile"));                ASSERT(ReadFile                # NIL);
-  SYSTEM.GetProcAddress(WriteFile,               K.Kernel, SYSTEM.ADR("WriteFile"));               ASSERT(WriteFile               # NIL);
-  SYSTEM.GetProcAddress(SetFilePointerEx,        K.Kernel, SYSTEM.ADR("SetFilePointerEx"));        ASSERT(SetFilePointerEx        # NIL);
-  SYSTEM.GetProcAddress(FlushFileBuffers,        K.Kernel, SYSTEM.ADR("FlushFileBuffers"));        ASSERT(FlushFileBuffers        # NIL);
-  SYSTEM.GetProcAddress(SetEndOfFile,            K.Kernel, SYSTEM.ADR("SetEndOfFile"));            ASSERT(SetEndOfFile            # NIL);
-  SYSTEM.GetProcAddress(GetFileSizeEx,           K.Kernel, SYSTEM.ADR("GetFileSizeEx"));           ASSERT(GetFileSizeEx           # NIL);
-  SYSTEM.GetProcAddress(wsprintfW,               K.User,   SYSTEM.ADR("wsprintfW"));               ASSERT(wsprintfW               # NIL);
-  SYSTEM.GetProcAddress(GetEnvironmentVariableW, K.Kernel, SYSTEM.ADR("GetEnvironmentVariableW")); ASSERT(GetEnvironmentVariableW # NIL);
-  SYSTEM.GetProcAddress(GetCurrentProcessId,     K.Kernel, SYSTEM.ADR("GetCurrentProcessId"));     ASSERT(GetCurrentProcessId     # NIL);
-  SYSTEM.GetProcAddress(GetFileAttributesExW,    K.Kernel, SYSTEM.ADR("GetFileAttributesExW"));    ASSERT(GetFileAttributesExW    # NIL);
-  SYSTEM.GetProcAddress(GetLastError,            K.Kernel, SYSTEM.ADR("GetLastError"));            ASSERT(GetLastError    # NIL);
+  K.GetProc(K.Kernel, "GetFileAttributesW",      GetFileAttributesW);      ASSERT(GetFileAttributesW      # NIL);
+  K.GetProc(K.Kernel, "CreateFileW",             CreateFileW);             ASSERT(CreateFileW             # NIL);
+  K.GetProc(K.Kernel, "CloseHandle",             CloseHandle);             ASSERT(CloseHandle             # NIL);
+  K.GetProc(K.Kernel, "MoveFileExW",             MoveFileExW);             ASSERT(MoveFileExW             # NIL);
+  K.GetProc(K.Kernel, "DeleteFileW",             DeleteFileW);             ASSERT(DeleteFileW             # NIL);
+  K.GetProc(K.Kernel, "ReadFile",                ReadFile);                ASSERT(ReadFile                # NIL);
+  K.GetProc(K.Kernel, "WriteFile",               WriteFile);               ASSERT(WriteFile               # NIL);
+  K.GetProc(K.Kernel, "SetFilePointerEx",        SetFilePointerEx);        ASSERT(SetFilePointerEx        # NIL);
+  K.GetProc(K.Kernel, "FlushFileBuffers",        FlushFileBuffers);        ASSERT(FlushFileBuffers        # NIL);
+  K.GetProc(K.Kernel, "SetEndOfFile",            SetEndOfFile);            ASSERT(SetEndOfFile            # NIL);
+  K.GetProc(K.Kernel, "GetFileSizeEx",           GetFileSizeEx);           ASSERT(GetFileSizeEx           # NIL);
+  K.GetProc(K.User,   "wsprintfW",               wsprintfW);               ASSERT(wsprintfW               # NIL);
+  K.GetProc(K.Kernel, "GetEnvironmentVariableW", GetEnvironmentVariableW); ASSERT(GetEnvironmentVariableW # NIL);
+  K.GetProc(K.Kernel, "GetCurrentProcessId",     GetCurrentProcessId);     ASSERT(GetCurrentProcessId     # NIL);
+  K.GetProc(K.Kernel, "GetFileAttributesExW",    GetFileAttributesExW);    ASSERT(GetFileAttributesExW    # NIL);
+  K.GetProc(K.Kernel, "GetLastError",            GetLastError);            ASSERT(GetLastError    # NIL);
 END InitWin32;
 
 BEGIN InitWin32

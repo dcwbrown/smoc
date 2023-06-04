@@ -128,13 +128,8 @@ VAR
 
   (* Static data address*)
   (* Win32 specifics *)
-  GetModuleHandleExW,
   ExitProcess,
-  LoadLibraryA,
-  GetProcAddress,
-  AddVectoredExceptionHandler,
-  MessageBoxA,
-  wsprintfA:  INTEGER;
+  MessageBoxA:  INTEGER;
 
    (* others *)
   adrOfNEW, modPtrTable, adrOfPtrTable, adrOfStackPtrList: INTEGER;
@@ -2127,33 +2122,6 @@ BEGIN
       IF x.r # rSI THEN RelocReg(x.r, rSI) END;
       EmitRep(MOVSrep, size, 1)
     END
-  ELSIF id = S.spLoadLibraryA THEN
-    MkItmStat.avoid := {0, 1, 2, 8 .. 11};
-    AvoidUsedBy(obj2);  MakeItem0(x, obj1);  ResetMkItmStat;
-    SetBestReg(rCX);  MakeItem0(y, obj2);  LoadAdr(y);
-    IF y.r # rCX THEN RelocReg(y.r, rCX) END;
-
-    EmitRmRegI(CALL, 4, rBX, LoadLibraryA);
-    FreeReg(rCX);  SetAlloc(rAX);  SetAlloc(rBX);
-
-    RefToRegI(x);  SetRmOperand(x);  EmitRegRm(MOV, rAX, 8);
-    IF curProc.obj.homeSpace < 32 THEN curProc.obj.homeSpace := 32 END
-  ELSIF id = S.spGetProcAddress THEN
-    obj3 := obj2(Node).right;  obj2 := obj2(Node).left;
-    MkItmStat.avoid := {0, 1, 2, 8 .. 11};  AvoidUsedBy(obj2);
-    AvoidUsedBy(obj3);  MakeItem0(x, obj1);  ResetMkItmStat;
-    AvoidUsedBy(obj3);  SetAvoid(rDX);  SetBestReg(rCX);
-    MakeItem0(y, obj2);  Load(y);  ResetMkItmStat;
-    SetBestReg(rDX);  MakeItem0(z, obj3);  Load(z);
-    IF z.r # rDX THEN RelocReg(y.r, rDX) END;
-    IF y.r # rCX THEN RelocReg(y.r, rCX) END;
-
-    EmitRmRegI(CALL, 4, rBX, GetProcAddress);
-    FreeReg(rCX);  FreeReg(rDX);
-    SetAlloc(rAX); SetAlloc(rBX);
-    RefToRegI(x);  SetRmOperand(x);
-    EmitRegRm(MOV, rAX, 8);
-    IF curProc.obj.homeSpace < 32 THEN curProc.obj.homeSpace := 32 END
   ELSIF id = S.spINT3 THEN
     EmitBare(INT3)
   ELSIF id = S.spPAUSE THEN
@@ -2640,16 +2608,10 @@ BEGIN
   adrOfNEW          := 120;
   adrOfPtrTable     := 112;
   adrOfStackPtrList := 104;
-  wsprintfA         := 96;
   MessageBoxA       := 88;
   (* Note: offset 80 is reserved for the RVA of the static data from the      *)
   (* Windows module base.                                                     *)
-
-  AddVectoredExceptionHandler := 32;
-  GetModuleHandleExW          := 24;
-  ExitProcess                 := 16;
-  LoadLibraryA                := 8;
-  GetProcAddress              := 0;
+  ExitProcess       := 16;
 
   debug := Files.New(".DebugInfo");  Files.Set(rider, debug, 0)
 END Init;

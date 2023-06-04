@@ -750,19 +750,6 @@ BEGIN hasParen := TRUE;
     y := expression();  CheckInt(y);  CheckSym(S.comma);
     z := expression();  CheckInt(z);
     x := NewNode(S.spCOPY, x, NewNode(S.null, y, z))
-  ELSIF f.id = S.spLoadLibraryA THEN
-    x := designator();  CheckVar(x, FALSE);
-    IF x.type # B.intType THEN Mark("not INTEGER") END;  CheckSym(S.comma);
-    y := expression();  IF ~B.IsStr(y.type) THEN Mark("not string") END;
-    x := NewNode(S.spLoadLibraryA, x, y)
-  ELSIF f.id = S.spGetProcAddress THEN
-    x := designator();  CheckVar(x, FALSE);
-    IF (x.type.form # B.tProc) & (x.type # B.intType) THEN
-      Mark("not INTEGER or procedure variable")
-    END;  CheckSym(S.comma);
-    y := expression();  CheckInt(y);  CheckSym(S.comma);
-    z := expression();  CheckInt(z);
-    x := NewNode(S.spGetProcAddress, x, NewNode(S.null, y, z))
   ELSIF f.id = S.spINT3 THEN
     x := NewNode(S.spINT3, NIL, NIL)
   ELSIF f.id = S.spPAUSE THEN

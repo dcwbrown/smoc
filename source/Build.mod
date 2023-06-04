@@ -64,7 +64,10 @@ BEGIN
     file := Files.Old(path);
     WHILE searchpath[i] = ";" DO INC(i) END;
   END;
-  IF file # NIL THEN filename := path END
+  IF file # NIL THEN
+    filename := path;
+    (*w.s("Found "); w.s(name); w.s(" at "); w.s(path); w.sl(".")*)
+  END
 END FindFile;
 
 

@@ -23,13 +23,13 @@ VAR
   AllocConsole:       PROCEDURE(): Bool;
     res: INTEGER;
 BEGIN
-  SYSTEM.GetProcAddress(GetStdHandle,       K.Kernel, SYSTEM.ADR("GetStdHandle"));       ASSERT(GetStdHandle       # NIL);
-  SYSTEM.GetProcAddress(SetConsoleOutputCP, K.Kernel, SYSTEM.ADR("SetConsoleOutputCP")); ASSERT(SetConsoleOutputCP # NIL);
-  SYSTEM.GetProcAddress(WriteFile,          K.Kernel, SYSTEM.ADR("WriteFile"));          ASSERT(WriteFile          # NIL);
+  K.GetProc(K.Kernel, "GetStdHandle",       GetStdHandle);       ASSERT(GetStdHandle       # NIL);
+  K.GetProc(K.Kernel, "SetConsoleOutputCP", SetConsoleOutputCP); ASSERT(SetConsoleOutputCP # NIL);
+  K.GetProc(K.Kernel, "WriteFile",          WriteFile);          ASSERT(WriteFile          # NIL);
   hOut := GetStdHandle(STD_OUTPUT_HANDLE);
   res  := SetConsoleOutputCP(UTF8);
   IF hOut = 0 THEN
-    SYSTEM.GetProcAddress(AllocConsole, K.Kernel, SYSTEM.ADR("AllocConsole"));
+    K.GetProc(K.Kernel, "AllocConsole", AllocConsole);
     ASSERT(AllocConsole # NIL);
     ASSERT(AllocConsole() # 0)
   END

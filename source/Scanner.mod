@@ -71,7 +71,7 @@ CONST
   spNEW* = 134;  spASSERT* = 135;  spPACK* = 136;  spUNPK* = 137;
   spGET* = 138;  spPUT*    = 139;  spCOPY* = 140;
 
-  spLoadLibraryA* = 151;  spGetProcAddress* = 152;  spINT3* = 154;
+  spINT3* = 154;
   spPAUSE*        = 155;
   endSp*          = 159;
 

@@ -977,8 +977,8 @@ BEGIN
   Enter(NewSProc(S.spGET,            cSProc), "GET");
   Enter(NewSProc(S.spPUT,            cSProc), "PUT");
   Enter(NewSProc(S.spCOPY,           cSProc), "COPY");
-  Enter(NewSProc(S.spLoadLibraryA,   cSProc), "LoadLibraryA");
-  Enter(NewSProc(S.spGetProcAddress, cSProc), "GetProcAddress");
+(*Enter(NewSProc(S.spLoadLibraryA,   cSProc), "LoadLibraryA");  *)
+(*Enter(NewSProc(S.spGetProcAddress, cSProc), "GetProcAddress");*)
   Enter(NewSProc(S.spINT3,           cSProc), "INT3");
   Enter(NewSProc(S.spPAUSE,          cSProc), "PAUSE");
 
