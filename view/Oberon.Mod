@@ -253,6 +253,8 @@ END RemoveMarks;
 PROCEDURE SaveRect(bmp: Windows.Bitmap; x, y, wi, h: INTEGER; VAR buf: ARRAY OF ARGB);
 VAR sadr, i, ilim, ylim: INTEGER;
 BEGIN ASSERT(wi * h <= LEN(buf));
+  IF x < 0 THEN wi := wi + x;  x := 0 END;
+  IF y < 0 THEN h  := h  + y;  y := 0 END;
   IF (x < bmp.width) & (y < bmp.height) THEN
     (*o.s("SaveRect "); Display.wxy(x,y); o.s(" size "); Display.wxy(wi,h); o.sl(".");*)
     i := 0;  ylim := y + h;  IF ylim > bmp.height THEN ylim := bmp.height END;
@@ -269,6 +271,8 @@ END SaveRect;
 PROCEDURE RestoreRect(buf: ARRAY OF ARGB; bmp: Windows.Bitmap; x, y, wi, h: INTEGER);
 VAR tadr, i, ilim, ylim: INTEGER;
 BEGIN ASSERT(wi * h <= LEN(buf));
+  IF x < 0 THEN wi := wi + x;  x := 0 END;
+  IF y < 0 THEN h  := h  + y;  y := 0 END;
   IF (x < bmp.width) & (y < bmp.height) THEN
     (*o.s("RestoreRect "); Display.wxy(x,y); o.s(" size "); Display.wxy(wi,h); o.sl(".");*)
     i := 0;  ylim := y + h;  IF ylim > bmp.height THEN ylim := bmp.height END;

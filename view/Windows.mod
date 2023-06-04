@@ -360,6 +360,8 @@ BEGIN
   w.DumpMem(2, mapadr, 0, 323);
   *)
 
+  (*ASSERT(x >= 0);  ASSERT(y >= 0);*)
+
   mp       := bitmapadr + 4 * (stride * y + x DIV 4);
   subpixel := x MOD 4;
   alphasum := 0;
@@ -377,7 +379,7 @@ BEGIN
     WHILE len > 0 DO
       INC(alphasum, alpha); INC(subpixel);
       IF subpixel > 3 THEN
-        IF alphasum > 0 THEN
+        IF (alphasum > 0) & (mp >= bitmapadr) & (mp+3 < bitmaplim) THEN
           IF alphasum >= 255 THEN
             SYSTEM.PUT(mp, paint);
           ELSE
@@ -390,8 +392,8 @@ BEGIN
         INC(mp, 4);
       END;
       INC(sp);
-      IF (mp < bitmaplim) & (sp >= width) THEN
-        IF alphasum > 0 THEN  (* write remaining partial pixel *)
+      IF sp >= width THEN
+        IF (alphasum > 0) & (mp >= bitmapadr) & (mp+3 < bitmaplim) THEN  (* write remaining partial pixel *)
           SYSTEM.GET(mp, pixel);
           SYSTEM.PUT(mp, BlendPixel(paint, pixel, alphasum));
         END;

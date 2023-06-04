@@ -168,11 +168,11 @@ BEGIN pos := 0;  ox := 0;
 RETURN ox END Width;
 
 
-PROCEDURE MeasureLine (l: Line;  VAR R: Texts.Reader);
+PROCEDURE MeasureLine (L: Line;  VAR R: Texts.Reader);
 VAR ascent, descent, below, length: INTEGER;
 BEGIN
   ascent := 1;  descent := 0;  below := 0;  length := 0;
-  WHILE (NextCh # CR) & (R.fnt # NIL) DO
+  WHILE (NextCh # CR) & (NextCh # LF) & (R.fnt # NIL) DO
     IF R.fnt.ascent  > ascent  THEN ascent  := R.fnt.ascent  END;
     IF R.fnt.descent > descent THEN descent := R.fnt.descent END;
     IF R.fnt.descent + R.fnt.lead > below THEN
@@ -180,22 +180,27 @@ BEGIN
     END;
     INC(length);  Texts.Read(R, NextCh)
   END;
-  l.length  := length + 1;
-  l.ascent  := ascent;
-  l.descent := descent;
-  l.height  := ascent + below;
-  l.eot     := R.fnt = NIL;
-  Texts.Read(R, NextCh)
+  L.length  := length + 1;
+  L.ascent  := ascent;
+  L.descent := descent;
+  L.height  := ascent + below;
+  L.eot     := R.fnt = NIL;
+  IF NextCh = CR THEN
+    Texts.Read(R, NextCh);
+    IF NextCh = LF THEN Texts.Read(R, NextCh);  INC(L.length) END
+  ELSE
+    Texts.Read(R, NextCh)
+  END
 END MeasureLine;
 
 
-PROCEDURE PlaceLine(f: Frame;  l: Line;  top: INTEGER);
+PROCEDURE PlaceLine(f: Frame;  L: Line;  top: INTEGER);
 (* Determines the first available baseline in the frame at which to place *)
-(* line l such that the line's ascent does not reach higher than top.     *)
+(* line L such that the line's ascent does not reach higher than top.     *)
 VAR linenum: INTEGER;
 BEGIN
   linenum    := (top - f.top - 1) DIV f.lineHeight;
-  l.baseline := f.top + (linenum + 1) * f.lineHeight + f.baseline
+  L.baseline := f.top + (linenum + 1) * f.lineHeight + f.baseline
 END PlaceLine;
 
 
@@ -216,7 +221,7 @@ BEGIN
   w.s(" R.col $"); w.h(R.col); w.s(" '");
   X    := X * 256;                      (* switch to subpixels *)
   xLim := (F.X + F.W - F.right) * 256;  (* x Limit in pixels   *)
-  WHILE (NextCh # CR) & (R.fnt # NIL) DO
+  WHILE (NextCh # CR) & (NextCh # LF) & (R.fnt # NIL) DO
     w.c(NextCh);
     dx := Fonts.GetAdvance(R.fnt, ORD(NextCh));
     IF (NextCh >= 20X) & (NextCh <= 7EX) & ((X + dx) < xLim) THEN
@@ -236,7 +241,12 @@ BEGIN
   L.length := length + 1;
   L.width  := (X+255) DIV 256 + EolWidth - (F.X + F.left);
   L.eot    := R.fnt = NIL;
-  Texts.Read(R, NextCh);
+  IF NextCh = CR THEN
+    Texts.Read(R, NextCh);
+    IF NextCh = LF THEN Texts.Read(R, NextCh);  INC(L.length) END
+  ELSE
+    Texts.Read(R, NextCh)
+  END
 END DisplayLine;
 
 
@@ -277,7 +287,7 @@ BEGIN
   selx := X;  seldx := 0;
   trkx := X;  trkdx := 0;
 
-  WHILE (NextCh # CR) & (R.fnt # NIL) DO
+  WHILE (NextCh # CR) & (NextCh # LF) & (R.fnt # NIL) DO
     IF (pos = F.selStart) THEN selx  := X        END;
     IF (pos = F.selLimit) THEN seldx := X - selx END;
     IF (pos = F.trkStart) THEN trkx  := X        END;
@@ -306,7 +316,12 @@ BEGIN
   L.length := length + 1;
   L.width  := (X+255) DIV 256 + EolWidth - (F.X + F.left);
   L.eot    := R.fnt = NIL;
-  Texts.Read(R, NextCh);
+  IF NextCh = CR THEN
+    Texts.Read(R, NextCh);
+    IF NextCh = LF THEN Texts.Read(R, NextCh);  INC(L.length) END
+  ELSE
+    Texts.Read(R, NextCh)
+  END
 END DisplaySelectionBackground;
 
 
@@ -314,11 +329,18 @@ PROCEDURE EnsureSOL(T: Texts.Text;  VAR pos: INTEGER);
 (* Ensure pos at start of line *)
 VAR R: Texts.Reader;
 BEGIN
+  w.s("EnsureSOL. pos "); w.i(pos); w.s(" T.length "); w.i(T.length); w.sl(".");
   IF pos > T.length THEN pos := T.length
   ELSIF pos > 0 THEN
     DEC(pos);
     Texts.OpenReader(R, T, pos);
-    REPEAT Texts.Read(R, NextCh);  INC(pos) UNTIL R.eot OR (NextCh = CR)
+    REPEAT Texts.Read(R, NextCh);  INC(pos)
+    UNTIL R.eot OR (NextCh = CR) OR (NextCh = LF);
+    w.s("EnsureSOL found NextCh = $"); w.h(ORD(NextCh)); w.sl(".");
+    IF NextCh = CR THEN
+      Texts.Read(R, NextCh); w.sl("-- found CR --.");
+      IF NextCh = LF THEN w.sl("-- Skip LF --.");  INC(pos) END
+    END
   ELSE pos := 0
   END
 END EnsureSOL;
