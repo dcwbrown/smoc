@@ -371,7 +371,6 @@ VAR
   impmod:   B.Module;
   export:   B.ObjList;
   i, adr:   INTEGER;
-  base:     Boot.ModuleBaseDesc;
 
 BEGIN
   filename := B.BuildPath;
@@ -384,10 +383,10 @@ BEGIN
 
   (* Insert pointers into the first 128 bytes of static data. *)
 
-  Files.Set(X64, X64file, Header.base + SYSTEM.ADR(base.ModHdrOffset) - SYSTEM.ADR(base));
+  Files.Set(X64, X64file, Header.base + Boot.OffModHeaderOffset);
   Files.WriteInt(X64, Header.base);
 
-  Files.Set(X64, X64file, Header.base + SYSTEM.ADR(base.ModulePtrTable) - SYSTEM.ADR(base));
+  Files.Set(X64, X64file, Header.base + Boot.OffModulePtrTable);
   Files.WriteInt(X64, modPtrTable);
 
   WriteImportReferences;
