@@ -4,6 +4,29 @@ MODULE Boot;  (*$RTL-*)
 
 IMPORT SYSTEM;
 
+CONST
+  (* Offsets within first 128 bytes of module base *)
+  OffExitProcess*     = 16;
+  OffModHeaderOffset* = 56;
+  OffStackPtrTable*   = 104;
+  OffModulePtrTable*  = 112;
+  OffNew*             = 120;
+
+  (* Module binary header offsets *)
+  OffModLength*      =   0;
+  OffModNext*        =   8;
+  OffModName*        =  16;
+  OffModBase*        =  48;
+  OffModCode*        =  56;
+  OffModInit*        =  64;
+  OffModTrap*        =  72;
+  OffModKey0*        =  80;
+  OffModKey1*        =  88;
+  OffModImportNames* =  96;  (* list of import names and keys  *)
+  OffModImports*     = 104;  (* adr of start of import list    *)
+  OffModExports*     = 112;  (* array of export addresses      *)
+  OffModCommands*    = 120;
+
 TYPE
   ModuleName*       = ARRAY 32 OF CHAR;
   ModuleHeader*     = POINTER [untraced] TO ModuleHeaderDesc;
@@ -22,22 +45,13 @@ TYPE
     commands*:    INTEGER
   END;
 
-  ModuleBase = POINTER [untraced] TO ModuleBaseDesc;
-  ModuleBaseDesc* = RECORD
-    (*   0 00 *) r0, r1:          INTEGER;
-    (*  16 10 *) ExitProcess:     PROCEDURE(result: INTEGER);
-    (*  24 18 *) z1, z2, z3, z4:  INTEGER;
-    (*  56 38 *) ModHdrOffset*:   INTEGER;
-    (*  64 40 *) z5, z6, z7, z8:  INTEGER;
-    (*  96 60 *) z9:              INTEGER;
-    (* 104 68 *) StackPtrTable:   INTEGER;
-    (* 112 70 *) ModulePtrTable*: INTEGER;
-    (* 120 78 *) New:             PROCEDURE(VAR ptr: INTEGER;  tdAdr: INTEGER)
-  END;
 
 VAR
   oneByteBeforeBase: CHAR; (* MUST BE THE FIRST GLOBAL VARIABLE        *)
                            (* - its address locates this module's base *)
+
+  BootBase:   INTEGER;  (* Base addres of Boot module - start of initialised data *)
+  BootHeader: INTEGER;  (* Start address of boot module *)
 
   GetProcAddress*: PROCEDURE(module, procname: INTEGER): INTEGER;
   LoadLibraryA*:   PROCEDURE(filename: INTEGER): INTEGER;
@@ -46,7 +60,6 @@ VAR
 
   FirstModule*: ModuleHeader;
 
-  WinBase:      ModuleBase;
   WinHdr:       ModuleHeader;
   module:       ModuleHeader;
   nextModule:   ModuleHeader;
@@ -68,6 +81,19 @@ BEGIN i := 0;
 RETURN i END GetString;
 
 
+PROCEDURE GetInt(adr: INTEGER): INTEGER;
+VAR res: INTEGER;
+BEGIN SYSTEM.GET(adr, res);  RETURN res END GetInt;
+
+
+PROCEDURE Relocate(adr, offset: INTEGER);
+VAR v: INTEGER;
+BEGIN
+  SYSTEM.GET(adr, v);
+  IF v # 0  THEN SYSTEM.PUT(adr, v + offset) END
+END Relocate;
+
+
 PROCEDURE Link(header: ModuleHeader);
 (* Convert offsets in the Module header to absolute addresses. *)
 (* Populate procedure pointers.                                *)
@@ -75,7 +101,8 @@ PROCEDURE Link(header: ModuleHeader);
 (* Lookup imported modules.                                    *)
 (* Convert import references to absolute addresses.            *)
 VAR
-  base:         ModuleBase;
+  headadr:      INTEGER;
+  baseadr:      INTEGER;
   export:       INTEGER;
   exportadr:    INTEGER;
   i:            INTEGER;
@@ -93,24 +120,30 @@ VAR
   importRef:    INTEGER;
 
 BEGIN
-  (* Convert module header offsets to absolute addresses *)
-  IF header.base        # 0 THEN INC(header.base,        SYSTEM.ADR(header^)) END;
-  IF header.code        # 0 THEN INC(header.code,        SYSTEM.ADR(header^)) END;
-  IF header.init        # 0 THEN INC(header.init,        SYSTEM.ADR(header^)) END;
-  IF header.trap        # 0 THEN INC(header.trap,        SYSTEM.ADR(header^)) END;
-  IF header.importNames # 0 THEN INC(header.importNames, SYSTEM.ADR(header^)) END;
-  IF header.exports     # 0 THEN INC(header.exports,     SYSTEM.ADR(header^)) END;
-  IF header.commands    # 0 THEN INC(header.commands,    SYSTEM.ADR(header^)) END;
+  headadr := SYSTEM.ADR(header^);
 
-  (* Set standard procedure addresses into module static data *)
-  base := SYSTEM.VAL(ModuleBase, header.base);
-  base.ExitProcess    := ExitProcess;
-  base.New            := New;
-  IF base.ModulePtrTable # 0 THEN INC(base.ModulePtrTable, header.base) END;
+  (* Convert module header offsets to absolute addresses *)
+  Relocate(headadr + OffModBase,        headadr);
+  Relocate(headadr + OffModCode,        headadr);
+  Relocate(headadr + OffModInit,        headadr);
+  Relocate(headadr + OffModTrap,        headadr);
+  Relocate(headadr + OffModImportNames, headadr);
+  Relocate(headadr + OffModExports,     headadr);
+  Relocate(headadr + OffModCommands,    headadr);
+
+  baseadr := GetInt(headadr + OffModBase);
+
+  SYSTEM.PUT(baseadr + OffExitProcess, SYSTEM.VAL(INTEGER, ExitProcess));
+  SYSTEM.PUT(baseadr + OffNew,         SYSTEM.VAL(INTEGER, New));
+
+  IF GetInt(baseadr + OffModulePtrTable) # 0 THEN
+    SYSTEM.PUT(baseadr + OffModulePtrTable, GetInt(baseadr + OffModulePtrTable) + baseadr);
+  END;
 
   (* Convert export offsets to absolute *)
   IF header.exports # 0 THEN
-    export := header.exports;  SYSTEM.GET(export, exportadr);
+    SYSTEM.GET(headadr + OffModExports, export);
+    SYSTEM.GET(export, exportadr);
     WHILE exportadr # 8000000000000000H DO
       SYSTEM.PUT(export, exportadr + header.base);
       INC(export, 8);
@@ -119,8 +152,8 @@ BEGIN
   END;
 
   (* Convert imported module names to module export table addresses *)
-  IF header.importNames # 0 THEN
-    importAdr := header.importNames;
+  SYSTEM.GET(headadr + OffModImportNames, importAdr);
+  IF importAdr # 0 THEN
     INC(importAdr, GetString(importAdr, impname));
     i := 0;  imports[i] := 0;
     WHILE impname[0] # 0X DO
@@ -167,18 +200,6 @@ END Link;
 (* ----------- Win PE pre-initialisation code - Oberon bootstrap ------------ *)
 (* -------------------------------------------------------------------------- *)
 
-
-PROCEDURE LoadPointers;
-VAR base, header, p: INTEGER;
-BEGIN
-  base := SYSTEM.ADR(oneByteBeforeBase) + 1;
-  SYSTEM.GET(base + 56, header);  header := base - header;  (* Start of module image *)
-  SYSTEM.GET(header - 32, p);  SYSTEM.PUT(SYSTEM.ADR(GetProcAddress), p);
-  SYSTEM.GET(header - 24, p);  SYSTEM.PUT(SYSTEM.ADR(LoadLibraryA),   p);
-  SYSTEM.GET(header - 16, p);  SYSTEM.PUT(SYSTEM.ADR(ExitProcess),    p);  SYSTEM.PUT(base + 16, p);
-END LoadPointers;
-
-
 BEGIN
   (* Initialisation code for the first module - this is the first code that   *)
   (* runs when the PE is loaded. It runs before it has been linked in and it  *)
@@ -187,19 +208,26 @@ BEGIN
 
   (* The 128 byte pointers block is at the start of static data and is the    *)
   (* base address used within the module code.                                *)
-  WinBase := SYSTEM.VAL(ModuleBase, SYSTEM.ADR(oneByteBeforeBase) + 1);
+  BootBase := SYSTEM.ADR(oneByteBeforeBase) + 1;
+  SYSTEM.GET(BootBase + 56, BootHeader);
+  IF BootHeader # 0 THEN
+    BootHeader := BootBase - BootHeader;  (* Start of module image *)
 
-  IF WinBase.ModHdrOffset # 0 THEN  (* If loaded as PE bootstrap *)
-    LoadPointers;
+    SYSTEM.PUT(SYSTEM.ADR(GetProcAddress), GetInt(BootHeader - 32));
+    SYSTEM.PUT(SYSTEM.ADR(LoadLibraryA),   GetInt(BootHeader - 24));
+    SYSTEM.PUT(SYSTEM.ADR(ExitProcess),    GetInt(BootHeader - 16));
+    SYSTEM.PUT(BootBase + 16,              GetInt(BootHeader - 16));
+
+    (*LoadPointers;*)
 
     (* The WinBase block includes the offset from the module header to the   *)
     (* WinBase block.                                                        *)
-    WinHdr := SYSTEM.VAL(ModuleHeader, SYSTEM.ADR(WinBase^) - WinBase.ModHdrOffset);
+    WinHdr := SYSTEM.VAL(ModuleHeader, BootHeader);
 
     (* Link this module - the Windows PE bootstrap *)
     FirstModule := WinHdr;
-    Link(WinHdr);  (* Note - does not call WinHdr's init address as that is *)
-                   (* this code and we're already running.                  *)
+    Link(WinHdr);  (* Note - do not call WinHdr's init address as that is *)
+                   (* this code and we're already running.                *)
 
     (* Link remaining modules in EXE 'Oberon' section *)
     module := SYSTEM.VAL(ModuleHeader, SYSTEM.ADR(WinHdr^) + WinHdr.length);

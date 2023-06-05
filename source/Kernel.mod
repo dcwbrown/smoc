@@ -307,16 +307,17 @@ BEGIN
     END;
     IF (adr = address) & (trap <= 10) THEN
       CASE trap OF
-      |  1: report := "Array index out of range in module "
-      |  2: report := "Type trap in module "
-      |  3: report := "String size error in module "
-      |  4: report := "NIL reference in module "
-      |  5: report := "NIL procedure call in module "
-      |  6: report := "Divide by zero in module "
-      |  7: report := "Assertion FALSE in module "
-      |  9: report := "SYSTEM.GET access violation in module "
-      | 10: report := "SYSTEM.PUT access violation in module "
+      |  1: report := "Array index out of range"
+      |  2: report := "Type trap"
+      |  3: report := "String size error"
+      |  4: report := "NIL reference"
+      |  5: report := "NIL procedure call"
+      |  6: report := "Divide by zero"
+      |  7: report := "Assertion FALSE"
+      |  9: report := "SYSTEM.GET access violation"
+      | 10: report := "SYSTEM.PUT access violation"
       END;
+      Append(" in module ", report);
       Append(module.name, report);
       Append(" at ", report);
       IntToDecimal(line, number); Append(number, report);
@@ -681,15 +682,15 @@ END GetArg;
 
 
 (* -------------------------------------------------------------------------- *)
-(* ----- Time in ms and 100nS ticks since since January 1, 1601 (UTC) ------- *)
+(* ---------------- Time since since January 1, 1601 (UTC) ------------------ *)
 (* -------------------------------------------------------------------------- *)
 
-PROCEDURE Ticks*(): INTEGER;
+PROCEDURE Ticks*(): INTEGER;  (* In 100ns ticks *)
 VAR tick: INTEGER;
 BEGIN GetSystemTimePreciseAsFileTime(SYSTEM.ADR(tick));
 RETURN tick END Ticks;
 
-PROCEDURE Time*(): INTEGER;
+PROCEDURE Time*(): INTEGER;   (* In ms *)
 RETURN Ticks() DIV 10000 END Time;
 
 
