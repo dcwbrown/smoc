@@ -141,10 +141,10 @@ VAR
   modno:        INTEGER;
   expno:        INTEGER;
   impadr:       INTEGER;
-  impheader:    ModuleHeader;
-  hdrname:      ARRAY 64 OF CHAR;
+  impHeader:    INTEGER;
   importRefAdr: INTEGER;
   importRef:    INTEGER;
+  (*dummy:        ModuleHeader;*)
 
 BEGIN
   (* Convert module header offsets to absolute addresses *)
@@ -179,16 +179,17 @@ BEGIN
   (* Convert imported module names to module export table addresses *)
   SYSTEM.GET(headadr + OffModImportNames, importAdr);
   IF importAdr # 0 THEN
-    i := 0;  imports[i] := 0;
+    i := 0;
+    imports[i] := 0;
     WHILE ~EndOfImports(importAdr) DO
-      impheader := SYSTEM.VAL(ModuleHeader, BootHeader);
-      WHILE (impheader # NIL) & (imports[i] = 0) DO
-      IF MatchingImports(importAdr, SYSTEM.VAL(INTEGER, impheader)) THEN
-          SYSTEM.GET(SYSTEM.VAL(INTEGER, impheader) + OffModExports, imports[i]);
+      impHeader := BootHeader;
+      WHILE (impHeader # 0) & (imports[i] = 0) DO
+        IF MatchingImports(importAdr, impHeader) THEN
+          SYSTEM.GET(impHeader + OffModExports, imports[i]);
         END;
-        impheader := impheader.next
+        SYSTEM.GET(impHeader + OffModNext, impHeader);
       END;
-      NextImport(importAdr); (* := importAdr; *)
+      NextImport(importAdr);
       INC(i)
     END
   END;
