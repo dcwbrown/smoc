@@ -26,8 +26,10 @@ CONST
   OffModImports*     = 104;  (* adr of start of import list    *)
   OffModExports*     = 112;  (* array of export addresses      *)
   OffModCommands*    = 120;
+  ModHdrSize*        = 128;
 
 TYPE
+(*
   ModuleName*       = ARRAY 32 OF CHAR;
   ModuleHeader*     = POINTER [untraced] TO ModuleHeaderDesc;
   ModuleHeaderDesc* = RECORD
@@ -44,6 +46,7 @@ TYPE
     exports*:     INTEGER;       (* 104 array of export addresses      *)
     commands*:    INTEGER
   END;
+*)
 
 VAR
   oneByteBeforeBase: CHAR; (* MUST BE THE FIRST GLOBAL VARIABLE IN Boot.mod *)
@@ -66,16 +69,6 @@ VAR
 (* -------------------------------------------------------------------------- *)
 (* --------- Link newly loaded module to previously loaded modules ---------- *)
 (* -------------------------------------------------------------------------- *)
-
-PROCEDURE GetString(adr: INTEGER; VAR str: ARRAY OF CHAR): INTEGER;
-(* Extract string from memory *)
-VAR i: INTEGER;
-BEGIN i := 0;
-  REPEAT
-    SYSTEM.GET(adr, str[i]);  INC(adr);  INC(i)
-  UNTIL (i = LEN(str)) OR (str[i-1] = 0X);
-  IF i = LEN(str) THEN str[i-1] := 0X END
-RETURN i END GetString;
 
 
 PROCEDURE GetInt(adr: INTEGER): INTEGER;
@@ -140,7 +133,7 @@ VAR
   imports:      ARRAY 64 OF INTEGER;
   modno:        INTEGER;
   expno:        INTEGER;
-  impadr:       INTEGER;
+  importedval:  INTEGER;
   impHeader:    INTEGER;
   importRefAdr: INTEGER;
   importRef:    INTEGER;
@@ -203,8 +196,9 @@ BEGIN
     ELSE
       modno := ASR(importRef, 48);
       expno := ASR(importRef, 32) MOD 10000H;
-      SYSTEM.GET(imports[modno] + expno * 8, impadr);
-      SYSTEM.PUT(baseadr + importRefAdr, impadr)
+      ASSERT(modno < i);
+      SYSTEM.GET(imports[modno] + expno * 8, importedval);
+      SYSTEM.PUT(baseadr + importRefAdr, importedval)
     END;
     importRefAdr := importRef MOD 100000000H;
   END;

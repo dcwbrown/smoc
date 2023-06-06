@@ -518,7 +518,10 @@ END FileAttributes;
 
 PROCEDURE InitWin32;
 BEGIN
+  w.sl("Files.InitWin32.");
+  w.s("K.GetProc at $"); w.h(SYSTEM.VAL(INTEGER, K.GetProc)); w.sl(".");
   K.GetProc(K.Kernel, "GetFileAttributesW",      GetFileAttributesW);      ASSERT(GetFileAttributesW      # NIL);
+  w.sl(".");
   K.GetProc(K.Kernel, "CreateFileW",             CreateFileW);             ASSERT(CreateFileW             # NIL);
   K.GetProc(K.Kernel, "CloseHandle",             CloseHandle);             ASSERT(CloseHandle             # NIL);
   K.GetProc(K.Kernel, "MoveFileExW",             MoveFileExW);             ASSERT(MoveFileExW             # NIL);

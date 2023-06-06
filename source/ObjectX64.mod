@@ -4,7 +4,17 @@ IMPORT SYSTEM, Files, B := Base, w := Writer, WritePE, Boot;
 VAR
   X64file: Files.File;  (* Output file *)
   X64:     Files.Rider;
-  Header:  Boot.ModuleHeaderDesc;
+
+  (* Header fields. *) (*: Boot.ModuleHeaderDesc;*)
+  HdrLength:      INTEGER;
+  HdrBase:        INTEGER;
+  HdrCode:        INTEGER;
+  HdrInit:        INTEGER;
+  HdrTrap:        INTEGER;
+  HdrImportNames: INTEGER;
+  HdrImports:     INTEGER;
+  HdrExports:     INTEGER;
+  HdrCommands:    INTEGER;
 
 (* -------------------------------------------------------------------------- *)
 
@@ -23,9 +33,9 @@ PROCEDURE AddImport(adr, modno, expno: INTEGER);
 BEGIN
   ASSERT((modno >= 0) & (modno < 8000H));
   ASSERT(expno > 0);
-  Files.Set(X64, X64file, Header.base + adr);
-  Files.WriteInt(X64, Header.imports + LSL(expno - 1, 32) + LSL(modno, 48));
-  Header.imports := adr;
+  Files.Set(X64, X64file, HdrBase + adr);
+  Files.WriteInt(X64, HdrImports + LSL(expno - 1, 32) + LSL(modno, 48));
+  HdrImports := adr;
 END AddImport;
 
 PROCEDURE WriteImportReferences;
@@ -37,7 +47,7 @@ VAR
   impadr:      INTEGER;
   expno:       INTEGER;
 BEGIN
-  Header.imports := 0;
+  HdrImports := 0;
   IF B.modList # NIL THEN
     impmod := B.modList;  modno := 0;
     WHILE impmod # NIL DO
@@ -69,7 +79,7 @@ VAR slist: B.StrList;  str: B.Str;  i: INTEGER;
 BEGIN
   slist := B.strList;
   WHILE slist # NIL DO str := slist.obj;
-    Files.Set(X64, X64file, Header.base + str.adr);  i := 0;
+    Files.Set(X64, X64file, HdrBase + str.adr);  i := 0;
     WHILE i < str.len DO
       Files.Write(X64, B.strBuf[str.bufpos+i]);  INC(i)
     END;
@@ -185,9 +195,9 @@ END DumpRecList;
 PROCEDURE AddRelocation(adr, val: INTEGER);
 BEGIN
   (*w.s("Add relocation at $"); w.h(adr); w.s(" value $"); w.h(val); w.sl(".");*)
-  Files.Set(X64, X64file, Header.base + adr);
-  Files.WriteInt(X64, 8000000000000000H + LSL(val, 32) + Header.imports);
-  Header.imports := adr;
+  Files.Set(X64, X64file, HdrBase + adr);
+  Files.WriteInt(X64, 8000000000000000H + LSL(val, 32) + HdrImports);
+  HdrImports := adr;
 END AddRelocation;
 
 
@@ -205,7 +215,7 @@ BEGIN
   recType := B.recList;
   WHILE recType # NIL DO
     type := recType.type;  typeadr := type.adr;
-    Files.Set(X64, X64file, Header.base + typeadr);
+    Files.Set(X64, X64file, HdrBase + typeadr);
     Files.WriteInt(X64, type.size);
 
     (* Write extensions for extended record types *)
@@ -215,7 +225,7 @@ BEGIN
         w.s("Type extension ptr, typeadr $"); w.h(typeadr);
         w.s(", type.len ");                   w.i(type.len);
         w.s(", ext type adr $");              w.h(type.adr);
-        w.s(", Header.base $");               w.h(Header.base);
+        w.s(", HdrBase $");               w.h(HdrBase);
         w.sl(".");
         *)
         AddRelocation(typeadr + type.len*8, type.adr)
@@ -225,7 +235,7 @@ BEGIN
       type := type.base
     END;
 
-    Files.Set(X64, X64file, Header.base + typeadr + 8 + B.MaxExt*8);
+    Files.Set(X64, X64file, HdrBase + typeadr + 8 + B.MaxExt*8);
     IF type.nTraced > 0 THEN Write_pointer_offset(0, recType.type) END;
     Files.WriteInt(X64, -1);
 
@@ -239,7 +249,7 @@ END WriteRecordPointerTables;
 PROCEDURE WriteModulePointerTable(tableOffset: INTEGER);
 VAR ident: B.Ident;  obj: B.Object;  adr: INTEGER;
 BEGIN
-  Files.Set(X64, X64file, Header.base + tableOffset);
+  Files.Set(X64, X64file, HdrBase + tableOffset);
   ident := B.universe.first;
   WHILE ident # NIL DO obj := ident.obj;
     IF (obj IS B.Var) & ~(obj IS B.Str) THEN
@@ -262,7 +272,7 @@ VAR x: B.Proc;
   PROCEDURE Write(x: B.Proc);
   VAR ident: B.Ident;  adr: INTEGER;  y: B.Object;
   BEGIN
-    Files.Set(X64, X64file, Header.base + x.descAdr);
+    Files.Set(X64, X64file, HdrBase + x.descAdr);
     ident := x.decl;
     WHILE ident # NIL DO y := ident.obj;
       IF (y IS B.Var) & ~(y IS B.Str) & ~(y IS B.Par)
@@ -301,7 +311,7 @@ VAR
   impmod: B.Module;
   modno:  INTEGER;
 BEGIN
-  Files.Set(X64, X64file, Header.importNames);
+  Files.Set(X64, X64file, HdrImportNames);
   impmod := B.modList;  modno := 0;
   WHILE impmod # NIL DO
     Files.WriteString(X64, impmod.id);
@@ -319,14 +329,14 @@ VAR
   export: B.ObjList;
   proc:   B.Proc;
 BEGIN
-  Files.Set(X64, X64file, Header.commands);
+  Files.Set(X64, X64file, HdrCommands);
   export := B.expList;
   WHILE export # NIL DO
     IF export.obj IS B.Proc THEN
       proc := export.obj(B.Proc);
       IF (proc.type.nfpar = 0) & (proc.return = NIL) THEN  (* No parameters, no result *)
         Files.WriteString(X64, proc.ident.name);
-        Files.WriteInt(X64, proc.adr + Header.code - Header.base)
+        Files.WriteInt(X64, proc.adr + HdrCode - HdrBase)
       END
     END;
     export := export.next
@@ -341,14 +351,14 @@ VAR
   export: B.ObjList;
   adr:    INTEGER;
 BEGIN
-  Files.Set(X64, X64file, Header.exports);
+  Files.Set(X64, X64file, HdrExports);
 
   export := B.expList;
   WHILE export # NIL DO
     IF export.obj.class = B.cType THEN adr := export.obj.type.adr;
     ELSIF export.obj IS B.Var     THEN adr := export.obj(B.Var).adr;
     ELSIF export.obj IS B.Proc    THEN adr := export.obj(B.Proc).adr
-                                            + Header.code - Header.base
+                                            + HdrCode - HdrBase
     END;
     Files.WriteInt(X64, adr);
     export := export.next
@@ -379,14 +389,14 @@ BEGIN
   X64file := Files.New(filename);
   WritePE.AddObject(filename);
 
-  Header.base := Align(SYSTEM.SIZE(Boot.ModuleHeaderDesc), 16) + Align(varSize, 16);
+  HdrBase := Align(Boot.ModHdrSize, 16) + Align(varSize, 16);
 
   (* Insert pointers into the first 128 bytes of static data. *)
 
-  Files.Set(X64, X64file, Header.base + Boot.OffModHeaderOffset);
-  Files.WriteInt(X64, Header.base);
+  Files.Set(X64, X64file, HdrBase + Boot.OffModHeaderOffset);
+  Files.WriteInt(X64, HdrBase);
 
-  Files.Set(X64, X64file, Header.base + Boot.OffModulePtrTable);
+  Files.Set(X64, X64file, HdrBase + Boot.OffModulePtrTable);
   Files.WriteInt(X64, modPtrTable);
 
   WriteImportReferences;
@@ -395,16 +405,16 @@ BEGIN
   WriteModulePointerTable(modPtrTable);
   WriteStackFramePointerTables;
 
-  Header.code := Header.base + Align(staticSize, 16);
-  Header.init := Header.code + initProc;
-  Files.Set(X64, X64file, Header.code);
+  HdrCode := HdrBase + Align(staticSize, 16);
+  HdrInit := HdrCode + initProc;
+  Files.Set(X64, X64file, HdrCode);
   Files.WriteBytes(X64, code, codesize);
 
-  Header.trap := Align(Header.code + codesize, 16);
+  HdrTrap := Align(HdrCode + codesize, 16);
 
-  (* Trap table *)
+  (* HdrTrap table *)
   Files.Set(r, debug, 0);
-  Files.Set(X64, X64file, Header.trap);
+  Files.Set(X64, X64file, HdrTrap);
   WHILE ~r.eof DO
     Files.ReadBytes(r, buffer, LEN(buffer));
     readlen := LEN(buffer) - r.res;
@@ -413,26 +423,28 @@ BEGIN
   Files.WriteInt(X64, -1);
 
   (* Module name *)
+  (*
   Header.name := B.Modid;
   Header.key0 := B.modkey[0];  Header.key1 := B.modkey[1];
+  *)
 
   (* Import names *)
-  IF Header.imports = 0 THEN
-    Header.importNames := 0
+  IF HdrImports = 0 THEN
+    HdrImportNames := 0
   ELSE
-    Header.importNames := Align(Files.Pos(X64), 16);
+    HdrImportNames := Align(Files.Pos(X64), 16);
     WriteImportNames
   END;
 
   (* Exports *)
   IF B.expList = NIL THEN
-    Header.exports := 0
+    HdrExports := 0
   ELSE
-    Header.exports := Align(Files.Pos(X64), 16);
+    HdrExports := Align(Files.Pos(X64), 16);
     WriteExports
   END;
 
-  Header.commands := Align(Files.Pos(X64), 16);
+  HdrCommands := Align(Files.Pos(X64), 16);
   WriteCommands;
 
   (* Round file length to a mutiple of 16 bytes *)
@@ -441,12 +453,26 @@ BEGIN
     Files.WriteByte(X64,0)
   END;
 
-  Header.length := Align(Files.Pos(X64), 16);
-  Header.next   := NIL;
+  HdrLength := Align(Files.Pos(X64), 16);
+  (*Header.next   := NIL;*)
 
   (* Write the header *)
   Files.Set(X64, X64file, 0);
-  Files.WriteBytes(X64, Header, SYSTEM.SIZE(Boot.ModuleHeaderDesc));
+  (*Files.WriteBytes(X64, Header, SYSTEM.SIZE(Boot.ModuleHeaderDesc));*)
+
+  Files.WriteInt  (X64, HdrLength);
+  Files.WriteInt  (X64, 0);            (* next *)
+  Files.WriteBytes(X64, B.Modid, 32);  (* name *)
+  Files.WriteInt  (X64, HdrBase);
+  Files.WriteInt  (X64, HdrCode);
+  Files.WriteInt  (X64, HdrInit);
+  Files.WriteInt  (X64, HdrTrap);
+  Files.WriteInt  (X64, B.modkey[0]);
+  Files.WriteInt  (X64, B.modkey[1]);
+  Files.WriteInt  (X64, HdrImportNames);
+  Files.WriteInt  (X64, HdrImports);
+  Files.WriteInt  (X64, HdrExports);
+  Files.WriteInt  (X64, HdrCommands);
 
   Files.Register(X64file)
 END Write;

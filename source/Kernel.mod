@@ -250,6 +250,16 @@ BEGIN
   END
 END WriteException;
 
+PROCEDURE AppendMemString(adr: INTEGER;  VAR str: ARRAY OF CHAR);
+VAR i: INTEGER;
+BEGIN
+  i := 0;  WHILE str[i] # 0X DO INC(i) END;
+  SYSTEM.GET(adr, str[i]);
+  WHILE str[i] # 0X DO
+    INC(adr);  INC(i);  SYSTEM.GET(adr, str[i]);
+  END
+END AppendMemString;
+
 PROCEDURE ExceptionHandler(p: INTEGER): INTEGER;
 TYPE
   Exception = POINTER [untraced] TO RECORD
@@ -266,39 +276,46 @@ TYPE
   END;
 
 VAR
-  ep:      ExceptionPointers;
-  module:  Boot.ModuleHeader;
-  address: INTEGER;
-  trapadr: INTEGER;
-  detail:  INTEGER;
-  trap:    INTEGER;
-  line:    INTEGER;
-  col:     INTEGER;
-  adr:     INTEGER;
-  report:  ARRAY 256 OF CHAR;
-  number:  ARRAY 25 OF CHAR;
+  ep:       ExceptionPointers;
+  modhdr:   INTEGER;
+  code:     INTEGER;
+  next:     INTEGER;
+  trapadr:  INTEGER;
+  address:  INTEGER;
+  detail:   INTEGER;
+  trap:     INTEGER;
+  line:     INTEGER;
+  prevline: INTEGER;
+  col:      INTEGER;
+  adr:      INTEGER;
+  report:   ARRAY 256 OF CHAR;
+  number:   ARRAY 25 OF CHAR;
 BEGIN
   ep := SYSTEM.VAL(ExceptionPointers, p);
   address := ep.exception.address;
-  module  := SYSTEM.VAL(Boot.ModuleHeader, Boot.BootHeader);
-  WHILE (module # NIL) & (module.length # 0) & ((address < module.code) OR (address > module.trap)) DO
-    module := module.next
-  END;
 
-  IF module = NIL THEN
+  next := Boot.BootHeader;
+  REPEAT
+    modhdr := next;
+    SYSTEM.GET(modhdr + Boot.OffModCode, code);
+    SYSTEM.GET(modhdr + Boot.OffModTrap, trapadr);
+    SYSTEM.GET(modhdr + Boot.OffModNext, next);
+  UNTIL (next = 0(*NIL*)) OR (address >= code) & (address < trapadr);
+  IF (address < code) OR (address >= trapadr) THEN
     WriteException(ep.exception.code, report);
     Append(" at address $", report);
     IntToHex(address, number);  Append(number, report);
     Append(" (not in loaded module code).", report);
   ELSE
-    trapadr := module.trap;
-    DEC(address, module.code);  (* Make address relative to modules code *)
+    DEC(address, code);  (* Make address relative to modules code *)
     SYSTEM.GET(trapadr, detail);
-    WHILE detail # -1 DO
-      trap := ASR(detail, 60) MOD 10H;
-      line := ASR(detail, 40) MOD 100000H;
-      col  := ASR(detail, 30) MOD 400H;
-      adr  := detail MOD 40000000H;
+    adr := 0;  prevline := 0;
+    WHILE (detail # -1) & (address >= adr) DO
+      prevline := line;
+      trap     := ASR(detail, 60) MOD 10H;
+      line     := ASR(detail, 40) MOD 100000H;
+      col      := ASR(detail, 30) MOD 400H;
+      adr      := detail MOD 40000000H;
       IF adr = address THEN
         detail := -1  (* End loop *)
       ELSE
@@ -318,16 +335,22 @@ BEGIN
       | 10: report := "SYSTEM.PUT access violation"
       END;
       Append(" in module ", report);
-      Append(module.name, report);
+      AppendMemString(modhdr + Boot.OffModName, report);
       Append(" at ", report);
       IntToDecimal(line, number); Append(number, report);
       Append(":", report);
       IntToDecimal(col,  number); Append(number, report);
     ELSE
       WriteException(ep.exception.code, report);
-      Append(" in module ", report);  Append(module.name, report);
+      Append(" in module ", report);
+      AppendMemString(modhdr + Boot.OffModName, report);
       Append(" at code offset $", report);
-      IntToHex(address, number);  Append(number, report)
+      IntToHex(address, number);  Append(number, report);
+      Append(" between lines  ", report);
+      IntToDecimal(prevline, number); Append(number, report);
+      Append(" and ", report);
+      IntToDecimal(line, number); Append(number, report);
+      Append(".", report);
     END
   END;
 
@@ -601,7 +624,8 @@ END Finalise;
 
 PROCEDURE Collect*;
 VAR
-  module:  Boot.ModuleHeader;
+  (*module:  Boot.ModuleHeader;*)
+  modhdr:  INTEGER;
   modBase: INTEGER;  (* modBase is both the start of the initialised .data    *)
                      (* section and also the limit of the uninitialised (.bss)*)
                      (* data section. Global VARs are Allocated backward from *)
@@ -609,9 +633,18 @@ VAR
   stkDesc, stkBase, ptrTable, off, ptr: INTEGER;
 BEGIN
   IF HeapTracer # NIL THEN HeapTracer(0) END;  (* Trace collect call *)
+
+  (*
   module := SYSTEM.VAL(Boot.ModuleHeader, Boot.BootHeader);
   WHILE module # NIL DO
     modBase := module.base;
+  *)
+
+  modhdr := Boot.BootHeader;
+  WHILE modhdr # 0 DO
+    SYSTEM.GET(modhdr + Boot.OffModBase, modBase);
+
+
     (* Loop through list of traced data items.                                *)
 
     (* At modBase+112 is ptrTable, a list of pointer offsets relative to      *)
@@ -643,7 +676,8 @@ BEGIN
       END;
       SYSTEM.GET(stkDesc + 16, stkDesc)
     END;
-    module := module.next
+    (*module := module.next*)
+    SYSTEM.GET(modhdr + Boot.OffModNext, modhdr)
   END;
 
   WHILE MarkedList # MarkedListSentinel DO TraceMarked END;

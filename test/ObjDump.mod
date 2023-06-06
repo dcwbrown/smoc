@@ -1,5 +1,23 @@
-MODULE ObjDump;  (*$CONSOLE*)  (* Dump content od .x64 object file *)
+MODULE ObjDump;  (*$CONSOLE*)  (* Dump content of .x64 object file *)
 IMPORT SYSTEM, Files, K := Kernel, w := Writer, Boot;
+
+TYPE
+  ModuleName*       = ARRAY 32 OF CHAR;
+  ModuleHeader*     = POINTER [untraced] TO ModuleHeaderDesc;
+  ModuleHeaderDesc* = RECORD
+    length*:      INTEGER;       (*   0                                *)
+    next*:        ModuleHeader;  (*   8                                *)
+    name*:        ModuleName;    (*  16                                *)
+    base*:        INTEGER;       (*  48                                *)
+    code*:        INTEGER;       (*  56                                *)
+    init*:        INTEGER;       (*  64                                *)
+    trap*:        INTEGER;       (*  72                                *)
+    key0*, key1*: INTEGER;       (*  80                                *)
+    importNames*: INTEGER;       (*  88 list of import names and keys  *)
+    imports*:     INTEGER;       (*  96 adr of start of import list    *)
+    exports*:     INTEGER;       (* 104 array of export addresses      *)
+    commands*:    INTEGER
+  END;
 
 VAR
   X64file: Files.File;  (* Input file *)
@@ -14,7 +32,7 @@ VAR
 PROCEDURE DumpX64;
 VAR
   filename:     ARRAY 256 OF CHAR;
-  header:       Boot.ModuleHeaderDesc;
+  header:       ModuleHeaderDesc;
   name:         ARRAY 1024 OF CHAR;
   nameOffset:   INTEGER;
   i:            INTEGER;
@@ -39,7 +57,7 @@ BEGIN
 
       (* Load header *)
       Files.Set(X64, X64file, 0);
-      Files.ReadBytes(X64, header, SYSTEM.SIZE(Boot.ModuleHeaderDesc));
+      Files.ReadBytes(X64, header, SYSTEM.SIZE(ModuleHeaderDesc));
       w.s("header.length:      $"); w.h(header.length);       w.sl(".");
       w.s("header.name:        '"); w.s(header.name);         w.sl("'.");
       w.s("header.base:        $"); w.h(header.base);         w.sl(".");

@@ -151,5 +151,6 @@ BEGIN
   crlf[0] := 13;  crlf[1] := 10;
 END init;
 
-BEGIN init
+BEGIN init;
+  sl("Writer initialisation complete.")
 END Writer.
