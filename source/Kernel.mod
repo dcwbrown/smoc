@@ -280,7 +280,7 @@ VAR
 BEGIN
   ep := SYSTEM.VAL(ExceptionPointers, p);
   address := ep.exception.address;
-  module  := Boot.FirstModule;
+  module  := SYSTEM.VAL(Boot.ModuleHeader, Boot.BootHeader);
   WHILE (module # NIL) & (module.length # 0) & ((address < module.code) OR (address > module.trap)) DO
     module := module.next
   END;
@@ -609,7 +609,7 @@ VAR
   stkDesc, stkBase, ptrTable, off, ptr: INTEGER;
 BEGIN
   IF HeapTracer # NIL THEN HeapTracer(0) END;  (* Trace collect call *)
-  module := Boot.FirstModule;
+  module := SYSTEM.VAL(Boot.ModuleHeader, Boot.BootHeader);
   WHILE module # NIL DO
     modBase := module.base;
     (* Loop through list of traced data items.                                *)

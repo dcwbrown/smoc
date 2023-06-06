@@ -127,13 +127,6 @@ BEGIN
   object := Objects;
   WHILE object # NIL DO CopyFile(object.name);  object := object.next END;
 
-  (*
-  CopyFile("build\boot2\Boot.X64");
-  CopyFile("build\boot2\Kernel.X64");
-  CopyFile("build\boot2\ObjWriter.X64");
-  CopyFile("build\boot2\ObjTest.X64");
-  *)
-
   Files.WriteInt(Exe, 0);  (* Mark end of modules - appears as header.length = 0 *)
   Files.WriteInt(Exe, 0);  (* Mark end of modules - appears as header.next = NIL *)
 
@@ -315,7 +308,7 @@ BEGIN
   Files.Set(Exe, ExeFile, 0);
   Files.WriteBytes(Exe, hdr, SYSTEM.SIZE(PEHDR));
 
-  (* WriteByte section headers *)
+  (* Write section headers *)
   WriteSectionHeader(".idata",
                      Align(ImportSize, SectionAlignment),  (* Size in memory *)
                      Align(ImportSize, FileAlignment),     (* Size on disk *)

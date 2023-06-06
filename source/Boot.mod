@@ -45,25 +45,22 @@ TYPE
     commands*:    INTEGER
   END;
 
-
 VAR
   oneByteBeforeBase: CHAR; (* MUST BE THE FIRST GLOBAL VARIABLE        *)
                            (* - its address locates this module's base *)
 
-  BootBase:   INTEGER;  (* Base addres of Boot module - start of initialised data *)
-  BootHeader: INTEGER;  (* Start address of boot module *)
+  BootBase:    INTEGER;  (* Base addres of Boot module - start of initialised data *)
+  BootHeader*: INTEGER;  (* Start address of boot module *)
+  ModHeader:   INTEGER;
+  NextHeader:  INTEGER;
+  initialise:  PROCEDURE;
 
   GetProcAddress*: PROCEDURE(module, procname: INTEGER): INTEGER;
   LoadLibraryA*:   PROCEDURE(filename: INTEGER): INTEGER;
   ExitProcess*:    PROCEDURE(result: INTEGER);
   New*:            PROCEDURE(VAR ptr: INTEGER;  tdAdr: INTEGER);
 
-  FirstModule*: ModuleHeader;
 
-  WinHdr:       ModuleHeader;
-  module:       ModuleHeader;
-  nextModule:   ModuleHeader;
-  initialise:   PROCEDURE;
 
 
 (* -------------------------------------------------------------------------- *)
@@ -94,14 +91,13 @@ BEGIN
 END Relocate;
 
 
-PROCEDURE Link(header: ModuleHeader);
+PROCEDURE Link(headadr: INTEGER);
 (* Convert offsets in the Module header to absolute addresses. *)
 (* Populate procedure pointers.                                *)
 (* Convert export offsets to absolute addresses.               *)
 (* Lookup imported modules.                                    *)
 (* Convert import references to absolute addresses.            *)
 VAR
-  headadr:      INTEGER;
   baseadr:      INTEGER;
   export:       INTEGER;
   exportadr:    INTEGER;
@@ -120,8 +116,6 @@ VAR
   importRef:    INTEGER;
 
 BEGIN
-  headadr := SYSTEM.ADR(header^);
-
   (* Convert module header offsets to absolute addresses *)
   Relocate(headadr + OffModBase,        headadr);
   Relocate(headadr + OffModCode,        headadr);
@@ -141,11 +135,11 @@ BEGIN
   END;
 
   (* Convert export offsets to absolute *)
-  IF header.exports # 0 THEN
-    SYSTEM.GET(headadr + OffModExports, export);
+  SYSTEM.GET(headadr + OffModExports, export);
+  IF export # 0 THEN
     SYSTEM.GET(export, exportadr);
     WHILE exportadr # 8000000000000000H DO
-      SYSTEM.PUT(export, exportadr + header.base);
+      SYSTEM.PUT(export, exportadr + baseadr);
       INC(export, 8);
       SYSTEM.GET(export, exportadr)
     END
@@ -159,7 +153,7 @@ BEGIN
     WHILE impname[0] # 0X DO
       SYSTEM.GET(importAdr, impkey0);  INC(importAdr, 8);
       SYSTEM.GET(importAdr, impkey1);  INC(importAdr, 8);
-      impheader := FirstModule;
+      impheader := SYSTEM.VAL(ModuleHeader, BootHeader);
       WHILE (impheader # NIL) & (imports[i] = 0) DO
         IF (impname = impheader.name) & (impkey0 = impheader.key0) & (impkey1 = impheader.key1) THEN
           imports[i] := impheader.exports
@@ -171,28 +165,19 @@ BEGIN
   END;
 
   (* Link imports to exports *)
-  importRefAdr := header.imports;
+  SYSTEM.GET(headadr + OffModImports, importRefAdr);
   WHILE importRefAdr # 0 DO
-    SYSTEM.GET(header.base + importRefAdr, importRef);
+    SYSTEM.GET(baseadr + importRefAdr, importRef);
     IF importRef < 0 THEN (* Local relocation *)
-      SYSTEM.PUT(header.base + importRefAdr, header.base + ASR(importRef, 32) MOD 80000000H)
+      SYSTEM.PUT(baseadr + importRefAdr, baseadr + ASR(importRef, 32) MOD 80000000H)
     ELSE
       modno := ASR(importRef, 48);
       expno := ASR(importRef, 32) MOD 10000H;
       SYSTEM.GET(imports[modno] + expno * 8, impadr);
-      SYSTEM.PUT(header.base + importRefAdr, impadr)
+      SYSTEM.PUT(baseadr + importRefAdr, impadr)
     END;
     importRefAdr := importRef MOD 100000000H;
   END;
-
-  (*
-  FOR i := 0 TO header.importCount-1 DO
-    SYSTEM.GET(header.base + 128 + i*8, expno);
-    modno := expno DIV 100000000H;  expno := expno MOD 100000000H;
-    SYSTEM.GET(imports[modno] + expno * 8, impadr);
-    SYSTEM.PUT(header.base + 128 + i*8, impadr)
-  END
-  *)
 END Link;
 
 
@@ -218,34 +203,28 @@ BEGIN
     SYSTEM.PUT(SYSTEM.ADR(ExitProcess),    GetInt(BootHeader - 16));
     SYSTEM.PUT(BootBase + 16,              GetInt(BootHeader - 16));
 
-    (*LoadPointers;*)
-
     (* The WinBase block includes the offset from the module header to the   *)
     (* WinBase block.                                                        *)
-    WinHdr := SYSTEM.VAL(ModuleHeader, BootHeader);
 
-    (* Link this module - the Windows PE bootstrap *)
-    FirstModule := WinHdr;
-    Link(WinHdr);  (* Note - do not call WinHdr's init address as that is *)
-                   (* this code and we're already running.                *)
+    Link(BootHeader);
 
-    (* Link remaining modules in EXE 'Oberon' section *)
-    module := SYSTEM.VAL(ModuleHeader, SYSTEM.ADR(WinHdr^) + WinHdr.length);
-    WinHdr.next := module;
-    WHILE module # NIL DO
-      Link(module);  module.next := NIL;
+    (* Link and initialise remaining modules in EXE 'Oberon' section *)
 
-      IF module.init # 0 THEN
-        SYSTEM.PUT(SYSTEM.ADR(initialise), module.init);  initialise;
-      END;
+    ModHeader  := BootHeader;
+    NextHeader := ModHeader + GetInt(ModHeader + OffModLength);
+    IF GetInt(NextHeader + OffModLength) = 0 THEN NextHeader := 0 END;
+    WHILE NextHeader # 0 DO
+      SYSTEM.PUT(ModHeader + OffModNext, NextHeader);
+      ModHeader := NextHeader;
 
-      (* Set header next pointer to next header, if any. *)
-      nextModule := SYSTEM.VAL(ModuleHeader, module.length + SYSTEM.ADR(module^));
-      IF nextModule.length = 0 THEN nextModule := NIL END;
+      Link(ModHeader);
+      SYSTEM.PUT(SYSTEM.ADR(initialise), GetInt(ModHeader + OffModInit));
+      IF initialise # NIL THEN initialise END;
 
-      module.next := nextModule;
-      module      := nextModule
+      NextHeader := ModHeader + GetInt(ModHeader + OffModLength);
+      IF GetInt(NextHeader + OffModLength) = 0 THEN NextHeader := 0 END
     END;
+    SYSTEM.PUT(ModHeader + OffModNext, 0);
 
     ExitProcess(0)
   END
