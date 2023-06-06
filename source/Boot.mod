@@ -46,8 +46,8 @@ TYPE
   END;
 
 VAR
-  oneByteBeforeBase: CHAR; (* MUST BE THE FIRST GLOBAL VARIABLE        *)
-                           (* - its address locates this module's base *)
+  oneByteBeforeBase: CHAR; (* MUST BE THE FIRST GLOBAL VARIABLE IN Boot.mod *)
+                           (* - its address locates this module's base      *)
 
   BootBase:    INTEGER;  (* Base addres of Boot module - start of initialised data *)
   BootHeader*: INTEGER;  (* Start address of boot module *)
@@ -91,6 +91,40 @@ BEGIN
 END Relocate;
 
 
+PROCEDURE MatchingImports(imp, mod: INTEGER): BOOLEAN;
+VAR a, b, impkey, modkey: INTEGER;  ch1, ch2: CHAR;  result: BOOLEAN;
+BEGIN
+  result := FALSE;
+  a := imp;  b := mod + OffModName;
+  SYSTEM.GET(a, ch1);  SYSTEM.GET(b, ch2);
+  WHILE (ch1 # 0X) & (ch2 # 0X) & (ch1 = ch2) DO
+    INC(a);  SYSTEM.GET(a, ch1);
+    INC(b);  SYSTEM.GET(b, ch2)
+  END;
+  IF ch1 = ch2 THEN
+    INC(a);
+    SYSTEM.GET(a, impkey);  SYSTEM.GET(mod + OffModKey0, modkey);
+    IF impkey = modkey THEN
+      INC(a, 8);
+      SYSTEM.GET(a, impkey);  SYSTEM.GET(mod + OffModKey1, modkey);
+      result := impkey = modkey
+    END
+  END
+RETURN result END MatchingImports;
+
+PROCEDURE NextImport(VAR adr: INTEGER);
+VAR b: BYTE;
+BEGIN
+  REPEAT SYSTEM.GET(adr, b);  INC(adr) UNTIL b = 0;
+  INC(adr, 16)
+END NextImport;
+
+PROCEDURE EndOfImports(adr: INTEGER): BOOLEAN;
+VAR b: BYTE;
+BEGIN SYSTEM.GET(adr, b)
+RETURN b = 0 END EndOfImports;
+
+
 PROCEDURE Link(headadr: INTEGER);
 (* Convert offsets in the Module header to absolute addresses. *)
 (* Populate procedure pointers.                                *)
@@ -107,11 +141,8 @@ VAR
   modno:        INTEGER;
   expno:        INTEGER;
   impadr:       INTEGER;
-  impname:      ARRAY 64 OF CHAR;
   impheader:    ModuleHeader;
   hdrname:      ARRAY 64 OF CHAR;
-  impkey0:      INTEGER;
-  impkey1:      INTEGER;
   importRefAdr: INTEGER;
   importRef:    INTEGER;
 
@@ -148,19 +179,17 @@ BEGIN
   (* Convert imported module names to module export table addresses *)
   SYSTEM.GET(headadr + OffModImportNames, importAdr);
   IF importAdr # 0 THEN
-    INC(importAdr, GetString(importAdr, impname));
     i := 0;  imports[i] := 0;
-    WHILE impname[0] # 0X DO
-      SYSTEM.GET(importAdr, impkey0);  INC(importAdr, 8);
-      SYSTEM.GET(importAdr, impkey1);  INC(importAdr, 8);
+    WHILE ~EndOfImports(importAdr) DO
       impheader := SYSTEM.VAL(ModuleHeader, BootHeader);
       WHILE (impheader # NIL) & (imports[i] = 0) DO
-        IF (impname = impheader.name) & (impkey0 = impheader.key0) & (impkey1 = impheader.key1) THEN
-          imports[i] := impheader.exports
+      IF MatchingImports(importAdr, SYSTEM.VAL(INTEGER, impheader)) THEN
+          SYSTEM.GET(SYSTEM.VAL(INTEGER, impheader) + OffModExports, imports[i]);
         END;
         impheader := impheader.next
       END;
-      INC(importAdr, GetString(importAdr, impname));  INC(i)
+      NextImport(importAdr); (* := importAdr; *)
+      INC(i)
     END
   END;
 
