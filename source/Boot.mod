@@ -48,6 +48,7 @@ TYPE
   END;
 *)
 
+
 VAR
   oneByteBeforeBase: CHAR; (* MUST BE THE FIRST GLOBAL VARIABLE IN Boot.mod *)
                            (* - its address locates this module's base      *)
@@ -62,8 +63,6 @@ VAR
   LoadLibraryA*:   PROCEDURE(filename: INTEGER): INTEGER;
   ExitProcess*:    PROCEDURE(result: INTEGER);
   New*:            PROCEDURE(VAR ptr: INTEGER;  tdAdr: INTEGER);
-
-
 
 
 (* -------------------------------------------------------------------------- *)
@@ -130,14 +129,14 @@ VAR
   exportadr:    INTEGER;
   i:            INTEGER;
   importAdr:    INTEGER;
+  import:       INTEGER;
   imports:      ARRAY 64 OF INTEGER;
   modno:        INTEGER;
   expno:        INTEGER;
   importedval:  INTEGER;
-  impHeader:    INTEGER;
+  moduleHdr:    INTEGER;
   importRefAdr: INTEGER;
   importRef:    INTEGER;
-  (*dummy:        ModuleHeader;*)
 
 BEGIN
   (* Convert module header offsets to absolute addresses *)
@@ -173,17 +172,16 @@ BEGIN
   SYSTEM.GET(headadr + OffModImportNames, importAdr);
   IF importAdr # 0 THEN
     i := 0;
-    imports[i] := 0;
     WHILE ~EndOfImports(importAdr) DO
-      impHeader := BootHeader;
-      WHILE (impHeader # 0) & (imports[i] = 0) DO
-        IF MatchingImports(importAdr, impHeader) THEN
-          SYSTEM.GET(impHeader + OffModExports, imports[i]);
+      imports[i] := 0;
+      moduleHdr  := BootHeader;
+      WHILE (moduleHdr # 0) & (imports[i] = 0) DO
+        IF MatchingImports(importAdr, moduleHdr) THEN
+          SYSTEM.GET(moduleHdr + OffModExports, imports[i])
         END;
-        SYSTEM.GET(impHeader + OffModNext, impHeader);
+        SYSTEM.GET(moduleHdr + OffModNext, moduleHdr)
       END;
-      NextImport(importAdr);
-      INC(i)
+      INC(i);  NextImport(importAdr)
     END
   END;
 
@@ -196,7 +194,6 @@ BEGIN
     ELSE
       modno := ASR(importRef, 48);
       expno := ASR(importRef, 32) MOD 10000H;
-      ASSERT(modno < i);
       SYSTEM.GET(imports[modno] + expno * 8, importedval);
       SYSTEM.PUT(baseadr + importRefAdr, importedval)
     END;

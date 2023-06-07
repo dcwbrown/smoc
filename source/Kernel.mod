@@ -2,11 +2,18 @@ MODULE Kernel;  (*$RTL-*)
 
 IMPORT SYSTEM, Boot;
 
+
 CONST
   MarkedListSentinel = 2;  (* Used to mark end of list of marked heap blocks during GC *)
   HeapReserve = 80000000H; (* 2GB   *)
 (*HeapCommit  = 80000H;    (* 512KB *) *)
   HeapCommit  = 2000000H;  (* 32MB *)
+
+  (* Windows constants *)
+  STD_OUTPUT_HANDLE = -11;
+  UTF8              = 65001;
+  NewLine*          = $ 0D 0A 00 $;
+
 
 TYPE
   ExceptionHandlerProc = PROCEDURE(p: INTEGER): INTEGER;
@@ -19,6 +26,8 @@ TYPE
                        next:     Finalised
                      END;
   HeapTraceHandler = PROCEDURE(reason: INTEGER);
+  LogWriter        = PROCEDURE(str: ARRAY OF CHAR);
+
 
 VAR
   Kernel*:       INTEGER;
@@ -32,6 +41,11 @@ VAR
   GetSystemTimePreciseAsFileTime: PROCEDURE(tickAdr: INTEGER);
   GetModuleFileNameW:             PROCEDURE(hModule, lpFilename, nSize: INTEGER);
   GetCurrentDirectoryW:           PROCEDURE(nsize, pbuffer: INTEGER): INTEGER;
+  GetStdHandle:                   PROCEDURE(nStdHandle: SYSTEM.CARD32): INTEGER;
+  SetConsoleOutputCP:             PROCEDURE(codepage: INTEGER): INTEGER;
+  WriteFile:                      PROCEDURE(hFile, lpBuffer, nNumberOfBytesToWrite,
+                                            lpNumberOfBytesWritten, lpOverlapped: INTEGER
+                                           ): SYSTEM.CARD32;
 
   (* Heap allocation *)
   VirtualAlloc:  PROCEDURE(lpAddress, dwSize, flAllocationType, flProtect: INTEGER): INTEGER;
@@ -57,6 +71,9 @@ VAR
   CommandAdr:         INTEGER;
   ExecutablePath*:    ARRAY 1024 OF CHAR;
   InitialDirectory*:  ARRAY 1024 OF CHAR;
+  StdOut*:            INTEGER;  (* Standard output file handle *)
+
+  WriteLog:           LogWriter;
 
   (* hwnd for messagebox owning window, if any. Set by SetHWnd. *)
   HWnd: INTEGER;
@@ -204,7 +221,7 @@ VAR d, i, j: INTEGER;  ch: CHAR;
 BEGIN
   i := 0;  j := 0;
   REPEAT
-    d := n MOD 16;  n := n DIV 16;
+    d := n MOD 16;  n := n DIV 16 MOD 1000000000000000H;
     IF d <= 9 THEN s[j] := CHR(d + 48) ELSE s[j] := CHR(d + 55) END;
     INC(j)
   UNTIL n = 0;
@@ -231,6 +248,17 @@ BEGIN
   END;
   IF j >= LEN( d) THEN DEC(j) END;  d[j] := 0X
 END Append;
+
+
+(* -------------------------------------------------------------------------- *)
+(* ---------------------- Primitive console/log output ---------------------- *)
+(* -------------------------------------------------------------------------- *)
+
+PROCEDURE WriteConsole(str: ARRAY OF CHAR);
+VAR written, result: INTEGER;
+BEGIN
+  result := WriteFile(StdOut, SYSTEM.ADR(str), Length(str), SYSTEM.ADR(written), 0)
+END WriteConsole;
 
 
 (* -------------------------------------------------------------------------- *)
@@ -760,6 +788,7 @@ END GetWindowsPaths;
 PROCEDURE SetHWnd*(h: INTEGER);
 BEGIN HWnd := h END SetHWnd;
 
+
 BEGIN
   HWnd := 0;
 
@@ -770,14 +799,17 @@ BEGIN
   Shell  := Boot.LoadLibraryA(SYSTEM.ADR("shell32.dll"));
   ShCore := Boot.LoadLibraryA(SYSTEM.ADR("shCore.dll"));
 
-  GetProc(User,   "MessageBoxW",                    MessageBoxW);
-  GetProc(Kernel, "AddVectoredExceptionHandler",    AddVectoredExceptionHandler);
-  GetProc(Kernel, "VirtualAlloc",                   VirtualAlloc);
-  GetProc(Kernel, "GetCommandLineW",                GetCommandLineW);
-  GetProc(Shell,  "CommandLineToArgvW",             CommandLineToArgvW);
-  GetProc(Kernel, "GetSystemTimePreciseAsFileTime", GetSystemTimePreciseAsFileTime);
-  GetProc(Kernel, "GetModuleFileNameW",             GetModuleFileNameW);
-  GetProc(Kernel, "GetCurrentDirectoryW",           GetCurrentDirectoryW);
+  GetProc(User,   "MessageBoxW",                    MessageBoxW);                     ASSERT(MessageBoxW                    # NIL);
+  GetProc(Kernel, "AddVectoredExceptionHandler",    AddVectoredExceptionHandler);     ASSERT(AddVectoredExceptionHandler    # NIL);
+  GetProc(Kernel, "VirtualAlloc",                   VirtualAlloc);                    ASSERT(VirtualAlloc                   # NIL);
+  GetProc(Kernel, "GetCommandLineW",                GetCommandLineW);                 ASSERT(GetCommandLineW                # NIL);
+  GetProc(Shell,  "CommandLineToArgvW",             CommandLineToArgvW);              ASSERT(CommandLineToArgvW             # NIL);
+  GetProc(Kernel, "GetSystemTimePreciseAsFileTime", GetSystemTimePreciseAsFileTime);  ASSERT(GetSystemTimePreciseAsFileTime # NIL);
+  GetProc(Kernel, "GetModuleFileNameW",             GetModuleFileNameW);              ASSERT(GetModuleFileNameW             # NIL);
+  GetProc(Kernel, "GetCurrentDirectoryW",           GetCurrentDirectoryW);            ASSERT(GetCurrentDirectoryW           # NIL);
+  GetProc(Kernel, "WriteFile",                      WriteFile);                       ASSERT(WriteFile                      # NIL);
+  GetProc(Kernel, "GetStdHandle",                   GetStdHandle);                    ASSERT(GetStdHandle                   # NIL);
+  GetProc(Kernel, "SetConsoleOutputCP",             SetConsoleOutputCP);              ASSERT(SetConsoleOutputCP             # NIL);
 
   (* Initialise exception/trap handling *)
   AddVectoredExceptionHandler(1, ExceptionHandler);
@@ -785,6 +817,7 @@ BEGIN
   (* Initialise Heap and GC *)
   Collect0 := Collect;
   InitHeap;
+  SYSTEM.PUT(SYSTEM.ADR(Boot.New), New);
 
   (* Initialise command line access *)
   CommandAdr := GetCommandLineW();
@@ -792,6 +825,8 @@ BEGIN
   ArgV       := CommandLineToArgvW(CommandAdr, SYSTEM.ADR(NumArgs));
   GetWindowsPaths;
 
-  (* Install New *)
-  SYSTEM.PUT(SYSTEM.ADR(Boot.New), New)
+  (* Initialise console output *)
+  StdOut := GetStdHandle(STD_OUTPUT_HANDLE);
+  ASSERT(SetConsoleOutputCP(UTF8) # 0);
+  WriteLog := WriteConsole
 END Kernel.

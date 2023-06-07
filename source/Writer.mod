@@ -144,7 +144,6 @@ VAR
 BEGIN
   K.GetProc(K.Kernel, "GetStdHandle",       GetStdHandle);       ASSERT(GetStdHandle       # NIL);
   K.GetProc(K.Kernel, "SetConsoleOutputCP", SetConsoleOutputCP); ASSERT(SetConsoleOutputCP # NIL);
-  K.GetProc(K.Kernel, "WriteFile",          WriteFile);          ASSERT(WriteFile          # NIL);
 
   hOut := GetStdHandle(STD_OUTPUT_HANDLE);
   res  := SetConsoleOutputCP(UTF8);
@@ -152,5 +151,5 @@ BEGIN
 END init;
 
 BEGIN init;
-  sl("Writer initialisation complete.")
+  K.GetProc(K.Kernel, "WriteFile", WriteFile);  ASSERT(WriteFile # NIL);
 END Writer.

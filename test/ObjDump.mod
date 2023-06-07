@@ -69,6 +69,7 @@ BEGIN
       w.s("header.importNames: $"); w.h(header.importNames);  w.sl(".");
       w.s("header.imports:     $"); w.h(header.imports);      w.sl(".");
       w.s("header.exports:     $"); w.h(header.exports);      w.sl(".");
+      w.s("header.commands:    $"); w.h(header.commands);     w.sl(".");
       w.l;
 
       (* Module name and key *)
@@ -99,9 +100,15 @@ BEGIN
         WHILE importRefAdr # 0 DO
           Files.Set(X64, X64file, header.base + importRefAdr);
           Files.ReadInt(X64, importRef);
-          modno := ASR(importRef, 48);
-          expno := ASR(importRef, 32) MOD 10000H;
-          w.s(" adr $"); w.h(importRefAdr); w.s(", modno "); w.i(modno); w.s(", expno "); w.i(expno); w.sl(".");
+          w.s(" adr $"); w.h(importRefAdr);
+          IF importRef < 0 THEN  (* Local reloction *)
+            w.s(" local <- $"); w.h(header.base + ASR(importRef, 32) MOD 80000000H);
+          ELSE
+            modno := ASR(importRef, 48);
+            expno := ASR(importRef, 32) MOD 10000H;
+            w.s(", modno "); w.i(modno); w.s(", expno "); w.i(expno)
+          END;
+          w.sl(".");
           importRefAdr := importRef MOD 100000000H
         END
       END;
@@ -157,79 +164,6 @@ BEGIN
       Files.ReadBytes(X64, Buf, header.trap - header.code);
       w.sl("Code:");
       w.DumpMem(2, SYSTEM.ADR(Buf), 0, header.trap - header.code);
-
-
-(*
-
-      (* 5b. Module ptr table address *)
-      Files.ReadInt(X64, modPtrTable);
-      w.s("Module ptr table at $");  w.h(modPtrTable);  w.sl(".");
-
-      (* 4. Initialised static data *)
-      Files.ReadInt(X64, i);
-      w.s("Static data size "); w.i(i); w.sl(".");
-      IF i > 0 THEN
-        Files.ReadBytes(X64, buf, i);
-        w.DumpMem(2, SYSTEM.ADR(buf), 0, i);
-      END;
-
-      (* 6. Code *)
-      Files.ReadInt(X64, i);
-      w.s("Code size "); w.i(i); w.sl(".");
-      IF i > 0 THEN
-        Files.ReadBytes(X64, buf, i);
-        w.DumpMem(2, SYSTEM.ADR(buf), 0, i);
-      END;
-
-      (* 8. Trap table *)
-      Files.ReadInt(X64, i);
-      IF i <= 0 THEN
-        w.sl("No trap table.");
-      ELSE
-        w.s("Trap table length "); w.i(i); w.sl(" bytes:");
-        WHILE i > 0 DO
-          Files.ReadInt(X64, adr);
-          trap := ASR(adr, 60) MOD 10H;
-          line := ASR(adr, 40) MOD 100000H;
-          col  := ASR(adr, 30) MOD 400H;
-          adr  := adr MOD 40000000H;
-          CASE trap OF
-          | 0: w.s("  modkey trap  at $");
-          | 1: w.s("  array trap   at $");
-          | 2: w.s("  type trap    at $");
-          | 3: w.s("  string trap  at $");
-          | 4: w.s("  nil trap     at $");
-          | 5: w.s("  nilProc trap at $");
-          | 6: w.s("  divide trap  at $");
-          | 7: w.s("  assert trap  at $");
-          | 8: w.s("  rtl trap     at $");
-          END;
-          w.hn(adr,12); w.s(" "); w.i(line); w.s(":"); w.i(col); w.sl(".");
-          DEC(i, 8);
-        END
-      END;
-
-      (* 9. List of export addresses in export number order *)
-      Files.ReadInt(X64, adr);
-      IF adr = 0 THEN
-        w.sl("No export addresses.");
-      ELSE
-        w.sl("Export addresses:");
-        n := 0;
-        WHILE adr # 0  DO
-          w.s("  "); w.i(n);
-          i :=  ASR(adr, 62) MOD 4;
-          adr := adr MOD 4000000000000000H;
-          CASE i OF
-          | 1: w.s(": type at $")
-          | 2: w.s(": var  at $")
-          | 3: w.s(": proc at $")
-          END;
-          w.h(adr); w.sl(".");
-          Files.ReadInt(X64, adr);  INC(n);
-        END
-      END
-*)
     END
   END
 END DumpX64;
