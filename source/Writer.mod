@@ -2,29 +2,19 @@ MODULE Writer;  (* Character output convenience functions *)
 
 IMPORT SYSTEM, K := Kernel;
 
-VAR
-  WriteFile: PROCEDURE(
-               hFile, lpBuffer, nNumberOfBytesToWrite,
-               lpNumberOfBytesWritten, lpOverlapped: INTEGER
-             ): SYSTEM.CARD32;
+CONST crlf = $ 0D 0A $;
 
-  hOut:  INTEGER;
-  crlf*: ARRAY 2 OF BYTE;
+PROCEDURE write(bytes: ARRAY OF BYTE);
+BEGIN K.WriteLog(SYSTEM.ADR(bytes), LEN(bytes)) END write;
 
-PROCEDURE writebuf(adr, len: INTEGER);
-VAR written, result: INTEGER;
-BEGIN result := WriteFile(hOut, adr, len, SYSTEM.ADR(written), 0) END writebuf;
-
-PROCEDURE write(VAR bytes: ARRAY OF BYTE);
-BEGIN writebuf(SYSTEM.ADR(bytes), LEN(bytes)) END write;
-
-PROCEDURE writebyte(b: BYTE); BEGIN write(b) END writebyte;
+PROCEDURE writebyte(b: BYTE);
+BEGIN K.WriteLog(SYSTEM.ADR(b), 1) END writebyte;
 
 PROCEDURE writesz(bytes: ARRAY OF BYTE);
 VAR len: INTEGER;
 BEGIN
   len := 0;  WHILE (len < LEN(bytes)) & (bytes[len] # 0) DO INC(len) END;
-  writebuf(SYSTEM.ADR(bytes), len)
+  K.WriteLog(SYSTEM.ADR(bytes), len)
 END writesz;
 
 PROCEDURE l*();                  BEGIN write(crlf) END l;
@@ -41,9 +31,9 @@ BEGIN l := 0;
   IF n < 0 THEN w := -n ELSE w := n END;
   WHILE (l < LEN(s)) & (l < w) & (s[l] # 0X) DO INC(l) END;
   IF n < 0 THEN
-    b(w-l);  writebuf(SYSTEM.ADR(s), l)
+    b(w-l);  K.WriteLog(SYSTEM.ADR(s), l)
   ELSE
-    writebuf(SYSTEM.ADR(s), l);  b(w-l)
+    K.WriteLog(SYSTEM.ADR(s), l);  b(w-l)
   END
 END sn;
 
@@ -132,24 +122,4 @@ BEGIN
   END
 END DumpMem;
 
-
-PROCEDURE init;
-CONST
-  STD_OUTPUT_HANDLE = -11;
-  UTF8              = 65001;
-VAR
-  GetStdHandle:       PROCEDURE(nStdHandle: SYSTEM.CARD32): INTEGER;
-  SetConsoleOutputCP: PROCEDURE(codepage:   INTEGER):       INTEGER;
-  res: INTEGER;
-BEGIN
-  K.GetProc(K.Kernel, "GetStdHandle",       GetStdHandle);       ASSERT(GetStdHandle       # NIL);
-  K.GetProc(K.Kernel, "SetConsoleOutputCP", SetConsoleOutputCP); ASSERT(SetConsoleOutputCP # NIL);
-
-  hOut := GetStdHandle(STD_OUTPUT_HANDLE);
-  res  := SetConsoleOutputCP(UTF8);
-  crlf[0] := 13;  crlf[1] := 10;
-END init;
-
-BEGIN init;
-  K.GetProc(K.Kernel, "WriteFile", WriteFile);  ASSERT(WriteFile # NIL);
-END Writer.
+BEGIN END Writer.

@@ -12,7 +12,6 @@ CONST
   (* Windows constants *)
   STD_OUTPUT_HANDLE = -11;
   UTF8              = 65001;
-  NewLine*          = $ 0D 0A 00 $;
 
 
 TYPE
@@ -26,7 +25,7 @@ TYPE
                        next:     Finalised
                      END;
   HeapTraceHandler = PROCEDURE(reason: INTEGER);
-  LogWriter        = PROCEDURE(str: ARRAY OF CHAR);
+  LogWriter        = PROCEDURE(adr, len: INTEGER);
 
 
 VAR
@@ -73,7 +72,7 @@ VAR
   InitialDirectory*:  ARRAY 1024 OF CHAR;
   StdOut*:            INTEGER;  (* Standard output file handle *)
 
-  WriteLog:           LogWriter;
+  WriteLog*:          LogWriter;
 
   (* hwnd for messagebox owning window, if any. Set by SetHWnd. *)
   HWnd: INTEGER;
@@ -254,11 +253,10 @@ END Append;
 (* ---------------------- Primitive console/log output ---------------------- *)
 (* -------------------------------------------------------------------------- *)
 
-PROCEDURE WriteConsole(str: ARRAY OF CHAR);
+PROCEDURE WriteConsoleBytes(adr, len: INTEGER);
 VAR written, result: INTEGER;
-BEGIN
-  result := WriteFile(StdOut, SYSTEM.ADR(str), Length(str), SYSTEM.ADR(written), 0)
-END WriteConsole;
+BEGIN result := WriteFile(StdOut, adr, len, SYSTEM.ADR(written), 0)
+END WriteConsoleBytes;
 
 
 (* -------------------------------------------------------------------------- *)
@@ -828,5 +826,5 @@ BEGIN
   (* Initialise console output *)
   StdOut := GetStdHandle(STD_OUTPUT_HANDLE);
   ASSERT(SetConsoleOutputCP(UTF8) # 0);
-  WriteLog := WriteConsole
+  WriteLog := WriteConsoleBytes
 END Kernel.
