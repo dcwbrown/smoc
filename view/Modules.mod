@@ -25,14 +25,21 @@ CONST
   *)
 
 TYPE
-  Module*     = Boot.ModuleHeader;
   Command*    = PROCEDURE;
+  ModuleName* = ARRAY 32 OF CHAR;
+  Module*     = POINTER TO ModuleDesc;
+  ModuleDesc* = RECORD
+    header*:  INTEGER;  (* Address of loaded image header *)
+    name*:    ModuleName;
+    (* finalize: Command; *)
+    next*:  Module
+  END;
 
 VAR
   root*:      Module;          (* First loaded module              *)
   res*:       INTEGER;         (* error code                       *)
-  importing*: Boot.ModuleName; (* module name that errors refer to *)
-  imported*:  Boot.ModuleName; (* module name that errors refer to *)
+  importing*: ModuleName; (* module name that errors refer to *)
+  imported*:  ModuleName; (* module name that errors refer to *)
 
 
 PROCEDURE error(n: INTEGER; name: ARRAY OF CHAR);
@@ -53,18 +60,24 @@ BEGIN
 END Load;
 
 
+PROCEDURE GetInt(adr: INTEGER): INTEGER;
+VAR result: INTEGER;
+BEGIN SYSTEM.GET(adr, result)
+RETURN result END GetInt;
+
+
 PROCEDURE ThisCommand(mod: Module;  command: ARRAY OF CHAR): Command;
 VAR
   cmd:  INTEGER;
   adr:  INTEGER;
-  name: Boot.ModuleName;
+  name: ModuleName;
   i:    INTEGER;
 BEGIN
   error(nocmd, mod.name);  cmd := 0;
   w.s("Lookup command '"); w.s(command); w.s("' in module "); w.s(mod.name); w.sl(".");
-  IF mod.commands # 0 THEN
-    w.s("mod.commands $"); w.h(mod.commands); w.sl(".");
-    adr := mod.commands;  SYSTEM.GET(adr, name[0]);  INC(adr);
+  adr := GetInt(mod.header + Boot.OffModCommands);
+  IF adr # 0 THEN
+    SYSTEM.GET(adr, name[0]);  INC(adr);
     WHILE (name[0] # 0X) & (cmd = 0) DO
       i := 0;  REPEAT INC(i); SYSTEM.GET(adr, name[i]);  INC(adr) UNTIL name[i] = 0X;
       w.s("  consider '"); w.s(name); w.sl("'.");
@@ -72,7 +85,7 @@ BEGIN
       INC(adr, 8);
       SYSTEM.GET(adr, name[0]);  INC(adr)
     END;
-    IF cmd # 0 THEN INC(cmd, mod.base) END  (* Relocation *)
+    IF cmd # 0 THEN INC(cmd, GetInt(mod.header + Boot.OffModBase)) END  (* Relocation *)
   END
 RETURN SYSTEM.VAL(Command, cmd) END ThisCommand;
 
@@ -80,8 +93,8 @@ RETURN SYSTEM.VAL(Command, cmd) END ThisCommand;
 PROCEDURE Call*(command: ARRAY OF CHAR; VAR err: INTEGER);
 VAR
   mod:   Module;
-  mname: Boot.ModuleName;
-  cname: Boot.ModuleName;
+  mname: ModuleName;
+  cname: ModuleName;
   ch:    CHAR;
   i, j:  INTEGER;
   p:     Command;
@@ -108,6 +121,34 @@ BEGIN
 END Call;
 
 
+PROCEDURE ImportPEImages;
+VAR mod: Module;  next, p, i: INTEGER;
 BEGIN
-  root := Boot.FirstModule
+  (* Import image headers for modules loaded from PE EXE.  *)
+  (* Note: not all images have been linked when we run, so *)
+  (* only rely on values unaffected by linking.            *)
+  NEW(root);  mod := root;  mod.header := Boot.BootHeader;
+  REPEAT
+    (* Extract module name from header *)
+    p := mod.header + Boot.OffModName;  i := 0;
+    SYSTEM.GET(p, mod.name[i]);
+    WHILE (mod.name[i] # 0X) & (i < LEN(mod.name)-1) DO
+      INC(p);  INC(i);  SYSTEM.GET(p, mod.name[i])
+    END;
+    mod.name[i] := 0X;  (* Guarantee 0 termination *)
+    (*
+    w.s("Imported ");    w.s(mod.name);
+    w.s(" header at $"); w.h(mod.header); w.sl(".");
+    *)
+    (* Generate next module pointer, if any *)
+    next := mod.header + GetInt(mod.header + Boot.OffModLength);
+    IF GetInt(next + Boot.OffModLength) # 0 THEN
+      NEW(mod.next);  mod.next.header := next;
+    END;
+    mod := mod.next;
+  UNTIL mod = NIL;
+END ImportPEImages;
+
+
+BEGIN ImportPEImages
 END Modules.

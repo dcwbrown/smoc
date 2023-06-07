@@ -483,7 +483,7 @@ END WriteLn;
 PROCEDURE WriteString*(VAR W: Writer; s: ARRAY OF CHAR);
 VAR i: INTEGER;
 BEGIN
-  w.s("Texts.WriteString, col $"); w.h(W.col); w.s(": '"); w.s(s); w.sl("'.");
+  (*w.s("Texts.WriteString, col $"); w.h(W.col); w.s(": '"); w.s(s); w.sl("'.");*)
   i := 0;
   WHILE s[i] >= " " DO Write(W, s[i]); INC(i) END
 END WriteString;
@@ -585,8 +585,5 @@ BEGIN
 END WriteClock;
 *)
 
-BEGIN
-  w.sl("Texts initialising.");
-  TrailerFile := Files.New("");
-  w.sl("Texts initialised.");
+BEGIN TrailerFile := Files.New("")
 END Texts.

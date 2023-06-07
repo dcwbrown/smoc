@@ -96,7 +96,7 @@ VAR
   KWX:    ARRAY 11 OF INTEGER;
   keyTab: ARRAY NKW OF RECORD sym: INTEGER;  id: IdStr END;
 
-  buffer:          ARRAY 80000H OF BYTE;
+  buffer: ARRAY 80000H OF CHAR;
   bufPos, bufSize: INTEGER;
 
   errPos:                  INTEGER;

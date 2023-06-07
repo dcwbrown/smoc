@@ -663,10 +663,17 @@ BEGIN Texts.WriteString(W, "System.Watch"); Texts.WriteLn(W);
 END Watch;
 *)
 
+
+PROCEDURE GetInt(adr: INTEGER): INTEGER;
+VAR result: INTEGER;
+BEGIN SYSTEM.GET(adr, result)
+RETURN result END GetInt;
+
+
 PROCEDURE ShowModules*;
 VAR T: Texts.Text;
     V: Viewers.Viewer;
-    M: Boot.ModuleHeader;
+    M: Modules.Module;
     X, Y: INTEGER;
 BEGIN T := TextFrames.Text("");
   Oberon.AllocateSystemViewer(Oberon.Par.vwr.X, X, Y);
@@ -676,8 +683,10 @@ BEGIN T := TextFrames.Text("");
   M := Modules.root;
   WHILE M # NIL DO
     IF M.name[0] # 0X THEN
-      Texts.WriteString(W, M.name); Texts.Write(W, Input.TAB);
-      Texts.WriteHex(W, SYSTEM.VAL(INTEGER, M)); Texts.WriteHex(W, M.base);
+      Texts.WriteString(W, M.name);
+      Texts.Write(W, Input.TAB);
+      Texts.WriteHex(W, M.header);
+      Texts.WriteHex(W, GetInt(M.header + Boot.OffModBase));
     ELSE Texts.WriteString(W, "---")
     END ;
     Texts.WriteLn(W); M := M.next

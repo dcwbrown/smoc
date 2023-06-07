@@ -10,7 +10,7 @@ CONST
   HeapCommit  = 2000000H;  (* 32MB *)
 
   (* Windows constants *)
-  STD_OUTPUT_HANDLE = -11;
+  StdOutputHandle = -11;
   UTF8              = 65001;
 
 
@@ -41,7 +41,7 @@ VAR
   GetModuleFileNameW:             PROCEDURE(hModule, lpFilename, nSize: INTEGER);
   GetCurrentDirectoryW:           PROCEDURE(nsize, pbuffer: INTEGER): INTEGER;
   GetStdHandle:                   PROCEDURE(nStdHandle: SYSTEM.CARD32): INTEGER;
-  SetConsoleOutputCP:             PROCEDURE(codepage: INTEGER): INTEGER;
+  SetConsoleOutputCP:             PROCEDURE(codepage: INTEGER) (* : INTEGER *);
   WriteFile:                      PROCEDURE(hFile, lpBuffer, nNumberOfBytesToWrite,
                                             lpNumberOfBytesWritten, lpOverlapped: INTEGER
                                            ): SYSTEM.CARD32;
@@ -93,9 +93,9 @@ VAR
 (* 0000 00vv wwww wwxx xxxx yyyy yyzz zzzz    111110vv 10wwwwww 10xxxxxx 10yyyyyy 10zzzzzz          *)
 (* 0uvv vvvv wwww wwxx xxxx yyyy yyzz zzzz    1111110u 10vvvvvv 10wwwwww 10xxxxxx 10yyyyyy 10zzzzzz *)
 
-PROCEDURE GetUtf8*(src: ARRAY OF BYTE; VAR i: INTEGER): INTEGER;
+PROCEDURE GetUtf8*(src: ARRAY OF CHAR; VAR i: INTEGER): INTEGER;
 VAR n, result: INTEGER;
-BEGIN ASSERT(i < LEN(src)); result := src[i];  INC(i);
+BEGIN ASSERT(i < LEN(src)); result := ORD(src[i]);  INC(i);
   IF result >= 0C0H THEN
     IF    result >= 0FCH THEN result := result MOD 2;  n := 5
     ELSIF result >= 0F8H THEN result := result MOD 4;  n := 4
@@ -105,8 +105,8 @@ BEGIN ASSERT(i < LEN(src)); result := src[i];  INC(i);
     END;
     WHILE n > 0 DO
       result := LSL(result,6);  DEC(n);
-      IF (i < LEN(src)) & (src[i] DIV 40H = 2) THEN
-        INC(result, src[i] MOD 40H);  INC(i)
+      IF (i < LEN(src)) & (ORD(src[i]) DIV 40H = 2) THEN
+        INC(result, ORD(src[i]) MOD 40H);  INC(i)
       END
     END
   END;
@@ -167,10 +167,10 @@ BEGIN
 END PutUtf16;
 
 
-PROCEDURE Utf8ToUtf16*(src: ARRAY OF BYTE;  VAR dst: ARRAY OF SYSTEM.CARD16): INTEGER;
+PROCEDURE Utf8ToUtf16*(src: ARRAY OF CHAR;  VAR dst: ARRAY OF SYSTEM.CARD16): INTEGER;
 VAR i, j: INTEGER;
 BEGIN  i := 0;  j := 0;
-  WHILE (i < LEN(src)) & (src[i] # 0) DO PutUtf16(GetUtf8(src, i), dst, j) END;
+  WHILE (i < LEN(src)) & (src[i] # 0X) DO PutUtf16(GetUtf8(src, i), dst, j) END;
   IF j < LEN(dst) THEN dst[j] := 0;  INC(j) END
 RETURN j END Utf8ToUtf16;
 
@@ -207,7 +207,7 @@ VAR i, j: INTEGER;  ch: CHAR;
 BEGIN
   IF n = 8000000000000000H THEN s := "-9223372036854775808"
   ELSE i := 0;
-    IF n < 0 THEN s[0] := '-';  i := 1; END;
+    IF n < 0 THEN s[0] := "-";  i := 1; END;
     j := i;
     REPEAT s[j] := CHR(n MOD 10 + 48);  INC(j);  n := n DIV 10 UNTIL n = 0;
     s[j] := 0X;  DEC(j);
@@ -288,7 +288,8 @@ END AppendMemString;
 
 PROCEDURE ExceptionHandler(p: INTEGER): INTEGER;
 TYPE
-  Exception = POINTER [untraced] TO RECORD
+  Exception = POINTER [untraced] TO ExceptionDesc;
+  ExceptionDesc = RECORD
     code:      SYSTEM.CARD32;
     flags:     SYSTEM.CARD32;
     nested:    Exception;
@@ -824,7 +825,7 @@ BEGIN
   GetWindowsPaths;
 
   (* Initialise console output *)
-  StdOut := GetStdHandle(STD_OUTPUT_HANDLE);
-  ASSERT(SetConsoleOutputCP(UTF8) # 0);
+  StdOut := GetStdHandle(StdOutputHandle);
+  SetConsoleOutputCP(UTF8);
   WriteLog := WriteConsoleBytes
 END Kernel.
