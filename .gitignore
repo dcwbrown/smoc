@@ -1,4 +1,6 @@
 *.sym
+*.smb
+*.rsc
 *.dll
 *.x64
 *.exe
