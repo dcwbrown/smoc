@@ -19,16 +19,15 @@ System.Directory ^
 
 ORP.Compile @  ORP.Compile @/s  ORP.Compile ^/s ORP.Compile ~
 System.Free ~  # free modules as a group, /f hides modules if refs exist
-System.Open Draw.Tool      System.Batch ~
+System.Open Draw.Tool    System.Batch ~
 System.CopyFiles ~
-System.RenameFiles ~         Stars.Open Stars.Run System.Free Stars~
-System.DeleteFiles ~           14.ShowModules  *Stars.Stop
+System.RenameFiles ~    Stars.Open Stars.Run System.Free Stars~
+System.DeleteFiles ~    System.ShowModules  *Stars.Stop
 
-System.ShowModules  System.ShowCommands ^  Modules.Collect
+System.ShowModules       System.ShowCommands ^   Modules.Collect
 System.ShowImports ORP~  System.ShowReferences Hilbert Sierpinski ~
 System.ShowClients ORS~  System.ShowGroupReferences Hilbert Viewers ~
                                 
-PCLink1.Run  PCLink1.Stop    Oberon0Tool.Run  Oberon0Tool.Stop  # run only of of these 2
 Hilbert.Draw  Sierpinski.Draw  Blink.Run  Stars.Open
 Tools.Inspect 0  Tools.Sector 1  Tools.ShowFile
 Tools.Recall  Tools.Clear  FontTool.Show Oberon10.Scn.Fnt ~

@@ -1,31 +1,31 @@
 MODULE Files;
-IMPORT SYSTEM, K := Kernel, w := Writer;
+IMPORT SYSTEM, K := Kernel, Heap, w := Writer;
 
 CONST
   (* Win32 Const *)
-  INVALID_FILE_ATTRIBUTES   = ORD({0..31});
-  FILE_ATTRIBUTE_READONLY   = {0};
-  FILE_ATTRIBUTE_TEMPORARY  = {8};
-  FILE_FLAG_DELETE_ON_CLOSE = {26};
+  InvalidFileAttributes  = ORD({0..31});
+  FileAttributeReadOnly  = {0};
+  FileAttributeTemporary = {8};
+  FileFlagDeleteOnClose  = {26};
 
-  GENERIC_READ  = {31};
-  GENERIC_WRITE = {30};
+  GenericRead  = {31};
+  GenericWrite = {30};
 
-  OPEN_EXISTING = 3;
-  CREATE_ALWAYS = 2;
-  CREATE_NEW    = 1;
+  openExisting = 3;
+  CreateAlways = 2;
+  CreateNew    = 1;
 
-  MAX_PATH = 260;
+  MaxPath = 260;
 
-  FILE_BEGIN   = 0;
-  FILE_CURRENT = 1;
-  FILE_END     = 2;
+  FileBegin   = 0;
+  FileCurrent = 1;
+  FileEnd     = 2;
 
-  MOVEFILE_COPY_ALLOWED = {1};
+  MoveFileCopyAllowed = {1};
 
-  FILE_SHARE_DELETE = {2};
-  FILE_SHARE_READ   = {0};
-  FILE_SHARE_WRITE  = {1};
+  FileShareDelete = {2};
+  FileSHareRead   = {0};
+  FileShareWrite  = {1};
 
   (* File operations for CreateFile *)
   FileOpenR    = 0;
@@ -35,81 +35,57 @@ CONST
 
 
 TYPE
-  Handle       = INTEGER;
-  Pointer      = INTEGER;
-  LargeInteger = INTEGER;
-  Dword        = SYSTEM.CARD32;
-  Bool         = SYSTEM.CARD32;
-  Int          = SYSTEM.CARD32;
+  Int   = SYSTEM.CARD32;
 
-  PathStr16 = ARRAY MAX_PATH+1 OF SYSTEM.CARD16;
-  PathStr   = ARRAY MAX_PATH+1 OF CHAR;
+  PathStr16 = ARRAY MaxPath+1 OF SYSTEM.CARD16;
+  PathStr   = ARRAY MaxPath+1 OF CHAR;
 
-  File*    = POINTER TO FileDesc;
-  FileDesc = RECORD (K.Finalised)
-               new:    BOOLEAN;
-               ronly:  BOOLEAN;
-               hFile:  Handle;
-               name*:  PathStr;
-               temp:   PathStr;
-               pos:    INTEGER;
-               len:    INTEGER
-             END;
-  Rider*   = RECORD
-               eof*: BOOLEAN;
-               res*: INTEGER;
-               f:    File;
-               pos:  INTEGER
-             END;
+  File*     = POINTER TO FileDesc;
+  FileDesc* = RECORD (Heap.FinalisedDesc)
+                new:    BOOLEAN;
+                ronly:  BOOLEAN;
+                hFile:  INTEGER;
+                name*:  PathStr;
+                temp:   PathStr;
+                pos:    INTEGER;
+                len:    INTEGER
+              END;
+
+  Rider* = RECORD
+             eof*: BOOLEAN;
+             res*: INTEGER;
+             f:    File;
+             pos:  INTEGER
+           END;
 
 VAR
   tempId: INTEGER;
 
   (* Win32 Interface *)
-  GetFileAttributesW:      PROCEDURE(lpFileName: ARRAY [untagged] OF SYSTEM.CARD16): Dword;
-  DeleteFileW:             PROCEDURE(lpFilename: ARRAY [untagged] OF SYSTEM.CARD16): Bool;
-  CloseHandle:             PROCEDURE(hObject: Handle): Bool;
-  FlushFileBuffers:        PROCEDURE(hFile: Handle): Bool;
-  SetEndOfFile:            PROCEDURE(hFile: Handle): Bool;
-  GetFileSizeEx:           PROCEDURE(hFile: Handle; lpFileSize: Pointer): Bool;
-  GetCurrentProcessId:     PROCEDURE(): Dword;
-  MoveFileExW:             PROCEDURE(lpExistingFileName,
-                                     lpNewFileName:         ARRAY [untagged] OF SYSTEM.CARD16;
-                                     dwFlags:               Dword): Bool;
-  CreateFileW:             PROCEDURE(lpFileName:            ARRAY [untagged] OF SYSTEM.CARD16;
-                                     dwDesiredAccess,
-                                     dwShareMode:           Dword;
-                                     lpSecurityAttributes:  Pointer;
-                                     dwCreationDisposition,
-                                     dwFlagsAndAttributes:  Dword;
-                                     hTemplateFile:         Handle): Handle;
-  ReadFile:                PROCEDURE(hFile:                 Handle;
-                                     lpBuffer:              Pointer;
-                                     nNumberOfBytesToRead:  Dword;
-                                     lpNumberOfBytesRead,
-                                     lpOverlapped:          Pointer): Bool;
-  WriteFile:               PROCEDURE(hFile:                 Handle;
-                                     lpBuffer:              Pointer;
-                                     nNumberOfBytesToWrite: Dword;
-                                     lpNumberOfBytesWrite,
-                                     lpOverlapped:          Pointer): Bool;
-  SetFilePointerEx:        PROCEDURE(hFile:                 Handle;
-                                     liDistanceToMove:      LargeInteger;
-                                     lpNewFilePointer:      Pointer;
-                                     dwMoveMethod:          Dword): Bool;
-  wsprintfW:               PROCEDURE(VAR lpOut:             ARRAY [untagged] OF SYSTEM.CARD16;
-                                     lpFmt:                 ARRAY [untagged] OF SYSTEM.CARD16;
-                                     par1, par2:            INTEGER): Int;
-  GetEnvironmentVariableW: PROCEDURE(lpName:                ARRAY [untagged] OF SYSTEM.CARD16;
-                                     lpBuffer:              Pointer;
-                                     nSize:                 Dword): Dword;
-  GetFileAttributesExW:    PROCEDURE(lpName:                ARRAY [untagged] OF SYSTEM.CARD16;
-                                     fInfoLevelId:          INTEGER;  (* Must be 0 (GetFileExInfoStandard) *)
-                                     lpFileInformation:     INTEGER): Dword;
+  GetFileAttributesW:      PROCEDURE(lpFileName: INTEGER): INTEGER;
+  DeleteFileW:             PROCEDURE(lpFilename: INTEGER): INTEGER;
+  CloseHandle:             PROCEDURE(hObject: INTEGER): INTEGER;
+  FlushFileBuffers:        PROCEDURE(hFile: INTEGER): INTEGER;
+  SetEndOfFile:            PROCEDURE(hFile: INTEGER): INTEGER;
+  GetFileSizeEx:           PROCEDURE(hFile, lpFileSize: INTEGER): INTEGER;
+  GetCurrentProcessId:     PROCEDURE(): INTEGER;
+  MoveFileExW:             PROCEDURE(lpExistingFileName, lpNewFileName, dwFlags: INTEGER): INTEGER;
+  CreateFileW:             PROCEDURE(lpFileName, dwDesiredAccess, dwShareMode,
+                                     lpSecurityAttributes, dwCreationDisposition,
+                                     dwFlagsAndAttributes, hTemplateFile: INTEGER): INTEGER;
+  ReadFile:                PROCEDURE(hFile, lpBuffer, nNumberOfBytesToRead,
+                                     lpNumberOfBytesRead, lpOverlapped: INTEGER): INTEGER;
+  WriteFile:               PROCEDURE(hFile, lpBuffer, nNumberOfBytesToWrite,
+                                     lpNumberOfBytesWritten, lpOverlapped: INTEGER): INTEGER;
+  SetFilePointerEx:        PROCEDURE(hFile, liDistanceToMove,
+                                     lpNewFilePointer, dwMoveMethod: INTEGER): INTEGER;
+  GetEnvironmentVariableW: PROCEDURE(lpName, lpBuffer, nSize: INTEGER): INTEGER;
+  GetFileAttributesExW:    PROCEDURE(lpName, fInfoLevelId, lpFileInformation: INTEGER): INTEGER;
+                           (* fInfoLevelId Must be 0 (GetFileExInfoStandard) *)
   GetLastError:            PROCEDURE(): INTEGER;
 
-PROCEDURE Finalise(ptr: K.Finalised);
-VAR bRes: Bool; f: File;
+PROCEDURE Finalise(ptr: Heap.Finalised);
+VAR bRes: INTEGER; f: File;
 BEGIN
   f := ptr(File); bRes := CloseHandle(f.hFile); ASSERT(bRes # 0);
   (*Out.String('Release ');
@@ -121,46 +97,46 @@ PROCEDURE CreateFile(name: ARRAY OF CHAR; op: INTEGER): INTEGER;
 VAR hFile, len, access, mode, disposition, flags: INTEGER; name16: PathStr16;
 BEGIN
   IF op = FileNew THEN
-    disposition := CREATE_NEW;
-    flags       := ORD(FILE_ATTRIBUTE_TEMPORARY+FILE_FLAG_DELETE_ON_CLOSE);
+    disposition := CreateNew;
+    flags       := ORD(FileAttributeTemporary+FileFlagDeleteOnClose);
   ELSIF op = FileRegister THEN
-    disposition := CREATE_ALWAYS;
+    disposition := CreateAlways;
     flags := 0;
   ELSE
-    disposition := OPEN_EXISTING;
+    disposition := openExisting;
     flags       := 0;
   END;
   IF op = FileOpenR THEN
-    access      := ORD(GENERIC_READ);
-    mode        := ORD(FILE_SHARE_READ);
+    access      := ORD(GenericRead);
+    mode        := ORD(FileSHareRead);
   ELSE
-    access      := ORD(GENERIC_READ+GENERIC_WRITE);
-    mode        := ORD(FILE_SHARE_READ+FILE_SHARE_WRITE+FILE_SHARE_DELETE);
+    access      := ORD(GenericRead+GenericWrite);
+    mode        := ORD(FileSHareRead+FileShareWrite+FileShareDelete);
   END;
   len := K.Utf8ToUtf16(name, name16);
-  hFile := CreateFileW(name16, access, mode, 0, disposition, flags, 0);
+  hFile := CreateFileW(SYSTEM.ADR(name16), access, mode, 0, disposition, flags, 0);
 RETURN hFile END CreateFile;
 
 PROCEDURE GetFileAttributes(name: ARRAY OF CHAR): INTEGER;
 VAR name16: PathStr16;  len, attr: INTEGER;
 BEGIN
   len  := K.Utf8ToUtf16(name, name16);
-  attr := GetFileAttributesW(name16);
+  attr := GetFileAttributesW(SYSTEM.ADR(name16));
 RETURN attr END GetFileAttributes;
 
-PROCEDURE NewFile(VAR file: File; hFile: Handle);
+PROCEDURE NewFile(VAR file: File; hFile: INTEGER);
 BEGIN
   NEW(file); file.hFile := hFile;
-  K.RegisterFinalised(file, Finalise)
+  Heap.RegisterFinalised(file, Finalise)
 END NewFile;
 
 PROCEDURE Old*(name: ARRAY OF CHAR): File;
-VAR file: File; hFile: Handle;
-    attr: Dword; ronly: BOOLEAN; bRes: Bool;
+VAR file: File; hFile: INTEGER;
+    attr: INTEGER; ronly: BOOLEAN; bRes: INTEGER;
 BEGIN
   attr := GetFileAttributes(name);
-  IF attr # INVALID_FILE_ATTRIBUTES THEN
-    ronly := FILE_ATTRIBUTE_READONLY * SYSTEM.VAL(SET, attr) # {};
+  IF attr # InvalidFileAttributes THEN
+    ronly := FileAttributeReadOnly * SYSTEM.VAL(SET, attr) # {};
     IF ronly THEN
       hFile := CreateFile(name, FileOpenR)
     ELSE
@@ -187,7 +163,7 @@ PROCEDURE GetUserProfile(VAR dir: ARRAY OF CHAR; VAR len: INTEGER);
 VAR s, userprofile: PathStr16;
 BEGIN
   SetWString("USERPROFILE", s);
-  len := GetEnvironmentVariableW(s, SYSTEM.ADR(userprofile), LEN(userprofile));
+  len := GetEnvironmentVariableW(SYSTEM.ADR(s), SYSTEM.ADR(userprofile), LEN(userprofile));
   len := K.Utf16ToUtf8(userprofile, dir);
 (*w.s("Got user profile as '"); w.s(dir); w.sl("'.");*)
 END GetUserProfile;
@@ -228,7 +204,7 @@ BEGIN
   pid  := GetCurrentProcessId();
   time := K.Time();
   GetUserProfile(name, len);
-  IF len < MAX_PATH-60 THEN
+  IF len < MaxPath-60 THEN
     Append("\.smoctmp", name); AppendHex(pid, name);
     Append("-", name);         AppendHex(time, name);
     Append("-", name);         AppendHex(tempId, name);
@@ -241,7 +217,7 @@ END MakeTempName;
 
 PROCEDURE New*(name: ARRAY OF CHAR): File;
 VAR
-  hFile: Handle;
+  hFile: INTEGER;
   file:  File;
   temp:  PathStr;
 BEGIN
@@ -259,8 +235,12 @@ END New;
 
 
 PROCEDURE Register*(f: File);
-VAR hFile2: Handle; buf: ARRAY 10000H OF BYTE;
-    bRes: Bool; byteRead, byteWritten: Dword;
+VAR
+  hFile2:       INTEGER;
+  buf:          ARRAY 10000H OF BYTE;
+  bRes:         INTEGER;
+  bytesRead:    SYSTEM.CARD32;
+  bytesWritten: SYSTEM.CARD32;
 BEGIN
   IF f.new THEN
     hFile2 := CreateFile(f.name, FileRegister);
@@ -269,19 +249,19 @@ BEGIN
       w.s("' failed, last error: $"); w.h(GetLastError()); w.l;
     END;
     ASSERT(hFile2 # -1); f.pos := 0;
-    bRes := SetFilePointerEx(f.hFile, 0, 0, FILE_BEGIN);
+    bRes := SetFilePointerEx(f.hFile, 0, 0, FileBegin);
     REPEAT
       bRes := ReadFile(
-        f.hFile, SYSTEM.ADR(buf), LEN(buf), SYSTEM.ADR(byteRead), 0
+        f.hFile, SYSTEM.ADR(buf), LEN(buf), SYSTEM.ADR(bytesRead), 0
       );
-      IF (bRes # 0) & (byteRead # 0) THEN
+      IF (bRes # 0) & (bytesRead # 0) THEN
         bRes := WriteFile(
-          hFile2, SYSTEM.ADR(buf), byteRead,
-          SYSTEM.ADR(byteWritten), 0
+          hFile2, SYSTEM.ADR(buf), bytesRead,
+          SYSTEM.ADR(bytesWritten), 0
         );
-        INC(f.pos, byteWritten)
+        INC(f.pos, bytesWritten)
       END
-    UNTIL (byteRead = 0) OR (bRes = 0);
+    UNTIL (bytesRead = 0) OR (bRes = 0);
     bRes := CloseHandle(f.hFile); ASSERT(bRes # 0);
     f.hFile := hFile2; f.new := FALSE;
     (* bRes := FlushFileBuffers(hFile2) very slow *)
@@ -289,33 +269,33 @@ BEGIN
 END Register;
 
 PROCEDURE Close*(f: File);
-VAR bRes: Bool;
+VAR bRes: INTEGER;
 BEGIN
   bRes := FlushFileBuffers(f.hFile);
   ASSERT(bRes # 0)
 END Close;
 
 PROCEDURE Purge*(f: File);
-VAR bRes: Bool; pos: INTEGER;
+VAR bRes: INTEGER; pos: INTEGER;
 BEGIN
-  bRes := SetFilePointerEx(f.hFile, 0, SYSTEM.ADR(pos), FILE_BEGIN);
+  bRes := SetFilePointerEx(f.hFile, 0, SYSTEM.ADR(pos), FileBegin);
   ASSERT(bRes # 0); bRes := SetEndOfFile(f.hFile); ASSERT(bRes # 0)
 END Purge;
 
 PROCEDURE Delete*(name: ARRAY OF CHAR;  VAR res: INTEGER);
-VAR bRes: Bool;  name16: PathStr16;  len: INTEGER;
+VAR bRes: INTEGER;  name16: PathStr16;  len: INTEGER;
 BEGIN
   len := K.Utf8ToUtf16(name, name16);
-  bRes := DeleteFileW(name16);
+  bRes := DeleteFileW(SYSTEM.ADR(name16));
   IF bRes # 0 THEN res := 0 ELSE res := -1 END
 END Delete;
 
 PROCEDURE Rename*(old, new: ARRAY OF CHAR; VAR res: INTEGER);
-VAR bRes: Bool;  old16, new16: PathStr16;  len: INTEGER;
+VAR bRes: INTEGER;  old16, new16: PathStr16;  len: INTEGER;
 BEGIN
   len := K.Utf8ToUtf16(old, old16);
   len := K.Utf8ToUtf16(new, new16);
-  bRes := MoveFileExW(old16, new16, ORD(MOVEFILE_COPY_ALLOWED));
+  bRes := MoveFileExW(SYSTEM.ADR(old16), SYSTEM.ADR(new16), ORD(MoveFileCopyAllowed));
   IF bRes # 0 THEN res := 0 ELSE res := -1 END
 END Rename;
 
@@ -344,18 +324,18 @@ PROCEDURE Base*(VAR r: Rider): File;
 END Base;
 
 PROCEDURE CheckFilePos(VAR r: Rider);
-VAR bRes: Bool;
+VAR bRes: INTEGER;
 BEGIN
   IF r.pos # r.f.pos THEN
     bRes := SetFilePointerEx(
-      r.f.hFile, r.pos, SYSTEM.ADR(r.pos), FILE_BEGIN
+      r.f.hFile, r.pos, SYSTEM.ADR(r.pos), FileBegin
     );
     ASSERT(bRes # 0); r.f.pos := r.pos
   END
 END CheckFilePos;
 
 PROCEDURE ReadMem*(VAR r: Rider; adr, len: INTEGER);
-VAR bRes: Bool;  bytesRead: Dword;  f: File;
+VAR bRes: INTEGER;  bytesRead: SYSTEM.CARD32;  f: File;
 BEGIN
   f := r.f; CheckFilePos(r);
   bRes := ReadFile(f.hFile, adr, len, SYSTEM.ADR(bytesRead), 0);
@@ -423,7 +403,7 @@ END ReadBytes;
 (* -------------------------------------------------------------------------- *)
 
 PROCEDURE WriteMem(VAR r: Rider; adr, len: INTEGER);
-VAR bRes: Bool;  bytesWritten: Dword;  f: File;
+VAR bRes: INTEGER;  bytesWritten: SYSTEM.CARD32;  f: File;
 BEGIN
   f := r.f;  CheckFilePos(r);
   bRes := WriteFile(f.hFile, adr, len, SYSTEM.ADR(bytesWritten), 0);
@@ -476,7 +456,7 @@ BEGIN i := 0;
 END WriteString;
 
 PROCEDURE WriteBytes*(VAR r: Rider; x: ARRAY OF BYTE; n: INTEGER);
-VAR startPos, byteCount: Dword;
+VAR startPos, byteCount: INTEGER;
 BEGIN
   CheckFilePos(r);  startPos := r.pos;
   IF n > LEN(x) THEN byteCount := LEN(x) ELSE byteCount := n END;
@@ -502,7 +482,7 @@ VAR
   res: INTEGER;
 BEGIN
   res := K.Utf8ToUtf16(name, name16);
-  res := GetFileAttributesExW(name16, 0, SYSTEM.ADR(attributes));
+  res := GetFileAttributesExW(SYSTEM.ADR(name16), 0, SYSTEM.ADR(attributes));
   IF res = 0  THEN
     length := -1;
     time := 0
@@ -529,7 +509,6 @@ BEGIN
   K.GetProc(K.Kernel, "FlushFileBuffers",        FlushFileBuffers);        ASSERT(FlushFileBuffers        # NIL);
   K.GetProc(K.Kernel, "SetEndOfFile",            SetEndOfFile);            ASSERT(SetEndOfFile            # NIL);
   K.GetProc(K.Kernel, "GetFileSizeEx",           GetFileSizeEx);           ASSERT(GetFileSizeEx           # NIL);
-  K.GetProc(K.User,   "wsprintfW",               wsprintfW);               ASSERT(wsprintfW               # NIL);
   K.GetProc(K.Kernel, "GetEnvironmentVariableW", GetEnvironmentVariableW); ASSERT(GetEnvironmentVariableW # NIL);
   K.GetProc(K.Kernel, "GetCurrentProcessId",     GetCurrentProcessId);     ASSERT(GetCurrentProcessId     # NIL);
   K.GetProc(K.Kernel, "GetFileAttributesExW",    GetFileAttributesExW);    ASSERT(GetFileAttributesExW    # NIL);

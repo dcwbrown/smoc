@@ -1,39 +1,58 @@
 MODULE Kernel;  (*$RTL-*)
 
-IMPORT SYSTEM, Boot;
+IMPORT SYSTEM, Boot, Heap;
 
 
 CONST
-  MarkedListSentinel = 2;  (* Used to mark end of list of marked heap blocks during GC *)
-  HeapReserve = 80000000H; (* 2GB   *)
-(*HeapCommit  = 80000H;    (* 512KB *) *)
-  HeapCommit  = 2000000H;  (* 32MB *)
-
   (* Windows constants *)
   StdOutputHandle = -11;
   UTF8              = 65001;
 
+  (* Exception pointers record from Windows *)
+  ExPtrExcDesc = 0;  (* ExceptionPointers record address of exception record *)
+  ExPtrCtxDesc = 8;  (* ExceptionPointers record address of context record *)
+
+  (* Exception description record from Windows *)
+  ExcCode      = 0;
+  ExcFlags     = 4;
+  ExcNested    = 8;
+  ExcAddress   = 16;
+  ExcNumParams = 24;
+  ExcParames   = 32;
 
 TYPE
   ExceptionHandlerProc = PROCEDURE(p: INTEGER): INTEGER;
-
-  (* Finalisation during garbage collection *)
-  Finalised*       = POINTER [untraced] TO FinalisedDesc;
-  FinaliseProc*    = PROCEDURE(ptr: Finalised);
-  FinalisedDesc*   = RECORD
-                       Finalise: FinaliseProc;
-                       next:     Finalised
-                     END;
-  HeapTraceHandler = PROCEDURE(reason: INTEGER);
   LogWriter        = PROCEDURE(adr, len: INTEGER);
+
+  (* Windows run time failure / exception handling *)
+  (*
+  Exception = POINTER [untraced] TO ExceptionDesc;
+  ExceptionDesc = RECORD
+    (* 0*) code:      SYSTEM.CARD32;
+    (* 4*) flags:     SYSTEM.CARD32;
+    (* 8*) nested:    Exception;
+    (*16*) address:   INTEGER;
+    (*24*) NumParams: SYSTEM.CARD32;
+    (*32*) Params:    ARRAY 15 OF INTEGER
+  END;
+
+  Context     = POINTER [untraced] TO ContextDesc;
+  ContextDesc = RECORD END;
+
+  ExceptionPointers = POINTER [untraced] TO ExceptionPointersDesc;
+  ExceptionPointersDesc = RECORD
+    exception: Exception;
+    context:   Context
+  END;
+  *)
 
 
 VAR
-  Kernel*:       INTEGER;
-  Gdi*:          INTEGER;
-  User*:         INTEGER;
-  Shell*:        INTEGER;
-  ShCore*:       INTEGER;
+  Kernel*: INTEGER;
+  Gdi*:    INTEGER;
+  User*:   INTEGER;
+  Shell*:  INTEGER;
+  ShCore*: INTEGER;
 
   MessageBoxW:                    PROCEDURE(hWnd, lpText, lpCaption, uType: INTEGER): INTEGER;
   AddVectoredExceptionHandler:    PROCEDURE(first: INTEGER; filter: ExceptionHandlerProc);
@@ -42,25 +61,12 @@ VAR
   GetCurrentDirectoryW:           PROCEDURE(nsize, pbuffer: INTEGER): INTEGER;
   GetStdHandle:                   PROCEDURE(nStdHandle: SYSTEM.CARD32): INTEGER;
   SetConsoleOutputCP:             PROCEDURE(codepage: INTEGER) (* : INTEGER *);
-  WriteFile:                      PROCEDURE(hFile, lpBuffer, nNumberOfBytesToWrite,
-                                            lpNumberOfBytesWritten, lpOverlapped: INTEGER
-                                           ): SYSTEM.CARD32;
 
-  (* Heap allocation *)
-  VirtualAlloc:  PROCEDURE(lpAddress, dwSize, flAllocationType, flProtect: INTEGER): INTEGER;
-  HeapBase*:     INTEGER;
-  HeapSize*:     INTEGER;            (* Committed heap memory                        *)
-  HeapMax:       INTEGER;            (* HeapSize to HeapMax reserved, not committed  *)
-  FreeList:      ARRAY 4 OF INTEGER; (* Free lists for 32, 64, 128 & 256 byte blocks *)
-  LargeFreeList: INTEGER;            (* Free list for 512 byte and larger blocks     *)
-  Allocated:     INTEGER;            (* Includes 16 byte header but excludes padding *)
+  WriteFile: PROCEDURE(hFile, lpBuffer, nNumberOfBytesToWrite,
+                       lpNumberOfBytesWritten, lpOverlapped: INTEGER
+                      ): SYSTEM.CARD32;
 
-  (* Garbage collection *)
-  MarkedList:    INTEGER;
-  Collect0:      PROCEDURE;
-  JustCollected: BOOLEAN;
-  FinalisedList: Finalised;
-  HeapTracer:    HeapTraceHandler;
+  VirtualAlloc: Heap.WindowsAllocator;
 
   (* Windows command line *)
   GetCommandLineW:    PROCEDURE(): INTEGER;
@@ -112,23 +118,23 @@ BEGIN ASSERT(i < LEN(src)); result := ORD(src[i]);  INC(i);
   END;
 RETURN result END GetUtf8;
 
-PROCEDURE PutUtf8*(c: INTEGER; VAR dst: ARRAY OF BYTE; VAR i: INTEGER);
+PROCEDURE PutUtf8*(c: INTEGER; VAR dst: ARRAY OF CHAR; VAR i: INTEGER);
 VAR n: INTEGER;
 BEGIN
   ASSERT(i < LEN(dst));
   ASSERT(c > 0);  ASSERT(c < 80000000H);
   IF i < LEN(dst) THEN
-    IF c < 80H THEN dst[i] := c;  INC(i)
+    IF c < 80H THEN dst[i] := CHR(c);  INC(i)
     ELSE
-      IF    c < 800H     THEN  dst[i] := 0C0H + ASR(c, 6);    n := 1;
-      ELSIF c < 10000H   THEN  dst[i] := 0E0H + ASR(c, 12);   n := 2;
-      ELSIF c < 200000H  THEN  dst[i] := 0F0H + ASR(c, 18);   n := 3;
-      ELSIF c < 4000000H THEN  dst[i] := 0F8H + ASR(c, 24);   n := 4;
-      ELSE                     dst[i] := 0FCH + ASR(c, 30);   n := 5;
+      IF    c < 800H     THEN  dst[i] := CHR(0C0H + ASR(c, 6));    n := 1;
+      ELSIF c < 10000H   THEN  dst[i] := CHR(0E0H + ASR(c, 12));   n := 2;
+      ELSIF c < 200000H  THEN  dst[i] := CHR(0F0H + ASR(c, 18));   n := 3;
+      ELSIF c < 4000000H THEN  dst[i] := CHR(0F8H + ASR(c, 24));   n := 4;
+      ELSE                     dst[i] := CHR(0FCH + ASR(c, 30));   n := 5;
       END;
       INC(i);
       WHILE (n > 0) & (i < LEN(dst)) DO
-        DEC(n);  dst[i] := 80H + ASR(c, n*6) MOD 40H;  INC(i)
+        DEC(n);  dst[i] := CHR(80H + ASR(c, n*6) MOD 40H);  INC(i)
       END;
     END
   END
@@ -174,11 +180,11 @@ BEGIN  i := 0;  j := 0;
   IF j < LEN(dst) THEN dst[j] := 0;  INC(j) END
 RETURN j END Utf8ToUtf16;
 
-PROCEDURE Utf16ToUtf8*(src: ARRAY OF SYSTEM.CARD16;  VAR dst: ARRAY OF BYTE): INTEGER;
+PROCEDURE Utf16ToUtf8*(src: ARRAY OF SYSTEM.CARD16;  VAR dst: ARRAY OF CHAR): INTEGER;
 VAR i, j: INTEGER;
 BEGIN  i := 0;  j := 0;
   WHILE (i < LEN(src)) & (src[i] # 0) DO PutUtf8(GetUtf16(src, i), dst, j) END;
-  IF j < LEN(dst) THEN dst[j] := 0;  INC(j) END
+  IF j < LEN(dst) THEN dst[j] := 0X;  INC(j) END
 RETURN j END Utf16ToUtf8;
 
 
@@ -286,26 +292,19 @@ BEGIN
   END
 END AppendMemString;
 
-PROCEDURE ExceptionHandler(p: INTEGER): INTEGER;
-TYPE
-  Exception = POINTER [untraced] TO ExceptionDesc;
-  ExceptionDesc = RECORD
-    code:      SYSTEM.CARD32;
-    flags:     SYSTEM.CARD32;
-    nested:    Exception;
-    address:   INTEGER;
-    NumParams: SYSTEM.CARD32;
-    Params:    ARRAY 15 OF INTEGER
-  END;
-  Context           = POINTER [untraced] TO RECORD END;
-  ExceptionPointers = POINTER [untraced] TO RECORD
-    exception: Exception;  context: Context
-  END;
 
+PROCEDURE GetCard32(adr: INTEGER): INTEGER;
+VAR result: SYSTEM.CARD32;
+BEGIN SYSTEM.GET(adr, result);
+RETURN result END GetCard32;
+
+
+PROCEDURE ExceptionHandler(p: INTEGER): INTEGER;
+(* parameter is address of 64/exception desc adr, 64/context desc adr *)
 VAR
-  ep:       ExceptionPointers;
+  exdesc:   INTEGER;  (* Address of exception description record *)
   modhdr:   INTEGER;
-  code:     INTEGER;
+  code:     SYSTEM.CARD32;
   next:     INTEGER;
   trapadr:  INTEGER;
   address:  INTEGER;
@@ -318,18 +317,17 @@ VAR
   report:   ARRAY 256 OF CHAR;
   number:   ARRAY 25 OF CHAR;
 BEGIN
-  ep := SYSTEM.VAL(ExceptionPointers, p);
-  address := ep.exception.address;
-
+  SYSTEM.GET(p + ExPtrExcDesc,    exdesc);
+  SYSTEM.GET(exdesc + ExcAddress, address);
   next := Boot.BootHeader;
   REPEAT
     modhdr := next;
     SYSTEM.GET(modhdr + Boot.OffModCode, code);
     SYSTEM.GET(modhdr + Boot.OffModTrap, trapadr);
     SYSTEM.GET(modhdr + Boot.OffModNext, next);
-  UNTIL (next = 0(*NIL*)) OR (address >= code) & (address < trapadr);
+  UNTIL (next = 0) OR (address >= code) & (address < trapadr);
   IF (address < code) OR (address >= trapadr) THEN
-    WriteException(ep.exception.code, report);
+    WriteException(GetCard32(exdesc + ExcCode), report);
     Append(" at address $", report);
     IntToHex(address, number);  Append(number, report);
     Append(" (not in loaded module code).", report);
@@ -368,7 +366,7 @@ BEGIN
       Append(":", report);
       IntToDecimal(col,  number); Append(number, report);
     ELSE
-      WriteException(ep.exception.code, report);
+      WriteException(GetCard32(exdesc + ExcCode), report);
       Append(" in module ", report);
       AppendMemString(modhdr + Boot.OffModName, report);
       Append(" at code offset $", report);
@@ -384,342 +382,6 @@ BEGIN
   MessageBox("Exception", report);
   Boot.ExitProcess(99)  (* Immediate exit - bypass GC finalisation *)
 RETURN 0 END ExceptionHandler;
-
-
-
-(* -------------------------------------------------------------------------- *)
-(* --------------------------- Memory allocation ---------------------------- *)
-(* -------------------------------------------------------------------------- *)
-
-PROCEDURE Align(a: INTEGER;  align: INTEGER): INTEGER;
-VAR result: INTEGER;
-BEGIN
-  IF    a > 0 THEN result := (a + align - 1) DIV align * align
-  ELSIF a < 0 THEN result :=        a        DIV align * align
-  END
-RETURN result END Align;
-
-
-PROCEDURE InstallHeapTraceHandler*(tracer: HeapTraceHandler);
-BEGIN HeapTracer := tracer END InstallHeapTraceHandler;
-
-
-PROCEDURE InitHeap;
-CONST MEM_RESERVE = 2000H;  MEM_COMMIT = 1000H;  PAGE_READWRITE = 4;
-VAR i, p: INTEGER;
-BEGIN
-  (* Reserve address space for later use as heap space *)
-  HeapMax  := HeapReserve;
-  HeapBase := VirtualAlloc(0, HeapMax, MEM_RESERVE, PAGE_READWRITE);
-  ASSERT(HeapBase # 0);
-
-  HeapSize := HeapCommit;
-  HeapBase := VirtualAlloc(HeapBase, HeapSize, MEM_COMMIT, PAGE_READWRITE);
-  ASSERT(HeapBase # 0);
-
-  FOR i := 0 TO LEN(FreeList)-1 DO FreeList[i] := 0 END;
-
-  p             := HeapBase;
-  LargeFreeList := HeapBase;
-  Allocated     := 0;
-
-  SYSTEM.PUT(p,    HeapSize);
-  SYSTEM.PUT(p+8,  -1);
-  SYSTEM.PUT(p+16, 0);
-
-  MarkedList := MarkedListSentinel;
-END InitHeap;
-
-PROCEDURE ExtendHeap;
-CONST MEM_COMMIT = 1000H;  PAGE_READWRITE = 4;
-VAR p, mark, size, prev, p2: INTEGER;
-BEGIN
-  p := VirtualAlloc(HeapBase + HeapSize, HeapSize, MEM_COMMIT, PAGE_READWRITE);
-  ASSERT(HeapSize < HeapMax);  ASSERT(p # 0);
-  SYSTEM.PUT(p, HeapSize);  SYSTEM.PUT(p+8, -1);  SYSTEM.PUT(p+16, 0);
-  IF LargeFreeList = 0 THEN
-    LargeFreeList := p
-  ELSE
-    prev := LargeFreeList;  SYSTEM.GET(LargeFreeList+16, p2);
-    WHILE p2 # 0 DO prev := p2;  SYSTEM.GET(p2+16, p2) END;
-    SYSTEM.PUT(prev+16, p)
-  END;
-  HeapSize := HeapSize * 2
-END ExtendHeap;
-
-
-PROCEDURE GetLargeBlock(need: INTEGER): INTEGER;
-  (* need is multiple of 512 *)
-VAR p, q0, q1, q2, size: INTEGER;  done: BOOLEAN;
-BEGIN q0 := 0;  q1 := LargeFreeList;  done := FALSE;
-  WHILE ~done & (q1 # 0) DO
-    SYSTEM.GET(q1, size);  SYSTEM.GET(q1+16, q2);
-    IF    size < need THEN (* no fit *) q0 := q1;  q1 := q2
-    ELSIF size = need THEN (* extract -> p *)
-      done := TRUE;  p := q1;
-      IF q0 # 0 THEN SYSTEM.PUT(q0 + 16, q2) ELSE LargeFreeList := q2 END
-    ELSE (* reduce size *)
-      done := TRUE;  p := q1;  q1 := q1 + need;
-      SYSTEM.PUT(q1,     size-need);
-      SYSTEM.PUT(q1 + 8,  -1);
-      SYSTEM.PUT(q1 + 16, q2);
-      IF q0 # 0 THEN SYSTEM.PUT(q0 + 16, q1) ELSE LargeFreeList := q1 END
-    END
-  END;
-  IF ~done THEN
-    IF ~JustCollected THEN Collect0 ELSE ExtendHeap;  JustCollected := FALSE END;
-    p := GetLargeBlock(need)
-  END;
-RETURN p END GetLargeBlock;
-
-
-PROCEDURE GetBlock256(): INTEGER;
-VAR p, q: INTEGER;
-BEGIN
-  IF FreeList[3] # 0 THEN p := FreeList[3];  SYSTEM.GET(FreeList[3]+16, FreeList[3])
-  ELSE q := GetLargeBlock(512);  SYSTEM.PUT(q+256, 256);  SYSTEM.PUT(q+(256+8), -1);
-    SYSTEM.PUT(q+(256+16), 0);  FreeList[3] := q + 256;  p := q
-  END;
-RETURN p END GetBlock256;
-
-
-PROCEDURE GetBlock128(): INTEGER;
-VAR p, q: INTEGER;
-BEGIN
-  IF FreeList[2] # 0 THEN p := FreeList[2];  SYSTEM.GET(FreeList[2]+16, FreeList[2])
-  ELSE q := GetBlock256();  SYSTEM.PUT(q+128, 128);  SYSTEM.PUT(q+(128+8), -1);
-    SYSTEM.PUT(q+(128+16), 0);  FreeList[2] := q + 128;  p := q
-  END;
-RETURN p END GetBlock128;
-
-
-PROCEDURE GetBlock64(): INTEGER;
-VAR p, q: INTEGER;
-BEGIN
-  IF FreeList[1] # 0 THEN p := FreeList[1];  SYSTEM.GET(FreeList[1]+16, FreeList[1])
-  ELSE q := GetBlock128();  SYSTEM.PUT(q+64, 64);  SYSTEM.PUT(q+(64+8), -1);
-    SYSTEM.PUT(q+(64+16), 0);  FreeList[1] := q + 64;  p := q
-  END;
-RETURN p END GetBlock64;
-
-
-PROCEDURE GetBlock32(): INTEGER;
-VAR p, q: INTEGER;
-BEGIN
-  IF FreeList[0] # 0 THEN p := FreeList[0];  SYSTEM.GET(FreeList[0]+16, FreeList[0])
-  ELSE q := GetBlock64();  SYSTEM.PUT(q+32, 32);  SYSTEM.PUT(q+(32+8), -1);
-    SYSTEM.PUT(q+(32+16), 0);  FreeList[0] := q + 32;  p := q
-  END;
-RETURN p END GetBlock32;
-
-
-PROCEDURE RoundUp(VAR size: INTEGER);
-BEGIN
-  IF    size < 32  THEN size := 32
-  ELSIF size < 64  THEN size := 64
-  ELSIF size < 128 THEN size := 128
-  ELSIF size < 256 THEN size := 256
-                   ELSE size := Align(size, 512)
-  END
-END RoundUp;
-
-
-PROCEDURE New*(VAR ptr: INTEGER;  tdAdr: INTEGER);
-VAR p, size, need, lim: INTEGER;
-BEGIN
-  SYSTEM.GET(tdAdr, size);  need := size+16;  RoundUp(need);
-  IF    need = 32  THEN p := GetBlock32()
-  ELSIF need = 64  THEN p := GetBlock64()
-  ELSIF need = 128 THEN p := GetBlock128()
-  ELSIF need = 256 THEN p := GetBlock256()
-                   ELSE p := GetLargeBlock(need)
-  END;
-  SYSTEM.PUT(p,   tdAdr);
-  SYSTEM.PUT(p+8, 0);
-  INC(p, 16);  ptr := p;
-  lim := Align(p + size, 8);
-  WHILE p < lim DO SYSTEM.PUT(p, 0); INC(p, 8) END;
-  INC(Allocated, need);
-END New;
-
-
-(* -------------------------------------------------------------------------- *)
-(* --------------------------- Garbage collection --------------------------- *)
-(* -------------------------------------------------------------------------- *)
-
-(* Mark and Sweep *)
-(* Combined ideas from both N. Wirth's and F. Negele's Garbage Collectors *)
-
-(* Block metadata is 16 bytes for Allocated block *)
-(* First word: Type desc address *)
-(* Second word: Mark word - 0 is not marked - 1 is marked - otherwise *)
-(*              pointer to the next element in marked list            *)
-
-(* For free block is 32 bytes *)
-(* First word: Size *)
-(* Second word: Mark = -1 *)
-(* Third word: Next element in free list *)
-(* Fourth word: Unused *)
-
-PROCEDURE Mark(blk: INTEGER);
-VAR mark: INTEGER;
-BEGIN
-  ASSERT(blk # 0);
-  SYSTEM.GET(blk+8, mark);
-  IF mark # 0 THEN (* already marked *)
-  ELSE SYSTEM.PUT(blk+8, MarkedList);  MarkedList := blk
-  END
-END Mark;
-
-PROCEDURE TraceMarked;
-VAR list, tdAdr, off, ptr, next: INTEGER;
-BEGIN list := MarkedList;  MarkedList := MarkedListSentinel;
-  WHILE list # MarkedListSentinel DO
-    SYSTEM.GET(list, tdAdr);  INC(tdAdr, 64);  SYSTEM.GET(tdAdr, off);
-    WHILE off # -1 DO
-      SYSTEM.GET(list + 16 + off, ptr);
-      DEC(ptr, 16);
-      IF ptr >= HeapBase THEN Mark(ptr) END;
-      INC(tdAdr, 8);  SYSTEM.GET(tdAdr, off)
-    END;
-    SYSTEM.GET(list+8, next);  SYSTEM.PUT(list+8, 1);  list := next
-  END
-END TraceMarked;
-
-PROCEDURE Scan;
-VAR p, q, mark, tag, size, heapLimit: INTEGER;
-BEGIN
-  p := HeapBase;  heapLimit := HeapBase + HeapSize;
-  REPEAT SYSTEM.GET(p+8, mark);  q := p;
-    WHILE mark = 0 DO
-      SYSTEM.GET(p, tag);  SYSTEM.GET(tag, size);
-      INC(size, 16);  RoundUp(size);  INC(p, size);
-      IF p < heapLimit THEN SYSTEM.GET(p+8, mark) ELSE mark := -1 END
-    END;
-    size := p - q;  DEC(Allocated, size);  (* size of free block *)
-    IF size > 0 THEN
-      IF size MOD 64 # 0 THEN
-        SYSTEM.PUT(q, 32);  SYSTEM.PUT(q+8, -1);
-        SYSTEM.PUT(q+16, FreeList[0]);  FreeList[0] := q;
-        INC(q, 32);  DEC(size, 32)
-      END;
-      IF size MOD 128 # 0 THEN
-        SYSTEM.PUT(q, 64);  SYSTEM.PUT(q+8, -1);
-        SYSTEM.PUT(q+16, FreeList[1]);  FreeList[1] := q;
-        INC(q, 64);  DEC(size, 64)
-      END;
-      IF size MOD 256 # 0 THEN
-        SYSTEM.PUT(q, 128);  SYSTEM.PUT(q+8, -1);
-        SYSTEM.PUT(q+16, FreeList[2]);  FreeList[2] := q;
-        INC(q, 128);  DEC(size, 128)
-      END;
-      IF size MOD 512 # 0 THEN
-        SYSTEM.PUT(q, 256);  SYSTEM.PUT(q+8, -1);
-        SYSTEM.PUT(q+16, FreeList[3]);  FreeList[3] := q;
-        INC(q, 256);  DEC(size, 256)
-      END;
-      IF size > 0 THEN
-        SYSTEM.PUT(q, size);  SYSTEM.PUT(q+8, -1);
-        SYSTEM.PUT(q+16, LargeFreeList);  LargeFreeList := q;  INC(q, size)
-      END
-    END;
-    IF mark > 0 THEN
-      SYSTEM.GET(p, tag);  SYSTEM.GET(tag, size);
-      SYSTEM.PUT(p+8, 0);  INC(size, 16);  RoundUp(size);  INC(p, size)
-    ELSIF p < heapLimit THEN (*free*) SYSTEM.GET(p, size);  INC(p, size)
-    END
-  UNTIL p >= heapLimit
-END Scan;
-
-
-PROCEDURE Finalise;
-VAR prev, ptr, next: Finalised;  p, mark: INTEGER;
-BEGIN ptr := FinalisedList;
-  WHILE ptr # NIL DO
-    p := SYSTEM.VAL(INTEGER, ptr) - 16;  SYSTEM.GET(p+8, mark);
-    IF mark = 0 (* released *) THEN
-      next := ptr.next;
-      IF prev # NIL THEN prev.next := next
-      ELSE FinalisedList := SYSTEM.VAL(Finalised, next)
-      END;
-      ptr.Finalise(ptr);  ptr := SYSTEM.VAL(Finalised, next)
-    ELSE prev := ptr;  ptr := SYSTEM.VAL(Finalised, ptr.next)
-    END
-  END
-END Finalise;
-
-
-PROCEDURE Collect*;
-VAR
-  (*module:  Boot.ModuleHeader;*)
-  modhdr:  INTEGER;
-  modBase: INTEGER;  (* modBase is both the start of the initialised .data    *)
-                     (* section and also the limit of the uninitialised (.bss)*)
-                     (* data section. Global VARs are Allocated backward from *)
-                     (* modBase.                                              *)
-  stkDesc, stkBase, ptrTable, off, ptr: INTEGER;
-BEGIN
-  IF HeapTracer # NIL THEN HeapTracer(0) END;  (* Trace collect call *)
-
-  (*
-  module := SYSTEM.VAL(Boot.ModuleHeader, Boot.BootHeader);
-  WHILE module # NIL DO
-    modBase := module.base;
-  *)
-
-  modhdr := Boot.BootHeader;
-  WHILE modhdr # 0 DO
-    SYSTEM.GET(modhdr + Boot.OffModBase, modBase);
-
-
-    (* Loop through list of traced data items.                                *)
-
-    (* At modBase+112 is ptrTable, a list of pointer offsets relative to      *)
-    (* modBase. Each non-nil pointer addresses a dynamically Allocated block  *)
-    (* which is preceeded by two 64 bit integers of block metadata, being the *)
-    (* type descriptor address and the mark word.                             *)
-    SYSTEM.GET(modBase + 112, ptrTable);
-    SYSTEM.GET(ptrTable, off);
-    WHILE off # -1 DO
-      SYSTEM.GET(modBase + off, ptr);
-      DEC(ptr, 16);    (* Address block metadata (or -16 if ptr was NIL) *)
-      IF ptr >= HeapBase THEN Mark(ptr) END;
-      INC(ptrTable, 8);  SYSTEM.GET(ptrTable, off)
-    END;
-
-    (* At modBase+104 is stkDesc, a linked list of stack descriptions:        *)
-    (*   64/stack base                                                        *)
-    (*   64/offset relative to stack base of table of pointers                *)
-    (*   64/next stack base                                                   *)
-    (* Each pointer table works much as the pointer table for the module base *)
-    (* except that the pointers are offsets relative to the current stack base*)
-    SYSTEM.GET(modBase + 104, stkDesc);
-    WHILE stkDesc # 0 DO SYSTEM.GET(stkDesc, stkBase);
-      SYSTEM.GET(stkDesc + 8, ptrTable);  SYSTEM.GET(ptrTable, off);
-      WHILE off # -1 DO
-        SYSTEM.GET(stkBase + off, ptr);  DEC(ptr, 16);
-        IF ptr >= HeapBase THEN Mark(ptr) END;
-        INC(ptrTable, 8);  SYSTEM.GET(ptrTable, off)
-      END;
-      SYSTEM.GET(stkDesc + 16, stkDesc)
-    END;
-    (*module := module.next*)
-    SYSTEM.GET(modhdr + Boot.OffModNext, modhdr)
-  END;
-
-  WHILE MarkedList # MarkedListSentinel DO TraceMarked END;
-
-  Finalise;
-  Scan;
-  JustCollected := TRUE
-END Collect;
-
-
-PROCEDURE RegisterFinalised*(ptr: Finalised;  finalise: FinaliseProc);
-BEGIN
-  ASSERT(finalise # NIL);  ptr.Finalise := finalise;
-  ptr.next := SYSTEM.VAL(Finalised, FinalisedList);  FinalisedList := ptr
-END RegisterFinalised;
 
 
 (* -------------------------------------------------------------------------- *)
@@ -760,7 +422,7 @@ RETURN Ticks() DIV 10000 END Time;
 (* -------------------------------------------------------------------------- *)
 
 PROCEDURE Halt*(exitCode: INTEGER);
-BEGIN  Finalise;  Boot.ExitProcess(exitCode) END Halt;
+BEGIN Heap.Finalise;  Boot.ExitProcess(exitCode) END Halt;
 
 
 (* -------------------------------------------------------------------------- *)
@@ -814,9 +476,8 @@ BEGIN
   AddVectoredExceptionHandler(1, ExceptionHandler);
 
   (* Initialise Heap and GC *)
-  Collect0 := Collect;
-  InitHeap;
-  SYSTEM.PUT(SYSTEM.ADR(Boot.New), New);
+  Heap.InitHeap(VirtualAlloc);
+  SYSTEM.PUT(SYSTEM.ADR(Boot.New), Heap.New);
 
   (* Initialise command line access *)
   CommandAdr := GetCommandLineW();

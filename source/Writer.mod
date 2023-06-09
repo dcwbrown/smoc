@@ -2,7 +2,7 @@ MODULE Writer;  (* Character output convenience functions *)
 
 IMPORT SYSTEM, K := Kernel;
 
-CONST crlf = $ 0D 0A $;
+VAR crlf: ARRAY 2 OF CHAR;
 
 PROCEDURE write(bytes: ARRAY OF BYTE);
 BEGIN K.WriteLog(SYSTEM.ADR(bytes), LEN(bytes)) END write;
@@ -122,4 +122,5 @@ BEGIN
   END
 END DumpMem;
 
-BEGIN END Writer.
+BEGIN crlf := $0D 0A$;
+END Writer.

@@ -149,12 +149,13 @@ BEGIN f := Files.Old(name);
 END Open;
 
 PROCEDURE Store*(VAR W: Files.Rider; T: Text);
-VAR p, q: Piece;
-    R: Files.Rider;
-    offset, rlen, pos: INTEGER;
-    N, n: INTEGER;
-    ch: CHAR;
-    Dict: ARRAY 32, 32 OF CHAR;
+VAR p, q:      Piece;
+    R:         Files.Rider;
+    offset:    INTEGER;
+    rlen, pos: INTEGER;
+    N, n:      INTEGER;
+    ch:        CHAR;
+    Dict:      ARRAY 32, 64 OF CHAR;
 BEGIN pos := Files.Pos(W); Files.WriteInt(W, 0); (*place holder*)
   N := 1; p := T.trailer.next;
   WHILE p # T.trailer DO

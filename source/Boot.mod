@@ -150,8 +150,8 @@ BEGIN
 
   baseadr := GetInt(headadr + OffModBase);
 
-  SYSTEM.PUT(baseadr + OffExitProcess, SYSTEM.VAL(INTEGER, ExitProcess));
-  SYSTEM.PUT(baseadr + OffNew,         SYSTEM.VAL(INTEGER, New));
+  SYSTEM.PUT(baseadr + OffExitProcess, GetInt(SYSTEM.ADR(ExitProcess)));
+  SYSTEM.PUT(baseadr + OffNew,         GetInt(SYSTEM.ADR(New)));
 
   IF GetInt(baseadr + OffModulePtrTable) # 0 THEN
     SYSTEM.PUT(baseadr + OffModulePtrTable, GetInt(baseadr + OffModulePtrTable) + baseadr);
