@@ -144,7 +144,7 @@ VAR
   refno, preTypeNo, expno*, modno*: INTEGER;
 
   strBufSize*:  INTEGER;
-  strBuf*:      ARRAY 1000H OF CHAR;
+  strBuf*:      ARRAY 8192 OF CHAR;
 
   SymFilename:  ARRAY 1024 OF CHAR;
   SrcPath*:     ARRAY 1024 OF CHAR;

@@ -885,11 +885,6 @@ BEGIN type := ORB.intType; (*sync*)
     ORS.Get(sym); RecordType(type, expo); Check(ORS.end, "no END")
   ELSIF sym = ORS.pointer THEN
     ORS.Get(sym);
-    (* KLUDGE DCWB to ignore [untraced] * )
-      IF sym = ORS.lbrak THEN
-        ORS.Get(sym);  Check(ORS.ident, "no ident");  Check(ORS.rbrak, "no ]")
-      END;
-    ( * KLUDGE DCWB to ignore [untraced] *)
     Check(ORS.to, "no TO");
     NEW(type);  type.form := ORB.Pointer; type.size := ORG.WordSize; type.base := ORB.intType;
     IF sym = ORS.ident THEN
@@ -1027,7 +1022,7 @@ VAR proc, redef, obj: ORB.Object;
       REPEAT ProcedureDecl; Check(ORS.semicolon, "no ;") UNTIL sym # ORS.procedure;
       ORG.FixOne(L); proc.val := ORG.Here() * 4; proc.type.dsc := ORB.topScope.next
     END;
-    ORG.Enter(parblksize, locblksize, int);
+    ORG.Enter(parblksize, locblksize, int, proc);
     IF sym = ORS.begin THEN ORS.Get(sym); StatSequence END;
     IF sym = ORS.return THEN
       ORS.Get(sym); expression(x);

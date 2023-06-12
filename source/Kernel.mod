@@ -213,7 +213,7 @@ VAR i, j: INTEGER;  ch: CHAR;
 BEGIN
   IF n = 8000000000000000H THEN s := "-9223372036854775808"
   ELSE i := 0;
-    IF n < 0 THEN s[0] := "-";  i := 1; END;
+    IF n < 0 THEN s[0] := "-";  i := 1;  n := -n END;
     j := i;
     REPEAT s[j] := CHR(n MOD 10 + 48);  INC(j);  n := n DIV 10 UNTIL n = 0;
     s[j] := 0X;  DEC(j);

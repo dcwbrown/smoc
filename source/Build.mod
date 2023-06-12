@@ -176,7 +176,7 @@ END NotifyError;
 PROCEDURE intSep(i, n: INTEGER);
 BEGIN
    IF n < 0 THEN n := 0 END;
-   IF i < 1000 THEN w.in(i, n)
+   IF i < 1000 THEN w.in(i, -n)
    ELSE
       intSep(i DIV 1000, n-4);  w.c(",");
       i := i MOD 1000;
