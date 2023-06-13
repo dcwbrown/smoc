@@ -348,16 +348,16 @@ BEGIN
       END
     END;
     IF (adr = address) & (trap <= 10) THEN
-      CASE trap OF
-      |  1: report := "Array index out of range"
-      |  2: report := "Type trap"
-      |  3: report := "String size error"
-      |  4: report := "NIL reference"
-      |  5: report := "NIL procedure call"
-      |  6: report := "Divide by zero"
-      |  7: report := "Assertion FALSE"
-      |  9: report := "SYSTEM.GET access violation"
-      | 10: report := "SYSTEM.PUT access violation"
+      IF    trap =  1 THEN report := "Array index out of range"
+      ELSIF trap =  2 THEN report := "Type trap"
+      ELSIF trap =  3 THEN report := "String size error"
+      ELSIF trap =  4 THEN report := "NIL reference"
+      ELSIF trap =  5 THEN report := "NIL procedure call"
+      ELSIF trap =  6 THEN report := "Divide by zero"
+      ELSIF trap =  7 THEN report := "Assertion FALSE"
+      ELSIF trap =  9 THEN report := "SYSTEM.GET access violation"
+      ELSIF trap = 10 THEN report := "SYSTEM.PUT access violation"
+                      ELSE report := "Undefined trap"
       END;
       Append(" in module ", report);
       AppendMemString(modhdr + Boot.OffModName, report);
