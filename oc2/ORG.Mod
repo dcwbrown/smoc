@@ -52,6 +52,7 @@ TYPE
 
   LabelRange* = RECORD low*, high*, label*: INTEGER END;
 
+
 (* ----------- Item forms and meaning of fields: ----------- *)
 (*                                                           *)
 (*      mode   r      a       b                              *)
@@ -85,6 +86,7 @@ VAR
   code:   ARRAY maxCode OF INTEGER;
   str:    ARRAY maxStrx OF CHAR;     (* strings *)
   td:     ARRAY maxTD   OF INTEGER;  (* type descriptors *)
+
 
 (* -------------------------- instruction listing --------------------------- *)
 
@@ -290,6 +292,7 @@ PROCEDURE SetCC(VAR x: Item; n: INTEGER);
 BEGIN x.mode := Cond; x.a := 0; x.b := 0; x.r := n
 END SetCC;
 
+
 (* -------------------------------------------------------------------------- *)
 
 PROCEDURE Trap(cond, num: INTEGER);
@@ -299,6 +302,7 @@ END Trap;
 PROCEDURE NilCheck;
 BEGIN IF check THEN Trap(EQ, 4) END
 END NilCheck;
+
 
 (* ----- handling of forward reference, fixups of instruction operands ------ *)
 
@@ -361,6 +365,7 @@ BEGIN (* merge chains of the two operands of AND and OR *)
   RETURN L1
 END merged;
 
+
 (* ------------ loading of operands and addresses into registers ------------ *)
 
 PROCEDURE load(VAR x: Item);
@@ -383,7 +388,7 @@ BEGIN
       IF x.r > 0 THEN (* local *)
         Put2(op, RH, SP, x.a + frame, "load local var")
       ELSE
-        PutPair(x.r, op, RH, RH, x.a, 2, "load imported var")
+        PutPair(x.r, op, RH, RH, x.a, 2, "load global or imported var")
       END;
       x.r := RH; incR
     ELSIF x.mode = ORB.Par THEN Put2(Ldr, RH, SP, x.a + frame, "load parameter");
@@ -481,6 +486,7 @@ BEGIN x.obj := y; x.mode := y.class; x.type := y.type;
   ELSE x.r := y.lev
   END
 END MakeItem;
+
 
 (* ---------- Code generation for Selectors, Variables, Constants ----------- *)
 
@@ -773,6 +779,7 @@ BEGIN
   END
 END DivOp;
 
+
 (* ------------------- Code generation for REAL operators ------------------- *)
 
 PROCEDURE RealOp*(op: INTEGER; VAR x, y: Item);   (* x := x op y *)
@@ -784,6 +791,7 @@ BEGIN load(x); load(y);
   END;
   DEC(RH); x.r := RH-1
 END RealOp;
+
 
 (* - Code generation for set operators - *)
 
@@ -958,6 +966,7 @@ BEGIN
   Put2(Str, RH, x.r, 0, ""); Put1(Add, x.r, x.r, 4, "");
   Put1(Asr, RH, RH, 24, ""); Put3(BC,  NE,      -6, "");  RH := 0
 END CopyString;
+
 
 (* --------------------- Code generation for parameters --------------------- *)
 
