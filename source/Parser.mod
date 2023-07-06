@@ -1163,10 +1163,8 @@ BEGIN tp := B.intType;
     END;
     B.OpenScope;
     IF sym = S.ident THEN FieldList(tp);
-      WHILE sym = S.semicolon DO GetSym;
-        IF sym = S.ident THEN FieldList(tp);
-        ELSE Mark("no fieldlist, remove ;")
-        END
+      WHILE sym = S.semicolon DO
+        GetSym; IF sym = S.ident THEN FieldList(tp) END
       END
     END;
     tp.fields := B.topScope.first;  B.CloseScope;  CheckSym(S.end)

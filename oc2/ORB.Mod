@@ -22,8 +22,8 @@ CONST
   (* class values *)
   Head*  = 0;
   Const* = 1;
-  Var*   = 2;
-  Par*   = 3;
+  Var*   = 2;  (* VAR variable (or atomic value parameter) *)
+  Par*   = 3;  (* VAR parameter *)
   Fld*   = 4;
   Typ*   = 5;
   SProc* = 6;
@@ -55,11 +55,12 @@ TYPE
   Type*   = POINTER TO TypeDesc;
 
   (* Object classes and the meaning of "val" *)
+  (* (item.a initialised from obj.val)       *)
   (*                                         *)
   (* class    val                            *)
   (* -------------------------------------   *)
   (* Var      address                        *)
-  (* Par      address                        *)
+  (* Par      address (stack relative)       *)
   (* Const    value                          *)
   (* Fld      offset                         *)
   (* Typ      type descriptor (TD) address   *)
@@ -69,8 +70,10 @@ TYPE
 
   ObjDesc*= RECORD
     class*, exno*: BYTE;
-    expo*, rdo*:   BOOLEAN;   (*exported / read-only*)
-    lev*:          INTEGER;
+    expo*, rdo*:   BOOLEAN;   (*exported / read-only                       *)
+    lev*:          INTEGER;   (* >0: local stack frame, lev = proc nesting *)
+                              (*  0: module globals                        *)
+                              (* <0: -imported module num (-1 .. -16)      *)
     next*, dsc*:   Object;
     type*:         Type;
     name*:         ORS.Ident;
@@ -420,19 +423,19 @@ BEGIN NEW(obj); obj.name := name; obj.class := cl; obj.type := type; obj.val := 
 END enter;
 
 BEGIN
-  byteType   := type(Byte,   Int,    1);
-  boolType   := type(Bool,   Bool,   1);
-  charType   := type(Char,   Char,   1);
-  intType    := type(Int,    Int,    4);
-  int16Type  := type(Int16,  Int,    2);
-  int32Type  := type(Int32,  Int,    4);
-  card16Type := type(Card16, Int,    2);
-  card32Type := type(Card32, Int,    4);
-  realType   := type(Real,   Real,   4);
-  setType    := type(Set,    Set,    4);
-  nilType    := type(NilTyp, NilTyp, 4);
-  noType     := type(NoTyp,  NoTyp,  4);
-strType    := type(String, String, 8);
+  byteType   := type(Byte,   Int,     1);
+  boolType   := type(Bool,   Bool,    1);
+  charType   := type(Char,   Char,    1);
+  intType    := type(Int,    Int,     8);
+  int16Type  := type(Int16,  Int,     2);
+  int32Type  := type(Int32,  Int,     4);
+  card16Type := type(Card16, Int,     2);
+  card32Type := type(Card32, Int,     4);
+  realType   := type(Real,   Real,    8);
+  setType    := type(Set,    Set,     8);
+  nilType    := type(NilTyp, NilTyp,  8);
+  noType     := type(NoTyp,  NoTyp,   8);
+  strType    := type(String, String, 16);
 
 (*initialize universe with data types and in-line procedures;
   INTEGER is synonym to INTEGER, LONGREAL to REAL.
@@ -474,8 +477,7 @@ strType    := type(String, String, 8);
   topScope := NIL; OpenScope; topScope.next := system; universe := topScope;
   system   := NIL;  (* initialize "unsafe" pseudo-module SYSTEM*)
 
-  enter("H",      SFunc, intType,    201);  (*functions*)
-  enter("COND",   SFunc, boolType,   191);
+  enter("COND",   SFunc, boolType,   191);  (*functions*)
   enter("SIZE",   SFunc, intType,    181);
   enter("ADR",    SFunc, intType,    171);
   enter("VAL",    SFunc, intType,    162);

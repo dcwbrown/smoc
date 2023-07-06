@@ -265,9 +265,11 @@ END Resize;
 PROCEDURE ToSRGB8(lin: INTEGER): BYTE;
 VAR result: BYTE;
 BEGIN
-  IF    lin <  10 THEN result := (lin * 13 + 10) DIV 16
-  ELSIF lin < 512 THEN result := (SRGB.lookup[lin] + 8) DIV 16
-  ELSE                 result := 21 + ((9718 * SRGB.lookup[lin DIV 8] - 35000) DIV 65536);
+  IF    lin <= 0    THEN result := 0
+  ELSIF lin >= 4095 THEN result := 255
+  ELSIF lin <  10   THEN result := (lin * 13 + 10) DIV 16
+  ELSIF lin <  512  THEN result := (SRGB.lookup[lin] + 8) DIV 16
+                    ELSE result := 21 + ((9718 * SRGB.lookup[lin DIV 8] - 35000) DIV 65536)
   END
 RETURN result END ToSRGB8;
 
@@ -288,11 +290,6 @@ BEGIN
   UNTIL b = 0
 END TestSRGB;
 
-
-(*
-PROCEDURE AlphaMultiplyChannel(p, a: BYTE): INTEGER;
-RETURN (Lin12.lookup[p] * a) DIV 256 END AlphaMultiplyChannel;
-*)
 
 
 PROCEDURE AlphaMultiplyPixel(pixel: INTEGER; alpha: BYTE): INTEGER;

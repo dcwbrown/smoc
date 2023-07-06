@@ -43,15 +43,15 @@ VAR
   str*:         ARRAY stringBufSize OF CHAR;
   errcnt*:      INTEGER;
 
-  ch:      CHAR;      (* Last character read *)
-  errpos: INTEGER;
+  ch:       CHAR;      (* Last character read *)
+  errpos:   INTEGER;
   linebeg*: INTEGER;  (* Position at start of current line *)
   linenum*: INTEGER;  (* Line number of current line *)
-  R:      Texts.Reader;
-  W:      Texts.Writer;
-  k:      INTEGER;
-  KWX:    ARRAY 10 OF INTEGER;
-  keyTab: ARRAY NKW OF RECORD sym: INTEGER; id: ARRAY 12 OF CHAR END;
+  R:        Texts.Reader;
+  W:        Texts.Writer;
+  k:        INTEGER;
+  KWX:      ARRAY 10 OF INTEGER;
+  keyTab:   ARRAY NKW OF RECORD sym: INTEGER; id: ARRAY 12 OF CHAR END;
 
 PROCEDURE CopyId*(VAR ident: Ident);
 BEGIN ident := id
