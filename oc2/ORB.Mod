@@ -34,20 +34,21 @@ CONST
   Byte*    = 1;
   Bool*    = 2;
   Char*    = 3;
-  Int*     = 4;
+  Int8*    = 4;
   Int16*   = 5;
   Int32*   = 6;
-  Card16*  = 7;
-  Card32*  = 8;
-  Real*    = 9;
-  Set*     = 10;
-  Pointer* = 11;
-  NilTyp*  = 12;
-  NoTyp*   = 13;
-  Proc*    = 14;
-  String*  = 15;
-  Array*   = 16;
-  Record*  = 17;
+  Int*     = 7;
+  Card16*  = 8;
+  Card32*  = 9;
+  Real*    = 10;
+  Set*     = 11;
+  Pointer* = 12;
+  NilTyp*  = 13;
+  NoTyp*   = 14;
+  Proc*    = 15;
+  String*  = 16;
+  Array*   = 17;
+  Record*  = 18;
 
 TYPE
   Object* = POINTER TO ObjDesc;
@@ -111,7 +112,9 @@ VAR
   intType*,  realType*, setType*:  Type;
   nilType*,  noType*,   strType*:  Type;
 
-  card16Type, card32Type, int16Type, int32Type: Type;
+  int8Type:               Type;
+  int16Type,  int32Type:  Type;
+  card16Type, card32Type: Type;
 
   nofmod, Ref: INTEGER;
 
@@ -426,11 +429,12 @@ BEGIN
   byteType   := type(Byte,   Int,     1);
   boolType   := type(Bool,   Bool,    1);
   charType   := type(Char,   Char,    1);
-  intType    := type(Int,    Int,     8);
+  int8Type   := type(Int8,   Int,     1);
   int16Type  := type(Int16,  Int,     2);
-  int32Type  := type(Int32,  Int,     4);
   card16Type := type(Card16, Int,     2);
+  int32Type  := type(Int32,  Int,     4);
   card32Type := type(Card32, Int,     4);
+  intType    := type(Int,    Int,     8);
   realType   := type(Real,   Real,    8);
   setType    := type(Set,    Set,     8);
   nilType    := type(NilTyp, NilTyp,  8);
@@ -472,7 +476,6 @@ BEGIN
   enter("LONGREAL", Typ,   realType, 0);
   enter("REAL",     Typ,   realType, 0);
   enter("INTEGER",  Typ,   intType,  0);
-  enter("INTEGER",  Typ,   intType,  0);
 
   topScope := NIL; OpenScope; topScope.next := system; universe := topScope;
   system   := NIL;  (* initialize "unsafe" pseudo-module SYSTEM*)
@@ -488,6 +491,7 @@ BEGIN
   enter("COPY",   SProc, noType,     123);
   enter("PUT",    SProc, noType,     112);
   enter("GET",    SProc, noType,     102);
+  enter("INT8",   Typ,   int8Type,   0);    (*types*)
   enter("INT16",  Typ,   int16Type,  0);    (*types*)
   enter("INT32",  Typ,   int32Type,  0);
   enter("CARD16", Typ,   card16Type, 0);

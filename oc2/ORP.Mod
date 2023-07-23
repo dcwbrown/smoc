@@ -66,20 +66,23 @@ END CheckSet;
 
 PROCEDURE CheckSetVal(VAR x: ORG.Item);
 BEGIN
-  IF x.type.form # ORB.Int THEN ORS.Mark("not Int");  x.type := ORB.setType
-  ELSIF x.mode = ORB.Const THEN
-    IF (x.a < 0) OR (x.a >= 32) THEN ORS.Mark("invalid set") END
+  IF x.type.form # ORB.Int THEN ORS.Mark("not Int");
+    x.type := ORB.setType
+  ELSIF x.class = ORB.Const THEN
+    IF (x.value < 0) OR (x.value >= 64) THEN ORS.Mark("invalid set") END
   END
 END CheckSetVal;
 
 PROCEDURE CheckConst(VAR x: ORG.Item);
 BEGIN
-  IF x.mode # ORB.Const THEN ORS.Mark("not a constant");  x.mode := ORB.Const END
+  IF x.class # ORB.Const THEN
+    ORS.Mark("not a constant");  x.class := ORB.Const;  x.base := ORG.Immediate
+  END
 END CheckConst;
 
 PROCEDURE CheckReadOnly(VAR x: ORG.Item);
 BEGIN
-  IF x.rdo THEN ORS.Mark("read-only") END
+  IF x.readonly THEN ORS.Mark("read-only") END
 END CheckReadOnly;
 
 PROCEDURE CheckExport(VAR expo: BOOLEAN);
@@ -102,7 +105,7 @@ PROCEDURE TypeTest(VAR x: ORG.Item;  T: ORB.Type;  guard: BOOLEAN);
 VAR xt: ORB.Type;
 BEGIN xt := x.type;
   IF (T.form = xt.form )
-   & ((T.form = ORB.Pointer)  OR (T.form = ORB.Record) & (x.mode = ORB.Par)) THEN
+   & ((T.form = ORB.Pointer)  OR (T.form = ORB.Record) & (x.class = ORB.Par)) THEN
     WHILE (xt # T) & (xt # NIL) DO xt := xt.base END;
     IF xt # T THEN xt := x.type;
       IF xt.form = ORB.Pointer THEN
@@ -111,7 +114,7 @@ BEGIN xt := x.type;
           x.type := T
         ELSE ORS.Mark("not an extension")
         END
-      ELSIF (xt.form = ORB.Record) & (x.mode = ORB.Par) THEN
+      ELSIF (xt.form = ORB.Record) & (x.class = ORB.Par) THEN
         IF IsExtension(xt, T) THEN  ORG.TypeTest(x, T, TRUE, guard);  x.type := T
         ELSE ORS.Mark("not an extension")
         END
@@ -217,7 +220,7 @@ BEGIN expression(x);
     ELSIF (x.type.form = ORB.String) & varpar & par.rdo & (par.type.form = ORB.Array) &
         (par.type.base.form = ORB.Char) & (par.type.len < 0) THEN ORG.StringParam(x)
     (*ELSIF ~varpar & (par.type.form = ORB.Int) & (x.type.form = ORB.Int) THEN ORG.ValueParam(x)  (*BYTE*)*)
-    ELSIF (x.type.form = ORB.String) & (x.b = 2)
+    ELSIF (x.type.form = ORB.String) & (x.length = 2)
         & (par.class = ORB.Var) & (par.type.form = ORB.Char) THEN
       ORG.StrToChar(x);  ORG.ValueParam(x)
     ELSIF (par.type.form = ORB.Array) & (par.type.base = ORB.byteType) (* &
@@ -260,7 +263,7 @@ BEGIN Check(ORS.lparen, "no (");
     ELSIF fct = 3 THEN (*FLT*) CheckInt(x);  ORG.Float(x)
     ELSIF fct = 4 THEN (*ORD*)
       IF x.type.form <= ORB.Proc THEN ORG.Ord(x)
-      ELSIF (x.type.form = ORB.String) & (x.b = 2) THEN ORG.StrToChar(x)
+      ELSIF (x.type.form = ORB.String) & (x.length = 2) THEN ORG.StrToChar(x)
       ELSE ORS.Mark("bad type")
       END
     ELSIF fct = 5 THEN (*CHR*) CheckInt(x);  ORG.Ord(x)
@@ -272,17 +275,17 @@ BEGIN Check(ORS.lparen, "no (");
     ELSIF fct = 12 THEN (*SBC*) ORG.SBC(x, y)
     ELSIF fct = 13 THEN (*UML*) ORG.UML(x, y)
     ELSIF fct = 14 THEN (*BIT*) CheckInt(x);  CheckInt(y);  ORG.Bit(x, y)
-    ELSIF fct = 15 THEN (*REG*) CheckConst(x);  CheckInt(x);  ORG.Register(x)
+    ELSIF fct = 15 THEN (*REG*) CheckConst(x);  CheckInt(x);  ORG.REG(x)
     ELSIF fct = 16 THEN (*VAL*)
-      IF (x.mode= ORB.Typ) & (x.type.size <= y.type.size) THEN restyp := x.type;  x := y
+      IF (x.class= ORB.Typ) & (x.type.size <= y.type.size) THEN restyp := x.type;  x := y
       ELSE ORS.Mark("casting not allowed")
       END
     ELSIF fct = 17 THEN (*ADR*) ORG.Adr(x)
     ELSIF fct = 18 THEN (*SIZE*)
-      IF x.mode = ORB.Typ THEN ORG.MakeConstItem(x, ORB.intType, x.type.size)
+      IF x.class = ORB.Typ THEN ORG.MakeConstItem(x, ORB.intType, x.type.size)
       ELSE ORS.Mark("must be a type")
       END
-    ELSIF fct = 19 THEN (*COND*) CheckConst(x);  CheckInt(x);  ORG.Condition(x)
+    ELSIF fct = 19 THEN (*COND*) CheckConst(x);  CheckInt(x);  ORG.COND(x)
     END;
     x.type := restyp
   ELSE ORS.Mark("wrong nof params")
@@ -412,9 +415,9 @@ BEGIN SimpleExpression(x);
           ((yf = ORB.String) OR (yf = ORB.Array) & (y.type.base.form = ORB.Char))
         OR (yf = ORB.Array) & (y.type.base.form = ORB.Char) & (xf = ORB.String) THEN
       ORG.StringRelation(rel, x, y)
-    ELSIF (xf = ORB.Char) & (yf = ORB.String) & (y.b = 2) THEN
+    ELSIF (xf = ORB.Char) & (yf = ORB.String) & (y.length = 2) THEN
       ORG.StrToChar(y);  ORG.IntRelation(rel, x, y)
-    ELSIF (yf = ORB.Char) & (xf = ORB.String) & (x.b = 2) THEN
+    ELSIF (yf = ORB.Char) & (xf = ORB.String) & (x.length = 2) THEN
       ORG.StrToChar(x);  ORG.IntRelation(rel, x, y)
     ELSIF (xf = ORB.Int) & (yf = ORB.Int) THEN ORG.IntRelation(rel,  x, y)  (*BYTE*)
     ELSE ORS.Mark("illegal comparison")
@@ -500,7 +503,7 @@ BEGIN (* StatSequence *)
     END;
     IF sym = ORS.ident THEN
       qualident(obj);  ORG.MakeItem(x, obj, level);
-      IF x.mode = ORB.SProc THEN StandProc(obj.val)
+      IF x.class = ORB.SProc THEN StandProc(obj.val)
       ELSE selector(x);
         IF sym = ORS.becomes THEN (*assignment*)
           ORS.Get(sym);  CheckReadOnly(x);  expression(y);
@@ -513,7 +516,7 @@ BEGIN (* StatSequence *)
           ELSIF (x.type.form = ORB.Array) & (x.type.base.form = ORB.Char) & (y.type.form = ORB.String) THEN
             ORG.CopyString(x, y)
           ELSIF (x.type.form = ORB.Int) & (y.type.form = ORB.Int) THEN ORG.Store(x, y)  (*BYTE*)
-          ELSIF (x.type.form = ORB.Char) & (y.type.form = ORB.String) & (y.b = 2) THEN
+          ELSIF (x.type.form = ORB.Char) & (y.type.form = ORB.String) & (y.length = 2) THEN
             ORG.StrToChar(y);  ORG.Store(x, y)
           ELSE ORS.Mark("illegal assignment")
           END
@@ -527,7 +530,7 @@ BEGIN (* StatSequence *)
         ELSIF x.type.form = ORB.Proc THEN (*procedure call without parameters*)
           IF x.type.nofpar > 0 THEN ORS.Mark("missing parameters") END;
           IF x.type.base.form = ORB.NoTyp THEN ORG.PrepCall(x, rx);  ORG.Call(x, rx) ELSE ORS.Mark("not a procedure") END
-        ELSIF x.mode = ORB.Typ THEN ORS.Mark("illegal assignment")
+        ELSIF x.class = ORB.Typ THEN ORS.Mark("illegal assignment")
         ELSE ORS.Mark("not a procedure")
         END
       END
@@ -536,11 +539,11 @@ BEGIN (* StatSequence *)
       Check(ORS.then, "no THEN");
       StatSequence;  L0 := 0;
       WHILE sym = ORS.elsif DO
-        ORS.Get(sym);  ORG.FJump(L0);  ORG.Fixup(x);  expression(x);  CheckBool(x);
+        ORS.Get(sym);  ORG.FJump(L0);  ORG.FixLink(x.value);  expression(x);  CheckBool(x);
         ORG.CFJump(x);  Check(ORS.then, "no THEN");  StatSequence
       END;
-      IF sym = ORS.else THEN ORS.Get(sym);  ORG.FJump(L0);  ORG.Fixup(x);  StatSequence
-      ELSE ORG.Fixup(x)
+      IF sym = ORS.else THEN ORS.Get(sym);  ORG.FJump(L0);  ORG.FixLink(x.value);  StatSequence
+      ELSE ORG.FixLink(x.value)
       END;
       ORG.FixLink(L0);
       Check(ORS.end, "no END")
@@ -548,10 +551,10 @@ BEGIN (* StatSequence *)
       ORS.Get(sym);  L0 := ORG.Here();  expression(x);  CheckBool(x);  ORG.CFJump(x);
       Check(ORS.do, "no DO");  StatSequence;  ORG.BJump(L0);
       WHILE sym = ORS.elsif DO
-        ORS.Get(sym);  ORG.Fixup(x);  expression(x);  CheckBool(x);  ORG.CFJump(x);
+        ORS.Get(sym);  ORG.FixLink(x.value);  expression(x);  CheckBool(x);  ORG.CFJump(x);
         Check(ORS.do, "no DO");  StatSequence;  ORG.BJump(L0)
       END;
-      ORG.Fixup(x);  Check(ORS.end, "no END")
+      ORG.FixLink(x.value);  Check(ORS.end, "no END")
     ELSIF sym = ORS.repeat THEN
       ORS.Get(sym);  L0 := ORG.Here();  StatSequence;
       IF sym = ORS.until THEN
@@ -582,9 +585,9 @@ BEGIN (* StatSequence *)
         IF (orgtype.form = ORB.Pointer) OR (orgtype.form = ORB.Record) & (obj.class = ORB.Par) THEN
           Check(ORS.of, "OF expected");  TypeCase(obj, x);  L0 := 0;
           WHILE sym = ORS.bar DO
-            ORS.Get(sym);  ORG.FJump(L0);  ORG.Fixup(x);  obj.type := orgtype;  TypeCase(obj, x)
+            ORS.Get(sym);  ORG.FJump(L0);  ORG.FixLink(x.value);  obj.type := orgtype;  TypeCase(obj, x)
           END;
-          ORG.Fixup(x);  ORG.FixLink(L0);  obj.type := orgtype
+          ORG.FixLink(x.value);  ORG.FixLink(L0);  obj.type := orgtype
         ELSE ORS.Mark("numeric case not implemented");
           Check(ORS.of, "OF expected");  SkipCase;
           WHILE sym = ORS.bar DO SkipCase END
@@ -623,8 +626,8 @@ VAR x: ORG.Item;  typ: ORB.Type;  len: INTEGER;
 BEGIN NEW(typ);
   typ.form := ORB.NoTyp;
   expression(x);
-  IF (x.mode = ORB.Const) & (x.type.form = ORB.Int) & (x.a >= 0) THEN
-    len := x.a
+  IF (x.class = ORB.Const) & (x.type.form = ORB.Int) & (x.value >= 0) THEN
+    len := x.value
   ELSE
     len := 1;  ORS.Mark("not a valid length")
   END;
@@ -811,12 +814,12 @@ BEGIN (*sync*) pbsList := NIL;
       ORS.CopyId(id);  ORS.Get(sym);  CheckExport(expo);
       IF sym = ORS.eql THEN ORS.Get(sym) ELSE ORS.Mark("= ?") END;
       expression(x);
-      IF (x.type.form = ORB.String) & (x.b = 2) THEN ORG.StrToChar(x) END;
+      IF (x.type.form = ORB.String) & (x.length = 2) THEN ORG.StrToChar(x) END;
       ORB.NewObj(obj, id, ORB.Const);
       obj.expo := expo;
-      IF x.mode = ORB.Const THEN
-        obj.val  := x.a;
-        obj.lev  := x.b;
+      IF x.class = ORB.Const THEN
+        obj.val  := x.value;
+        obj.lev  := x.length;
         obj.type := x.type
       ELSE ORS.Mark("expression not constant");  obj.type := ORB.intType
       END;
@@ -972,7 +975,7 @@ BEGIN Texts.WriteString(W, "  compiling ");  ORS.Get(sym);
     END;
     IF ORS.errcnt = 0 THEN
       ORG.Close(modid, key, exno);
-      Texts.WriteInt(W, ORG.pc, 6);  Texts.WriteInt(W, dc, 6);  Texts.WriteHex(W, key)
+      Texts.WriteInt(W, ORG.PC, 6);  Texts.WriteInt(W, dc, 6);  Texts.WriteHex(W, key)
     ELSE Texts.WriteLn(W);  Texts.WriteString(W, "compilation FAILED")
     END;
     Texts.WriteLn(W);  Texts.Append(Oberon.Log, W.buf);
