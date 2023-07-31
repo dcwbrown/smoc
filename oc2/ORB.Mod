@@ -37,7 +37,7 @@ CONST
   Int8*    = 4;
   Int16*   = 5;
   Int32*   = 6;
-  Int*     = 7;
+  Int64*   = 7;
   Card16*  = 8;
   Card32*  = 9;
   Real*    = 10;
@@ -100,8 +100,8 @@ TYPE
     len*:          INTEGER;  (* For arrays, len < 0 => open array
                                 For records: adr of descriptor    *)
     dsc*, typobj*: Object;
-    base*:         Type;     (* For arrays, records, pointers*)
-    size*:         INTEGER   (* In bytes; always multiple of 4, except for Byte, Bool and Char*)
+    base*:         Type;     (* For arrays, records, pointers *)
+    size*:         INTEGER   (* In bytes *)
   END;
 
 
@@ -426,15 +426,15 @@ BEGIN NEW(obj); obj.name := name; obj.class := cl; obj.type := type; obj.val := 
 END enter;
 
 BEGIN
-  byteType   := type(Byte,   Int,     1);
+  byteType   := type(Byte,   Int64,   1);
   boolType   := type(Bool,   Bool,    1);
   charType   := type(Char,   Char,    1);
-  int8Type   := type(Int8,   Int,     1);
-  int16Type  := type(Int16,  Int,     2);
-  card16Type := type(Card16, Int,     2);
-  int32Type  := type(Int32,  Int,     4);
-  card32Type := type(Card32, Int,     4);
-  intType    := type(Int,    Int,     8);
+  int8Type   := type(Int8,   Int64,   1);
+  int16Type  := type(Int16,  Int64,   2);
+  card16Type := type(Card16, Int64,   2);
+  int32Type  := type(Int32,  Int64,   4);
+  card32Type := type(Card32, Int64,   4);
+  intType    := type(Int64,  Int64,   8);
   realType   := type(Real,   Real,    8);
   setType    := type(Set,    Set,     8);
   nilType    := type(NilTyp, NilTyp,  8);
