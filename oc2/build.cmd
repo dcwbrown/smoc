@@ -1,3 +1,4 @@
+@mkdir build >NUL 2>NUL
 @copy ..\source\Boot.mod   . >NUL
 @copy ..\source\Kernel.mod . >NUL
 @copy ..\source\Writer.mod . >NUL
