@@ -69,7 +69,7 @@ BEGIN
   IF x.type.form # ORB.Int64 THEN
     ORS.Mark("not Int");  x.type := ORB.setType
   ELSIF ORG.IsImmediate(x) THEN
-    IF (x.ea.value < 0) OR (x.ea.value >= 64) THEN ORS.Mark("invalid set") END
+    IF (x.o.disp < 0) OR (x.o.disp >= 64) THEN ORS.Mark("invalid set") END
   END
 END CheckSetVal;
 
@@ -548,17 +548,17 @@ BEGIN (* StatSequence *)
       WHILE sym = ORS.elsif DO
         ORS.Get(sym);
         ORG.FJump(L0);
-        ORG.FixLink(x.ea.base);
+        ORG.FixLink(x.o.base);
         expression(x);  CheckBool(x);
         ORG.CFJump(x);
         Check(ORS.then, "no THEN");
         StatSequence
       END;
       IF sym = ORS.else THEN
-        ORS.Get(sym);  ORG.FJump(L0);  ORG.FixLink(x.ea.index);
+        ORS.Get(sym);  ORG.FJump(L0);  ORG.FixLink(x.o.index);
         StatSequence
       ELSE
-        ORG.FixLink(x.ea.base)
+        ORG.FixLink(x.o.base)
       END;
       ORG.FixLink(L0);
       Check(ORS.end, "no END")
@@ -569,10 +569,10 @@ BEGIN (* StatSequence *)
       Check(ORS.do, "no DO");  StatSequence;
       ORG.BJump(L0);
       WHILE sym = ORS.elsif DO
-        ORS.Get(sym);  ORG.FixLink(x.ea.base);  expression(x);  CheckBool(x);  ORG.CFJump(x);
+        ORS.Get(sym);  ORG.FixLink(x.o.base);  expression(x);  CheckBool(x);  ORG.CFJump(x);
         Check(ORS.do, "no DO");  StatSequence;  ORG.BJump(L0)
       END;
-      ORG.FixLink(x.ea.base);
+      ORG.FixLink(x.o.base);
       Check(ORS.end, "no END")
     ELSIF sym = ORS.repeat THEN
       ORS.Get(sym);  L0 := ORG.Here();  StatSequence;
@@ -580,22 +580,30 @@ BEGIN (* StatSequence *)
         ORS.Get(sym);  expression(x);  CheckBool(x);  ORG.CBJump(x, L0)
       ELSE ORS.Mark("missing UNTIL")
       END
-    ELSIF sym = ORS.for THEN
+    ELSIF sym = ORS.for THEN  (* FOR val := ini TO lim BY step *)
       ORS.Get(sym);
-      IF sym = ORS.ident THEN
+      IF sym # ORS.ident THEN ORS.Mark("identifier expected")
+      ELSE
         qualident(obj);  ORG.MakeItem(x, obj, level);  CheckInt(x);  CheckReadOnly(x);
-        IF sym = ORS.becomes THEN
-          ORS.Get(sym);  expression(y);  CheckInt(y);  ORG.For0(x, y);  L0 := ORG.Here();
-          Check(ORS.to, "no TO");  expression(z);  CheckInt(z);  obj.rdo := TRUE;
-          IF sym = ORS.by THEN ORS.Get(sym);  expression(w);  CheckConst(w);  CheckInt(w)
-          ELSE ORG.MakeConstItem(w, ORB.intType, 1)
+        IF sym # ORS.becomes THEN ORS.Mark(":= expected")
+        ELSE
+          ORS.Get(sym);  expression(y);  CheckInt(y);
+          ORG.For0(x, y);  (* val, ini *)
+          L0 := ORG.Here();
+          Check(ORS.to, "TO expected");
+          expression(z);  CheckInt(z);  obj.rdo := TRUE;
+          IF sym # ORS.by THEN ORG.MakeConstItem(w, ORB.intType, 1)
+          ELSE
+            ORS.Get(sym);  expression(w);  CheckConst(w);  CheckInt(w)
           END;
-          Check(ORS.do, "no DO");  ORG.For1(x, y, z, w, L1);
-          StatSequence;  Check(ORS.end, "no END");
-          ORG.For2(x, y, w);  ORG.BJump(L0);  ORG.FixLink(L1);  obj.rdo := FALSE
-        ELSE ORS.Mark(":= expected")
+          Check(ORS.do, "DO expected");
+          ORG.For1(x, y, z, w, L1);  (* val, ini, lim, step *)
+          StatSequence;
+          Check(ORS.end, "END expected");
+          ORG.For2(x, y, w);
+          ORG.BJump(L0);  (* val, ini, step *)
+          ORG.FixLink(L1);  obj.rdo := FALSE
         END
-      ELSE ORS.Mark("identifier expected")
       END
     ELSIF sym = ORS.case THEN
       ORS.Get(sym);
@@ -604,9 +612,9 @@ BEGIN (* StatSequence *)
         IF (orgtype.form = ORB.Pointer) OR (orgtype.form = ORB.Record) & (obj.class = ORB.Par) THEN
           Check(ORS.of, "OF expected");  TypeCase(obj, x);  L0 := 0;
           WHILE sym = ORS.bar DO
-            ORS.Get(sym);  ORG.FJump(L0);  ORG.FixLink(x.ea.base);  obj.type := orgtype;  TypeCase(obj, x)
+            ORS.Get(sym);  ORG.FJump(L0);  ORG.FixLink(x.o.base);  obj.type := orgtype;  TypeCase(obj, x)
           END;
-          ORG.FixLink(x.ea.base);  ORG.FixLink(L0);  obj.type := orgtype
+          ORG.FixLink(x.o.base);  ORG.FixLink(L0);  obj.type := orgtype
         ELSE ORS.Mark("numeric case not implemented");
           Check(ORS.of, "OF expected");  SkipCase;
           WHILE sym = ORS.bar DO SkipCase END
@@ -615,7 +623,7 @@ BEGIN (* StatSequence *)
       END;
       Check(ORS.end, "no END")
     END;
-    ORG.CheckRegs;
+    ORG.CheckRegs("StatSequence");
     IF sym = ORS.semicolon THEN ORS.Get(sym)
     ELSIF sym < ORS.semicolon THEN ORS.Mark("missing semicolon?")
     END
@@ -645,8 +653,8 @@ VAR x: ORG.Item;  typ: ORB.Type;  len: INTEGER;
 BEGIN NEW(typ);
   typ.form := ORB.NoTyp;
   expression(x);
-  IF ORG.IsImmediate(x) & (x.type.form = ORB.Int64) & (x.ea.value >= 0) THEN
-    len := x.ea.value
+  IF ORG.IsImmediate(x) & (x.type.form = ORB.Int64) & (x.o.disp >= 0) THEN
+    len := x.o.disp
   ELSE
     len := 1;  ORS.Mark("not a valid length")
   END;
@@ -841,7 +849,7 @@ BEGIN (*sync*) pbsList := NIL;
       ORB.NewObj(obj, id, ORB.Const);
       obj.expo := expo;
       IF ORG.IsImmediate(x) THEN
-        obj.val  := x.ea.value;
+        obj.val  := x.o.disp;
         obj.lev  := x.length;
         obj.type := x.type
       ELSE ORS.Mark("expression not constant");  obj.type := ORB.intType

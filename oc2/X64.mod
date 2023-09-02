@@ -5,18 +5,35 @@ MODULE X64;  (* DCWB August 2023; Assembler for X64 *)
 IMPORT SYSTEM, ORS, w := Writer;
 
 CONST
-  MaxPC = 10000H;
-  RSP*  = 4;     (* X64 stack pointer *)
+  MaxPC*   = 10000H;
+  RSP*     = 4;     (* X64 stack pointer *)
+  AllFree* = {0,1,2,3,5,6,7,8,9,10,11,12,13,14,15};  (* RSP (4) is reserved *)
+
+  (* levels *)
+  Direct*         = 0;  (* immediate value (in disp) or individual register (in base) *)
+  Indirect*       = 1;  (* [base-reg + index-reg * scale + disp]                      *)
+  DoubleIndirect* = 2;  (* [ [base-reg + index-reg * scale + disp] + offset]          *)
+
+  (* Dyadic ALU operations, values correspond to x86 instruction set *)
+  Plus*  = 00H;
+  Or*    = 08H;
+  And*   = 20H;
+  Minus* = 28H;
+  Xor*   = 30H;
+  Cmp*   = 38H;
 
 
 TYPE
-  EffectiveAddress* = RECORD
-    direct*: BOOLEAN;  (* use register as value rather than part of address *)
-    base*:   INTEGER;  (* direct register or base address register *)
-    value*:  INTEGER;  (* address offset (indirect only) *)
-    index*:  INTEGER;  (* index register (indirect only) *)
-    scale*:  INTEGER;  (* index register scale (1, 2, 4, 8) (indirect only) *)
-    fixup*:  INTEGER;  (* -1: none, 0: module, 2+: import *)
+  Operand* = RECORD
+    level*:   INTEGER;  (* Direct/Indirect/DoubleIndirect                    *)
+    base*:    INTEGER;  (* direct register or base address register          *)
+    index*:   INTEGER;  (* index register (indirect only)                    *)
+    scale*:   INTEGER;  (* index register scale 0,1,2,3 (indirect only) *)
+    disp*:    INTEGER;  (* address offset (indirect only)                    *)
+    section*: INTEGER;  (* -1: none(abs), 0: module, >=1: import                   *)
+    offset*:  INTEGER;  (* applies only when level = DoubleIndirect          *)
+    size*:    INTEGER;
+    signed*:  BOOLEAN;
   END;
 
 VAR
@@ -28,36 +45,43 @@ VAR
   Hexbuf:  ARRAY 40 OF CHAR;  Hbi: INTEGER;
   Mnembuf: ARRAY 80 OF CHAR;  Mbi: INTEGER;
 
+  Free*: SET;      (* Free registers *)
+  SPO*:  INTEGER;  (* Stack pointer offset - space used by temmporaries *)
+
+
+PROCEDURE Min(a, b: INTEGER): INTEGER;
+BEGIN IF a < b THEN b := a END;  RETURN b END Min;
+
+PROCEDURE Max(a, b: INTEGER): INTEGER;
+BEGIN IF a > b THEN b := a END;  RETURN b END Max;
+
 
 (* -------------------------------- Assembly -------------------------------- *)
 
-PROCEDURE IncReg*(VAR r: INTEGER);
+PROCEDURE ClearOperand*(VAR o: Operand);  (* Sets o to immediate value 0 *)
 BEGIN
-  ASSERT(r < 15);
-  INC(r);
-  IF r = RSP THEN INC(r) END
-END IncReg;
+  o.level   := 0;
+  o.base    := -1;
+  o.index   := -1;
+  o.scale   := 0;
+  o.disp    := 0;
+  o.offset  := 0;
+  o.section := -1;
+  o.size    := 8;
+  o.signed  := FALSE;
+END ClearOperand;
 
-PROCEDURE DecReg*(VAR r: INTEGER);
+
+PROCEDURE Emit*(value: INTEGER);
 BEGIN
-  ASSERT(r > 0);
-  DEC(r);
-  IF r = RSP THEN DEC(r) END
-END DecReg;
+  IF PC < LEN(Program) THEN
+    Program[PC] := value;  INC(PC)
+  ELSE
+    ORS.Mark("program too long")
+  END
+END Emit;
 
-
-PROCEDURE ClearEA*(VAR ea: EffectiveAddress);  (* Sets EA to immediate value 0 *)
-BEGIN
-  ea.direct := TRUE;
-  ea.base   := -1;
-  ea.value  := 0;
-  ea.index  := -1;
-  ea.scale  := 1;
-  ea.fixup  := -1;
-END ClearEA;
-
-
-PROCEDURE Emit*(size, value: INTEGER);
+PROCEDURE EmitBytes*(size, value: INTEGER);
 BEGIN
   ASSERT(size IN {1, 2, 4, 8});
   IF PC + size <= LEN(Program) THEN
@@ -66,7 +90,8 @@ BEGIN
   ELSE
     ORS.Mark("program too long")
   END
-END Emit;
+END EmitBytes;
+
 
 PROCEDURE Patch*(pc, size, value: INTEGER);
 BEGIN
@@ -77,6 +102,7 @@ BEGIN
   ASSERT(size IN {1, 2, 4, 8});
   SYSTEM.COPY(SYSTEM.ADR(value), SYSTEM.ADR(Program) + pc, size)
 END Patch;
+
 
 PROCEDURE PeekUnsigned*(pc, size: INTEGER): INTEGER;
 VAR c8: BYTE;  c16: SYSTEM.CARD16;  c32: SYSTEM.CARD32;  result: INTEGER;
@@ -107,70 +133,465 @@ BEGIN
 RETURN result END PeekSigned;
 
 
+PROCEDURE EmitModRegMem*(reg, base, index, scale, disp: INTEGER);
+VAR mode: INTEGER;
+BEGIN
+  reg := reg MOD 8;
+  IF base < 0 THEN  (* offset only *)
+    ASSERT(index < 0);
+    ASSERT((disp >= -80000000H) & (disp < 80000000H));
+    Emit(reg * 8 + 5);  mode := 2;  (* 32 bit disp *)
+  ELSE
+    (* Emit register based address *)
+    IF base = RSP THEN INC(disp, 8 * SPO) END;  (* Allow for temporaries pushed to stack *)
+    base := base MOD 8;
+    (* Determine mode and offset size *)
+    IF    (disp < -80H) OR (disp >= 80H) THEN mode := 2  (* 32 bit disp *)
+    ELSIF (disp = 0)    &  (base  # 5)   THEN mode := 0  (* 0 valued disp omitted exept for RBP *)
+    ELSE                                      mode := 1  (* 8 bit signed disp *)
+    END;
+    IF (index < 0) & (base # 4) THEN
+      Emit(mode*64 + reg*8 + base)    (* ModRegRm *)
+    ELSE
+      Emit(mode*64 + reg*8 + 4);      (* ModRegRm *)
+      IF index < 0 THEN
+        Emit(4*8 + base)              (* SIB with no index reg *)
+      ELSE
+        ASSERT(index # 4);  (* Cannot use rsp as index *)
+        ASSERT((scale >= 0) & (scale <= 3));
+        Emit(scale*64 + index MOD 8 * 8 + base) (* SIB with index reg *)
+      END
+    END
+  END;
+  IF    mode = 1 THEN Emit(disp)
+  ELSIF mode = 2 THEN EmitBytes(4, disp)
+  END
+END EmitModRegMem;
 
 
+PROCEDURE EmitModRegReg*(reg, base: INTEGER);
+VAR mode: INTEGER;
+BEGIN
+  reg := reg MOD 8;
+  ASSERT(base >= 0);
+  Emit(0C0H + reg*8 + base MOD 8)
+END EmitModRegReg;
 
 
+(*
 PROCEDURE EmitRex*(W: BOOLEAN; reg, index, base: INTEGER);
 VAR rex: INTEGER;
 BEGIN  rex := 0;
-  IF W         THEN INC(rex, 8) END;
-  IF reg   > 7 THEN INC(rex, 4) END;
-  IF index > 7 THEN INC(rex, 2) END;
-  IF base  > 7 THEN INC(rex)    END;
-  IF rex   > 0 THEN Emit(1, 40H + rex) END
+  IF W         THEN INC(rex, 8)     END;
+  IF reg   > 7 THEN INC(rex, 4)     END;
+  IF index > 7 THEN INC(rex, 2)     END;
+  IF base  > 7 THEN INC(rex)        END;
+  IF rex   > 0 THEN Emit(40H + rex) END
 END EmitRex;
+*)
 
-
-PROCEDURE EmitModRegRm*(reg, spo: INTEGER; ea: EffectiveAddress);
-VAR mode, base, disp: INTEGER;
-BEGIN
-  reg := reg MOD 8;
-  IF ea.direct THEN  ASSERT(ea.base >= 0);  ASSERT(ea.value = 0);  ASSERT(ea.index < 0);
-    Emit(1, 0C0H + reg*8 + ea.base MOD 8)
-  ELSE
-    disp := ea.value;
-    IF ea.base < 0 THEN  (* offset only *)
-      ASSERT(ea.index < 0);
-      Emit(1, reg * 8 + 5);  mode := 2;                    (* 32 bit disp *)
-    ELSE
-      (* Emit register based address *)
-      IF ea.base = RSP THEN INC(disp, 8 * spo) END;  (* Allow for temporaries pushed to stack *)
-      base := ea.base MOD 8;
-      (* Determine mode and offset size *)
-      IF    (disp < -80H) OR (disp >= 80H) THEN mode := 2  (* 32 bit disp *)
-      ELSIF (disp = 0)    &  (base  # 5)   THEN mode := 0  (* 0 valued disp omitted exept for RBP *)
-      ELSE                                      mode := 1  (* 8 bit signed disp *)
-      END;
-      IF (ea.index < 0) & (base # 4) THEN
-        Emit(1, mode*64 + reg*8 + base)    (* ModRegRm *)
-      ELSE
-        Emit(1, mode*64 + reg*8 + 4);      (* ModRegRm *)
-        IF ea.index < 0 THEN
-          Emit(1, 4*8 + base)              (* SIB with no index reg *)
-        ELSE
-          ASSERT(ea.index # 4);  (* Cannot use rsp as index *)
-          Emit(1, ea.scale*64 + ea.index MOD 8 * 8 + base) (* SIB with index reg *)
-        END
-      END
-    END;
-    IF    mode = 1 THEN Emit(1, disp)
-    ELSIF mode = 2 THEN Emit(4, disp)
-    END
-  END
-END EmitModRegRm;
-
-PROCEDURE EmitPrefices*(reg, size: INTEGER; ea: EffectiveAddress);
+PROCEDURE EmitPrefices*(reg, size, base, index: INTEGER);
 VAR rex: INTEGER;
 BEGIN  rex := 0;
   (* Emit prefices *)
-  IF size     =  2 THEN Emit(1, 66H)       END;
-  IF size     >  4 THEN INC(rex, 8)        END;
-  IF reg      >= 8 THEN INC(rex, 4)        END;
-  IF ea.index >= 8 THEN INC(rex, 2)        END;
-  IF ea.base  >= 8 THEN INC(rex, 1)        END;
-  IF rex      #  0 THEN Emit(1, 40H + rex) END;
+  IF size  =  2 THEN Emit(66H)       END;
+  IF size  >  4 THEN INC(rex, 8)     END;
+  IF reg   >= 8 THEN INC(rex, 4)     END;
+  IF index >= 8 THEN INC(rex, 2)     END;
+  IF base  >= 8 THEN INC(rex, 1)     END;
+  IF rex   #  0 THEN Emit(40H + rex) END;
 END EmitPrefices;
+
+PROCEDURE EmitRegMemOp*(op, reg, size, base, index, scale, disp: INTEGER);
+BEGIN
+  EmitPrefices(reg, size, base, index);
+  IF op >= 100H THEN Emit(op DIV 100H) END;
+  Emit(op MOD 100H);
+  EmitModRegMem(reg, base, index, scale, disp)
+END EmitRegMemOp;
+
+PROCEDURE EmitRegRegOp*(op, reg, size, base: INTEGER);
+BEGIN
+  EmitPrefices(reg, size, base, -1);
+  IF op >= 100H THEN Emit(op DIV 100H) END;
+  Emit(op MOD 100H);
+  EmitModRegReg(reg, base)
+END EmitRegRegOp;
+
+PROCEDURE EmitOp*(op, reg, size: INTEGER; o: Operand);
+BEGIN
+  IF o.level = Direct THEN
+    ASSERT(o.base >= 0);
+    EmitRegRegOp(op, reg, size, o.base)
+  ELSE
+    EmitRegMemOp(op, reg, size, o.base, o.index, o.scale, o.disp)
+  END
+END EmitOp;
+
+
+(* --------------------- Common instruction generation ---------------------- *)
+
+PROCEDURE First(s: SET): INTEGER;  (* Returns first value in SET, or 64 if none *)
+VAR f: INTEGER;
+BEGIN
+  f := 0;
+  WHILE (f < 64) & ~(f IN s) DO INC(f) END;
+  IF f >= 64 THEN f := -1 END
+RETURN f END First;
+
+PROCEDURE IsDataReg*(r: INTEGER): BOOLEAN;
+BEGIN ASSERT(r < 16); RETURN (r >= 0) & (r # RSP) END IsDataReg;
+
+PROCEDURE ReserveReg*(r: INTEGER);
+BEGIN IF IsDataReg(r) THEN EXCL(Free, r) END END ReserveReg;
+
+PROCEDURE ReleaseReg*(r: INTEGER);
+BEGIN IF IsDataReg(r) THEN INCL(Free, r) END END ReleaseReg;
+
+PROCEDURE FirstFreeReg*(): INTEGER;
+VAR r: INTEGER;
+BEGIN r := First(Free);
+  IF r < 0 THEN ORS.Mark("Out of registers") END;
+RETURN r END FirstFreeReg;
+
+PROCEDURE ClearRegs*; BEGIN Free := AllFree END ClearRegs;
+
+PROCEDURE FreeOperand*(VAR o: Operand);
+BEGIN
+  IF IsDataReg(o.base)  THEN ReleaseReg(o.base)  END;
+  IF IsDataReg(o.index) THEN ReleaseReg(o.index) END;
+  ClearOperand(o)
+END FreeOperand;
+
+PROCEDURE MakeOperand*(level, base, disp, section, size: INTEGER;
+                       signed: BOOLEAN;
+                       VAR o: Operand);
+BEGIN
+  o.level   := level;
+  o.base    := base;
+  o.index   := -1;
+  o.scale   := 0;
+  o.disp    := disp;
+  o.offset  := 0;
+  o.section := section;
+  o.size    := size;
+  o.signed  := signed;
+END MakeOperand;
+
+
+PROCEDURE AdjustStack*(delta: INTEGER);  (* delta is a count of quadwords *)
+BEGIN INC(SPO, delta) END AdjustStack;
+
+PROCEDURE ClearStack*; BEGIN SPO := 0 END ClearStack;
+
+
+PROCEDURE LoadCondition*(reg, c: INTEGER);  (* Set register to 0/1 based on condition flags *)
+BEGIN
+  (* setcc  byte-reg*)
+  IF reg >= 8 THEN Emit(41H) END;
+  Emit(0FH);  Emit(c MOD 16 + 90H);
+  Emit(0C0H + reg MOD 8);
+  (* movzx qword-reg, byte-reg*)
+  IF reg >= 8 THEN Emit(45H) END;
+  Emit(0FH);
+  Emit(0B6H);
+  Emit(0C0H + reg MOD 8 * 8 + reg MOD 8);
+END LoadCondition;
+
+
+PROCEDURE LoadImmediate*(reg, val: INTEGER);
+BEGIN
+  ASSERT(reg >= 0);
+  IF val = 0 THEN                             (* Clear register with 32 bit XOR *)
+    EmitPrefices(reg, 4, reg, -1);
+    Emit(31H);
+    Emit(0C0H + reg MOD 8 * 8 + reg MOD 8)
+  ELSIF (val > 0) & (val < 100000000H) THEN   (* Load 32 bit positive value as 32 bit load with zero extension *)
+    EmitPrefices(reg, 4, -1, -1);
+    Emit(0B8H + reg MOD 8);
+    EmitBytes(4, val);
+  ELSIF (val < 0) & (val >= -80000000H) THEN  (* Load 32 bit negative value with sign extended move *)
+    EmitPrefices(reg, 8, -1, -1);
+    Emit(0C7H);
+    Emit(0C0H + reg MOD 8);
+    EmitBytes(4,val);
+  ELSE                                        (* Need full 64 bit literal *)
+    EmitPrefices(reg, 8, -1, -1);
+    Emit(0B8H + reg MOD 8);
+    EmitBytes(8, val);
+  END
+END LoadImmediate;
+
+
+PROCEDURE MoveReg*(r1, r2: INTEGER);
+BEGIN
+  ASSERT(r1 >= 0);  ASSERT(r2 >= 0);
+  IF r1 # r2 THEN
+    EmitPrefices(r1, 8, r2, -1);
+    Emit(8BH);
+    EmitModRegReg(r1, r2);
+  END
+END MoveReg;
+
+
+PROCEDURE LoadMem(reg: INTEGER; signed: BOOLEAN; size, base, index, scale, disp: INTEGER);
+BEGIN
+  IF signed THEN
+    EmitPrefices(reg, 8, base, index);
+    IF    size = 1 THEN Emit(0FH); Emit(0BEH);   (* movsx  r64, r/m8  *)
+    ELSIF size = 2 THEN Emit(0FH); Emit(0BFH);   (* movsx  r64, r/m16 *)
+    ELSIF size = 4 THEN Emit(63H)                (* movsxd r64, r/m32 *)
+                   ELSE Emit(8BH)                (* mov    r64, r/m64 *)
+    END
+  ELSE (* Unsigned *)
+    IF size = 4 THEN
+      EmitPrefices(reg, 4, index, base)
+    ELSE
+      EmitPrefices(reg, 8, index, base)
+    END;
+    IF    size = 1 THEN Emit(0FH); Emit(0B6H);   (* movzx  r64, r/m8  *)
+    ELSIF size = 2 THEN Emit(0FH); Emit(0B7H);   (* movzx  r64, r/m16 *)
+                   ELSE Emit(8BH)                (* mov    r32/64, rm32/64 *)
+    END
+  END;
+  EmitModRegMem(reg, base, index, scale, disp)
+END LoadMem;
+
+
+PROCEDURE Undouble*(VAR o: Operand);
+VAR reg: INTEGER;
+BEGIN
+  IF o.level > Indirect THEN
+    ASSERT(o.base >= 0);
+    IF IsDataReg(o.base) THEN
+      reg := o.base
+    ELSE
+      reg := FirstFreeReg();  ReserveReg(reg)
+    END;
+    EmitPrefices(reg, 8, o.base, -1);
+    Emit(8BH);
+    EmitModRegMem(reg, o.base, o.index, o.scale, o.disp);
+    ReleaseReg(o.index);
+    o.base   := reg;
+    o.level  := Indirect;
+    o.index  := -1;
+    o.scale  := 0;
+    o.disp   := o.offset;
+    o.offset := 0;
+  END
+END Undouble;
+
+PROCEDURE IsImmediate(o: Operand): BOOLEAN;
+BEGIN RETURN (o.level = Direct) & (o.base < 0) END IsImmediate;
+
+
+PROCEDURE Load*(VAR o: Operand);
+VAR reg: INTEGER;
+BEGIN
+  Undouble(o);
+  IF IsDataReg(o.base) THEN reg := o.base ELSE reg := FirstFreeReg() END;
+  IF IsImmediate(o) THEN
+    LoadImmediate(reg, o.disp)
+  ELSIF o.level = Indirect THEN
+    LoadMem(reg, o.signed, o.size, o.base, o.index, o.scale, o.disp);
+    ReleaseReg(o.base);
+    ReleaseReg(o.index);
+    ReserveReg(reg);
+    o.level := Direct;
+    o.base  := reg;
+    o.index := -1;
+    o.disp  := 0
+  END
+END Load;
+
+
+PROCEDURE StoreRegToMem*(sreg, size, base, index, scale, disp: INTEGER);
+BEGIN
+  EmitPrefices(sreg, size, base, index);
+  IF size = 1 THEN Emit(88H) ELSE Emit(89H) END;
+  EmitModRegMem(sreg, base, index, scale, disp)
+END StoreRegToMem;
+
+PROCEDURE StoreImmediateToMem(imm, size, base, index, scale, disp: INTEGER);
+VAR reg: INTEGER;
+BEGIN
+  IF (imm >= -80000000H) & (imm < 80000000H) THEN  (* imm fits 32 bits *)
+    EmitPrefices(0, size, base, index);
+    IF size = 1 THEN Emit(0C6H) ELSE Emit(0C7H) END;
+    EmitModRegMem(0, base, index, scale, disp);
+    EmitBytes(Min(size, 4), imm);
+  ELSE
+    (* 64 bit immediate - load immediate then store reg *)
+    reg := FirstFreeReg();
+    LoadImmediate(reg, imm);
+    StoreRegToMem(reg, size, base, index, scale, disp);
+  END
+END StoreImmediateToMem;
+
+
+PROCEDURE StoreReg*(r: INTEGER; VAR o: Operand);  (* Store register to addr in operand *)
+BEGIN ASSERT(o.level > Direct);
+  Undouble(o);  ASSERT(o.level = Indirect);
+  StoreRegToMem(r, o.size, o.base, o.index, o.scale, o.disp)
+END StoreReg;
+
+PROCEDURE StoreImmediate*(imm: INTEGER; VAR o: Operand);
+BEGIN ASSERT(o.level > Direct);
+  Undouble(o);  ASSERT(o.level = Indirect);
+  StoreImmediateToMem(imm, o.size, o.base, o.index, o.scale, o.disp)
+END StoreImmediate;
+
+
+(* Push *)
+
+PROCEDURE PushReg*(r: INTEGER);
+BEGIN EmitPrefices(r, 4, -1, -1); Emit(50H + r MOD 8) END PushReg;
+
+PROCEDURE PopReg*(r: INTEGER);
+BEGIN EmitPrefices(r, 4, -1, -1); Emit(58H + r MOD 8) END PopReg;
+
+PROCEDURE PushImmediate*(i: INTEGER);
+VAR reg: INTEGER;
+BEGIN
+  IF (i >= -80H) & (i < 80H) THEN
+    Emit(6AH);  Emit(i)
+  ELSIF (i >= -80000000H) & (i < 80000000H) THEN
+    Emit(68H);  EmitBytes(4, i)
+  ELSE
+    reg := FirstFreeReg();
+    EmitPrefices(reg, 8, -1, -1); Emit(0B8H + reg MOD 8); EmitBytes(8, i);  (* Load literal *)
+    EmitPrefices(reg, 4, -1, -1); Emit(050H + reg MOD 8);                   (* Push reg *)
+  END
+END PushImmediate;
+
+PROCEDURE Push*(VAR o: Operand);
+VAR reg: INTEGER;
+BEGIN
+  Undouble(o);
+  IF o.level = Direct THEN
+    IF o.base >= 0 THEN
+      PushReg(o.base)
+    ELSE
+      PushImmediate(o.disp)
+    END
+  ELSE  (* push indirect o *)
+    Emit(0FFH);  EmitModRegMem(6, o.base, o.index, o.scale, o.disp)
+  END;
+  FreeOperand(o)
+END Push;
+
+
+PROCEDURE AluOpImmediateToReg*(op, reg, imm: INTEGER);
+VAR incdec: INTEGER;
+BEGIN
+  ASSERT((imm >= -80000000H) & (imm < 80000000H));
+  IF ((imm = 1) OR (imm = -1)) & ((op = Plus) OR (op = Minus)) THEN
+    incdec := 0;
+    IF op = Minus THEN incdec := 1 END;
+    IF imm = -1 THEN incdec := 1 - incdec END;
+    EmitPrefices(-1, 8, reg, -1);
+    Emit(0FFH);
+    Emit(0C0H + incdec * 8 + reg MOD 8);
+  ELSE
+    EmitPrefices(-1, 8, reg, -1);
+    IF (imm >= -80H) & (imm < 80H) THEN
+      Emit(83H);  Emit(0C0H + op + reg MOD 8);  Emit(imm)
+    ELSE
+      Emit(81H);  Emit(0C0H + op + reg MOD 8);  EmitBytes(4, imm)
+    END
+  END
+END AluOpImmediateToReg;
+
+PROCEDURE AluOpImmediateToMem*(op, imm, size, base, index, scale, disp: INTEGER);
+VAR immsize, incdec: INTEGER;
+BEGIN
+  ASSERT((imm >= -80000000H) & (imm < 80000000H));
+  IF ((imm = 1) OR (imm = -1)) & ((op = Plus) OR (op = Minus)) THEN
+    incdec := 0;
+    IF op = Minus THEN incdec := 1 END;
+    IF imm = -1 THEN incdec := 1 - incdec END;
+    EmitPrefices(-1, size, base, index);
+    Emit(0FFH);
+    EmitModRegMem(incdec, base, index, scale, disp);
+  ELSE
+    EmitPrefices(-1, size, base, index);
+    IF size = 1 THEN
+      Emit(80H);  immsize := 1
+    ELSIF (imm >= -80H) & (imm < 80H) THEN
+      Emit(83H);  immsize := 1
+    ELSE
+      Emit(81H);  immsize := 4
+    END;
+    EmitModRegMem(op DIV 10H, base, index, scale, disp);
+    EmitBytes(immsize, imm)
+  END
+END AluOpImmediateToMem;
+
+PROCEDURE AluOpMemToReg*(op, reg, size, base, index, scale, disp: INTEGER);
+BEGIN
+  EmitPrefices(reg, size, base, index);
+  Emit(op + 3);
+  EmitModRegMem(reg, base, index, scale, disp)
+END AluOpMemToReg;
+
+PROCEDURE AluOpRegToMem*(op, reg, size, base, index, scale, disp: INTEGER);
+BEGIN
+  EmitPrefices(reg, size, base, index);
+  Emit(op + 1);
+  EmitModRegMem(reg, base, index, scale, disp)
+END AluOpRegToMem;
+
+PROCEDURE AluOpRegToReg*(op, r1, r2: INTEGER);
+BEGIN
+  EmitPrefices(r1, 8, r2, -1);
+  Emit(op + 3);
+  EmitModRegReg(r1, r2)
+END AluOpRegToReg;
+
+PROCEDURE AluOp*(op, reg: INTEGER; VAR o: Operand);  (* Assumes reg is dest *)
+BEGIN
+  Undouble(o);
+  IF IsImmediate(o) THEN
+    AluOpImmediateToReg(op, reg, o.disp)
+  ELSIF o.level = Direct THEN
+  ELSE
+    IF o.size = 8 THEN
+      AluOpMemToReg(op, reg, 8, o.base, o.index, o.scale, o.disp)
+    ELSE
+      Load(o);
+      AluOpRegToReg(op, reg, o.base)
+    END
+  END
+END AluOp;
+
+
+PROCEDURE Call*(VAR o: Operand);
+BEGIN
+  ASSERT(o.level < DoubleIndirect);
+  IF IsImmediate(o) THEN Emit(0E8H);  EmitBytes(4, o.disp - (PC + 4))
+  ELSE
+    IF (o.level = Direct) & (o.base = 15) THEN  (* Recover R15 from stack *)
+      IF ~(15 IN Free) THEN ORS.Mark("Out of registers") END;
+      EmitPrefices(15, 4, -1, -1);
+      Emit(58H + 15 MOD 8);
+      AdjustStack(-1);
+      ReleaseReg(15)
+    END;
+    EmitPrefices(-1, 4, o.base, -1);  (* call instruction defaults to 64 bit arg *)
+    Emit(0FFH);
+    (*EmitModRegRm(2, o);*)
+    EmitModRegMem(2, o.base, o.index, o.scale, o.disp);
+    IF (o.base = RSP) & (o.disp < 0) THEN  (* called through temp on stack *)
+      (* Release temp stack space *)
+      ASSERT(SPO > 0);
+      Emit(48H);  Emit(83H);  Emit(0C4H);  Emit(8);
+      AdjustStack(-1)
+    END
+  END;
+
+
+END Call;
+
 
 
 (* ------------------------------ Disassembly ------------------------------- *)
@@ -326,7 +747,10 @@ BEGIN
     IF base >= 0  THEN InsReg(64, base) END;
     IF index >= 0 THEN
       AddMnem("+"); InsReg(64, index);
-      IF scale > 1 THEN AddMnem("*"); InsDec(scale, Mnembuf, Mbi) END
+      IF    scale = 1 THEN AddMnem("*2")
+      ELSIF scale = 2 THEN AddMnem("*4")
+      ELSIF scale = 2 THEN AddMnem("*8")
+      END
     END;
     IF disp # 0 THEN AddMnem("+");  InsHex(disp, Mnembuf, Mbi); AddMnem("H") END;
     AddMnem("]")
@@ -359,10 +783,10 @@ END GetSigned;
 PROCEDURE DisSIB(VAR pc, base, index, scale: INTEGER);  (* Returns X64 reg nums in range 0-7 *)
 BEGIN
   AddHex(8, Program[pc]);
-  scale := LSL(1, Program[pc] DIV 64);
+  scale := Program[pc] DIV 64;
   base  := Program[pc] MOD 8;
   IF Program[pc] DIV 8 MOD 8 = 4 THEN
-    index := -1; scale := 1
+    index := -1; scale := 0
   ELSE
     index := Program[pc] DIV 8 MOD 8;
   END;
@@ -376,7 +800,7 @@ BEGIN
   mode     := Program[pc] DIV 64;
   reg      := Program[pc] DIV 8 MOD 8;
   rm       := Program[pc] MOD 8;
-  scale    := 1;
+  scale    := 0;
   index    := -1;
   base     := -1;
   disp     := 0;
@@ -424,7 +848,7 @@ BEGIN
   reghigh  := FALSE;  indexhigh := FALSE;  basehigh := FALSE;
   reg      := -1;     base      := -1;     index    := -1;
   regsize  := 32;     dispsize  := 0;
-  disp     := 0;      mode      := 0;      scale    := 1;
+  disp     := 0;      mode      := 0;      scale    := 0;
   indirect := FALSE;  tofirst   := FALSE;
   Hbi      := 0;      Mbi       := 0;
 
@@ -545,7 +969,8 @@ BEGIN
     IF opcode < 0B8H THEN regsize := 8 END;
     InsReg(regsize, base);
     AddMnem(",");
-    IF regsize < 64 THEN GetUnsigned(regsize, pc, disp) ELSE GetUnsigned(32, pc, disp) END;
+    (*IF regsize < 64 THEN GetUnsigned(regsize, pc, disp) ELSE GetUnsigned(32, pc, disp) END;*)
+    GetUnsigned(regsize, pc, disp);
     InsHex(disp, Mnembuf, Mbi); AddMnem("H")
 
   ELSIF opcode = 0C3H THEN
@@ -557,8 +982,10 @@ BEGIN
     IF opcode = 0C6H THEN regsize := 8 END;
     AddMnem("mov    ");
     DisModRegRm(pc, reg, base, index, disp, scale, regsize, indirect);
-    ASSERT(indirect);
-    InsBaseIndexScaleDisp(indirect, reg, regsize, base, index, scale, disp);
+    ASSERT(indirect);  ASSERT(reg = 0);
+    IF indexhigh & (index < 8) THEN INC(index, 8) END;
+    IF basehigh  & (base  < 8) THEN INC(base,  8) END;
+    InsBaseIndexScaleDisp(indirect, -1, regsize, base, index, scale, disp);
     AddMnem(",");
     IF regsize < 64 THEN GetUnsigned(regsize, pc, disp) ELSE GetUnsigned(32, pc, disp) END;
     InsHex(disp, Mnembuf, Mbi); AddMnem("H")
@@ -601,11 +1028,15 @@ BEGIN
     ELSE
       AddMnem("??")
     END;
+    IF indexhigh & (index < 8) THEN INC(index, 8) END;
+    IF basehigh  & (base  < 8) THEN INC(base,  8) END;
     InsBaseIndexScaleDisp(indirect, -1, regsize, base, index, scale, disp)
 
   ELSIF opcode = 0FFH THEN  (* Group 5 extensions to primary opcode map *)
 
     DisModRegRm(pc, opcode, base, index, disp, scale, regsize, indirect);
+    IF indexhigh & (index < 8) THEN INC(index, 8) END;
+    IF basehigh  & (base  < 8) THEN INC(base,  8) END;
     IF opcode < 3 THEN (* INC/DEC/CALL *)
 
       IF    opcode = 0 THEN AddMnem("inc    ")
@@ -629,6 +1060,9 @@ BEGIN
       ELSIF opcode = 0BFH THEN AddMnem("movsx  ");  regsize := 16
       END;
       DisModRegRm(pc, reg, base, index, disp, scale, regsize, indirect);
+      IF reghigh   & (reg   < 8) THEN INC(reg,   8) END;
+      IF indexhigh & (index < 8) THEN INC(index, 8) END;
+      IF basehigh  & (base  < 8) THEN INC(base,  8) END;
       InsReg(64, reg);  AddMnem(",");
       InsBaseIndexScaleDisp(indirect, -1, regsize, base, index, scale, disp)
 
@@ -675,6 +1109,9 @@ BEGIN
       ELSIF opcode = 9FH THEN AddMnem("setg   ")
       END;
       DisModRegRm(pc, reg, base, index, disp, scale, 8, indirect);
+      IF reghigh   & (reg   < 8) THEN INC(reg,   8) END;
+      IF indexhigh & (index < 8) THEN INC(index, 8) END;
+      IF basehigh  & (base  < 8) THEN INC(base,  8) END;
       InsBaseIndexScaleDisp(indirect, reg, 8, base, index, scale, disp)
 
     ELSE

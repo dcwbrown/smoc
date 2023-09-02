@@ -11,17 +11,8 @@ CONST
   RightCol  = 80;
 
   (* Derived states *)
-  RegRm     = 10;     (* X64 register or effective address *)
-  RegRmInd  = 11;     (* X64 register or effective address containing address *)
+  Operand   = 10;     (* X64 register or immediate or direct or indirect effective address *)
   Condition = 12;     (* Condition codes set by last ALU operation *)
-
-  (* Dyadic ALU operations, values correspond to x86 instruction set *)
-  Plus  = 00H;
-  Or    = 08H;
-  And   = 20H;
-  Minus = 28H;
-  Xor   = 30H;
-  Cmp   = 38H;
 
   (* X64 conditions *)
   CF  = 0;     (* False, Never                         *)
@@ -48,7 +39,7 @@ TYPE
   Item* = RECORD
     state*:    INTEGER;  (* Initially from object.class *)
     type*:     ORB.Type;
-    ea*:       X64.EffectiveAddress;
+    o*:        X64.Operand;
     readonly*: BOOLEAN;
     length*:   INTEGER;  (* Only if type = strType *)
   END;
@@ -63,10 +54,8 @@ VAR
   sourceBol:  INTEGER;      (* pos at beginiing of line *)
   sourceLine: INTEGER;      (* Line number *)
   sourcechar: CHAR;
-  outcol:     INTEGER;      (* Output column *)
 
-  RH:    INTEGER;           (* Register high = top of register stack = first free register *)
-  SPO:   INTEGER;           (* Stack pointer offset - nonzero after temporary pushes *)
+  Saved: SET;               (* Registers saved around a function call *)
 
 
 (* ---- Source display ---- *)
@@ -89,34 +78,31 @@ BEGIN  ASSERT(~source.eof);
   END
 END GetChar;
 
-PROCEDURE wl; BEGIN w.l;  outcol := 0 END wl;
+PROCEDURE wl; BEGIN w.l      END wl;
 PROCEDURE wc; BEGIN w.c(",") END wc;
 
 PROCEDURE DisplaySourceToPos(pos: INTEGER);
 VAR ch: CHAR;
 BEGIN
-  WHILE sourcechar <= " " DO GetChar END;  (* Skip to next non-whitespace character *)
+  w.in(sourceLine, 4); w.s(": ");
+  w.b(Pos() - sourceBol);  (* Space to current column *)
 
-  (* Copy source text *)
+  (* Copy source text to pos *)
   WHILE ~source.eof & (Pos() < pos) DO
-    w.in(sourceLine, 4); w.s(": "); w.b(Pos() - sourceBol);
-    outcol := 6 + Pos() - sourceBol;
+    IF (sourcechar = 0DX) OR (sourcechar = 0AX) THEN
+      GetChar; w.l; w.in(sourceLine, 4); w.s(": ")
+    ELSE
+      w.c(sourcechar); GetChar
+    END
+  END;
 
-    (* Copy characters to pos or EOL *)
-    WHILE ~source.eof & (Pos() < pos) & (sourcechar # 0DX) & (sourcechar # 0AX) DO
-      w.c(sourcechar);  INC(outcol);  GetChar
-    END;
-
-    (* Skip whitespace *)
-    WHILE ~source.eof & (sourcechar <= " ") DO GetChar END;
-
-    IF ~source.eof & (Pos() < pos) THEN wl END
-  END
+  (* Space to RightCol allowing for 6 columns already used by linenumber *)
+  IF Pos() - sourceBol < (RightCol - 6) THEN w.b((RightCol - 6) - (Pos() - sourceBol)) ELSE w.s("  "); END;
 END DisplaySourceToPos;
 
 PROCEDURE startRightCol(str: ARRAY OF CHAR);
-BEGIN DisplaySourceToPos(ORS.Pos());
-  IF outcol < RightCol THEN w.b(RightCol - outcol) END;
+BEGIN
+  DisplaySourceToPos(ORS.Pos());
   w.s(str)
 END startRightCol;
 
@@ -261,8 +247,7 @@ BEGIN
   IF    state = ORB.Head  THEN w.s("Head")
   ELSIF state = ORB.SProc THEN w.s("SProc")
   ELSIF state = ORB.Typ   THEN w.s("Typ")
-  ELSIF state = RegRm     THEN w.s("RegRm")
-  ELSIF state = RegRmInd  THEN w.s("RegRmInd")
+  ELSIF state = Operand   THEN w.s("Operand")
   ELSIF state = Condition THEN w.s("Condition")
   ELSE                         w.i(state)
   END
@@ -316,31 +301,43 @@ BEGIN
   END
 END wreg;
 
-PROCEDURE wRegRm(ea: X64.EffectiveAddress);
+PROCEDURE wOperand(o: X64.Operand);
 BEGIN
-  IF ea.direct THEN
-    IF ea.base >= 0 THEN wreg(ea.base) ELSE w.i(ea.value) END
+  IF o.level = X64.Direct THEN
+    IF o.base >= 0 THEN wreg(o.base) ELSE w.i(o.disp) END
   ELSE
+    IF o.level = X64.DoubleIndirect THEN w.c("[") END;
+    IF o.size # 8 THEN
+      IF o.signed THEN w.s("s-") ELSE w.s("u-") END;
+      IF    o.size = 1 THEN w.s("byte")
+      ELSIF o.size = 2 THEN w.s("word")
+      ELSIF o.size = 4 THEN w.s("dword")
+      END
+    END;
     w.c("[");
-    IF ea.base < 0 THEN w.i(ea.value)
+    IF o.base < 0 THEN w.i(o.disp)
     ELSE
-      wreg(ea.base);
-      IF ea.index >= 0 THEN w.c("+");  wreg(ea.index);
-        IF ea.scale > 1 THEN w.c("*");  w.i(ea.scale) END
+      wreg(o.base);
+      IF o.index >= 0 THEN w.c("+");  wreg(o.index);
+        IF o.scale > 1 THEN w.c("*");  w.i(o.scale) END
       END;
-      IF ea.value # 0 THEN w.s("+");  w.i(ea.value) END
+      IF o.disp # 0 THEN w.s("+");  w.i(o.disp) END
     END;
     w.c("]");
-    IF (ea.base = X64.RSP) & (SPO # 0) THEN w.s(" SPO "); w.i(SPO) END
+    IF o.level = X64.DoubleIndirect THEN
+      IF o.offset # 0 THEN w.s("+"); w.i(o.offset) END;
+      w.c("]")
+    END;
+    IF (o.base = X64.RSP) & (X64.SPO # 0) THEN w.s(" SPO "); w.i(X64.SPO) END
   END
-END wRegRm;
+END wOperand;
 
 PROCEDURE witem(i: Item);
 BEGIN
   w.s("(");  wstate(i.state);
-  ASSERT(i.state IN {RegRm, RegRmInd, Condition, ORB.Head, ORB.Typ, ORB.SProc});
-  IF i.state IN {RegRm, RegRmInd} THEN w.c(" "); wRegRm(i.ea) END;
-  IF i.state = Condition THEN w.c(" "); wcond(i.ea.value) END;
+  ASSERT(i.state IN {Operand, Condition, ORB.Head, ORB.Typ, ORB.SProc});
+  IF i.state = Operand   THEN w.c(" "); wOperand(i.o) END;
+  IF i.state = Condition THEN w.c(" "); wcond(i.o.disp) END;
   IF i.readonly THEN w.s(", readonly") END;
   IF i.type # NIL THEN
     w.s(", ");  wtype(i.type);
@@ -351,38 +348,63 @@ END witem;
 
 PROCEDURE wop(op: INTEGER);
 BEGIN
-  IF    op = Plus  THEN w.s("Plus")
-  ELSIF op = Or    THEN w.s("Or")
-  ELSIF op = And   THEN w.s("And")
-  ELSIF op = Minus THEN w.s("Minus")
-  ELSIF op = Xor   THEN w.s("Xor")
-  ELSIF op = Cmp   THEN w.s("Cmp")
+  IF    op = X64.Plus  THEN w.s("Plus")
+  ELSIF op = X64.Or    THEN w.s("Or")
+  ELSIF op = X64.And   THEN w.s("And")
+  ELSIF op = X64.Minus THEN w.s("Minus")
+  ELSIF op = X64.Xor   THEN w.s("Xor")
+  ELSIF op = X64.Cmp   THEN w.s("Cmp")
   ELSE w.i(op)
   END
 END wop;
+
+PROCEDURE wset(s: SET);
+VAR i, f, l: INTEGER; ch: CHAR;
+BEGIN
+  IF s = {} THEN w.s("{}")
+  ELSE
+    ch := "{";  i := 0;  f := -1;  l := -1;
+    FOR i := 0 TO 63 DO
+      IF i IN s THEN
+        IF f < 0 THEN
+          f := i; l := i
+        ELSIF i = l + 1 THEN
+          l := i
+        ELSE (* i > l + 1 *)
+          w.c(ch);  ch := ",";
+          IF f = l THEN w.i(f) ELSE w.i(f); w.c("-"); w.i(l) END;
+          f := i;  l := i
+        END
+      END
+    END;
+    w.c(ch);
+    IF f = l THEN w.i(f) ELSE w.i(f); w.c("-"); w.i(l) END;
+    w.c("}")
+  END
+END wset;
 
 
 (* ---------------------------- Code generation ----------------------------- *)
 
 
-PROCEDURE FixAddr(x: Item): INTEGER;
-BEGIN
-  RETURN x.ea.value
-END FixAddr;
+PROCEDURE ReserveNextFree*(): INTEGER;
+VAR n: INTEGER;
+BEGIN n := X64.FirstFreeReg();
+  IF n < 0 THEN ORS.Mark("register stack underflow");  n := 15
+  ELSE X64.ReserveReg(n) END
+RETURN n END ReserveNextFree;
 
-PROCEDURE IncReg;
-BEGIN
-  (*startRightCol("IncReg RH "); w.i(RH);*)
-  IF RH >= 15 THEN ORS.Mark("register stack overflow") ELSE X64.IncReg(RH) END;
-  (*w.s(" -> "); w.i(RH); wl*)
-END IncReg;
+PROCEDURE CheckRegs*(msg: ARRAY OF CHAR);
+BEGIN startRightCol("CheckRegs("); w.s(msg);
+  w.s("): Used "); wset(X64.AllFree - X64.Free);
+  w.s(", Free: "); wset(X64.Free);
+  w.s(", SPO "); w.i(X64.SPO); w.sl(".");
+  IF X64.Free # X64.AllFree   THEN ORS.Mark("Reg Stack"); X64.ClearRegs;  ASSERT(FALSE) END;
+  IF X64.PC >= X64.MaxPC - 40 THEN ORS.Mark("program too long");          ASSERT(FALSE) END;
+  IF X64.SPO # 0              THEN ORS.Mark("SPO error"); X64.ClearStack; ASSERT(FALSE) END
+END CheckRegs;
 
-PROCEDURE DecReg;
-BEGIN
-  IF RH <= 0 THEN ORS.Mark("register stack underflow") ELSE X64.DecReg(RH) END
-END DecReg;
-
-PROCEDURE IsSigned(x: ORB.Type): BOOLEAN;  (* returns whether x represents a signed value *)
+PROCEDURE IsSigned(x: ORB.Type): BOOLEAN;  (* returns whether x represents a signed integer value *)
 BEGIN RETURN (x.ref >= ORB.Int8) & (x.ref <= ORB.Int64) END IsSigned;
 
 PROCEDURE IsStructured(x: ORB.Type): BOOLEAN;
@@ -391,159 +413,153 @@ BEGIN RETURN (x.form = ORB.Array) OR (x.form = ORB.Record) OR (x.form = ORB.Poin
 PROCEDURE IsReference(x: Item): BOOLEAN;
 BEGIN RETURN (x.state = ORB.Par) OR IsStructured(x.type) END IsReference;
 
+(*
 PROCEDURE MakeCodeFixup(pc: INTEGER; x: Item): INTEGER;
 VAR result: INTEGER;
 BEGIN
-  ASSERT(x.ea.fixup >= 0);
-  result := x.ea.value;
-  IF x.ea.fixup = 0 THEN
+  ASSERT(x.o.fixup >= 0);
+  result := x.o.disp;
+  IF x.o.fixup = 0 THEN
     ASSERT(result < 80000000H)                   (* 1/0, 31/module offset *)
   ELSE
     ASSERT(result < 800000H);
-    INC(result, 80000000H + LSL(x.ea.fixup-1, 24))  (* 1/1, 5/module no, 24/import index *)
+    INC(result, 80000000H + LSL(x.o.fixup-1, 24))  (* 1/1, 5/module no, 24/import index *)
   END
 RETURN result END MakeCodeFixup;
-
+*)
 
 PROCEDURE IsImmediate*(i: Item): BOOLEAN;
-BEGIN RETURN (i.state = RegRm) & i.ea.direct & (i.ea.base < 0) END IsImmediate;
+BEGIN RETURN (i.state = Operand) & (i.o.level = X64.Direct) & (i.o.base < 0) END IsImmediate;
 
 
-PROCEDURE LoadImmediate(reg, val: INTEGER);
+PROCEDURE Min(a, b: INTEGER): INTEGER;
+BEGIN IF a < b THEN b := a END;  RETURN b END Min;
+
+PROCEDURE Max(a, b: INTEGER): INTEGER;
+BEGIN IF a > b THEN b := a END;  RETURN b END Max;
+
+
+
+(*
+ROCEDURE LoadRegFromEa(reg, size: INTEGER; signed: BOOLEAN; VAR o: X64.Operand);
+(* Loads all 64 bits of reg from sized data at o *)
 BEGIN
-  IF val = 0 THEN                             (* Clear register with 32 bit XOR *)
-    X64.EmitRex(FALSE, reg, 0, reg); X64.Emit(1, 31H); X64.Emit(1, 0C0H + LSL(reg MOD 8, 3) + reg MOD 8)
-  ELSIF (val > 0) & (val < 100000000H) THEN   (* Load 32 bit unsigned value as 32 bit load with zero extension *)
-    X64.EmitRex(FALSE, reg, 0,0); X64.Emit(1, 0B8H + reg MOD 8); X64.Emit(4, val);
-  ELSIF (val < 0) & (val >= -80000000H) THEN
-    (* Load 32 bit negative value with sign extended move *)
-    X64.EmitRex(TRUE, reg, 0,0); X64.Emit(1, 0C7H); X64.Emit(1, 0C0H + reg MOD 8); X64.Emit(4,val);
-  ELSE
-    (* Need full 64 bit literal *)
-    X64.EmitRex(TRUE, reg, 0,0); X64.Emit(1, 0B8H + reg MOD 8); X64.Emit(8,val);
-  END
-END LoadImmediate;
-
-
-PROCEDURE LoadRegFromEa(reg, size: INTEGER; signed: BOOLEAN; ea: X64.EffectiveAddress);
-(* Loads all 64 bits of reg from sized data at ea *)
-BEGIN
-  IF ea.direct & (ea.base < 0) THEN  (* Load immediate value *)
-    LoadImmediate(reg, ea.value)
+  (*IF reg < 0 THEN IF X64.IsDataReg(o.base) THEN reg := o.base ELSE reg := ReserveNextFree() END END;*)
+  ASSERT(reg >= 0);
+  ASSERT(~(o.direct & (o.base >= 0)));
+  IF o.direct THEN  ASSERT(o.base < 0);  (* must be immediate value, not direct register *)
+    X64.LoadImmediate(reg, o.disp)
   ELSE                         (* Load reg from size at [base+index*scale+offset] *)
     IF signed THEN
-      X64.EmitRex(TRUE, reg, 0, ea.base);
-      IF    size = 1 THEN X64.Emit(1, 0FH); X64.Emit(1, 0BEH);   (* movsx  r64, r/m8  *)
-      ELSIF size = 2 THEN X64.Emit(1, 0FH); X64.Emit(1, 0BFH);   (* movsx  r64, r/m16 *)
-      ELSIF size = 4 THEN X64.Emit(1, 63H)                       (* movsxd r64, r/m32 *)
-                     ELSE X64.Emit(1, 8BH)                       (* mov    r64, r/m64 *)
+      X64.EmitRex(TRUE, reg, 0, o.base);
+      IF    size = 1 THEN X64.Emit(0FH); X64.Emit(0BEH);   (* movsx  r64, r/m8  *)
+      ELSIF size = 2 THEN X64.Emit(0FH); X64.Emit(0BFH);   (* movsx  r64, r/m16 *)
+      ELSIF size = 4 THEN X64.Emit(63H)                    (* movsxd r64, r/m32 *)
+                     ELSE X64.Emit(8BH)                    (* mov    r64, r/m64 *)
       END
     ELSE (* Unsigned *)
-      X64.EmitRex(size # 4, reg, 0, ea.base);
-      IF    size = 1 THEN X64.Emit(1, 0FH); X64.Emit(1, 0B6H);   (* movzx  r64, r/m8  *)
-      ELSIF size = 2 THEN X64.Emit(1, 0FH); X64.Emit(1, 0B7H);   (* movzx  r64, r/m16 *)
-                     ELSE X64.Emit(1, 8BH)                       (* mov    r32/64, rm32/64 *)
+      X64.EmitRex(size # 4, reg, 0, o.base);
+      IF    size = 1 THEN X64.Emit(0FH); X64.Emit(0B6H);   (* movzx  r64, r/m8  *)
+      ELSIF size = 2 THEN X64.Emit(0FH); X64.Emit(0B7H);   (* movzx  r64, r/m16 *)
+                     ELSE X64.Emit(8BH)                    (* mov    r32/64, rm32/64 *)
       END
     END;
-    X64.EmitModRegRm(reg, SPO, ea)
-  END
+    X64.EmitModRegRm(reg, o);
+    X64.FreeOperand(o)
+  END;
+  X64.ReserveReg(reg)
 END LoadRegFromEa;
 
 
-PROCEDURE FollowIndirect(VAR i: Item);
+PROCEDURE LoadReg(VAR i: Item);  (* Ensure value is in register *)
+VAR reg: INTEGER;
 BEGIN
-  ASSERT(i.state = RegRmInd);
-
-  LoadRegFromEa(RH, 64, FALSE, i.ea);
-  X64.Disassemble("FollowIndirect");
-
-  X64.ClearEA(i.ea);
-  i.state     := RegRm;
-  i.ea.direct := FALSE;
-  i.ea.base   := RH;
-  IncReg;
-END FollowIndirect;
-
-
-PROCEDURE LoadValueToReg(VAR i: Item);  (* Ensure value is in register *)
-VAR size: INTEGER;
-BEGIN
-  IF i.state = RegRmInd THEN FollowIndirect(i) END;
-
-  (* Convert TRUE/FALSE conditions to immediate values *)
-  IF (i.state = Condition) & (i.ea.value < 2) THEN
-    i.state := RegRm;  i.ea.direct := TRUE;  i.ea.base := -1
+  X64.Undouble(i.o);
+  IF X64.IsDataReg(i.o.base) THEN reg := i.o.base ELSE reg := X64.FirstFreeReg() END;
+  IF IsImmediate(i) OR ~i.o.level = X64.Direct THEN
+    IF IsImmediate(i) THEN
+      X64.LoadImmediate(reg, i.o.disp);
+    ELSE  (* Only load if not already in a register  *)
+      LoadRegFromEa(reg, i.type.size, IsSigned(i.type), i.o)
+    END;
+    X64.FreeOperand(i.o);
+    i.state     := RegRm;
+    i.o.level = X64.Direct := TRUE;
+    i.o.base   := reg;
+    X64.ReserveReg(reg)
   END;
+  ASSERT(i.state = Operand)
+END LoadReg;
 
-  IF i.state = Condition THEN  (* Generate code to load condition to reg *)
-    X64.EmitRex(FALSE, 0, 0, RH);
-    X64.Emit(1, 0FH);  X64.Emit(1, i.ea.value + 10H);
-    X64.Emit(1, 0C0H + RH MOD 8);
-    X64.Disassemble("LoadValueToReg from condition");
-    X64.EmitRex(FALSE, RH, 0, RH);
-    X64.Emit(1, 0FH);
-    X64.Emit(1, 0B6H);
-    X64.Emit(1, 0C0H + RH MOD 8 * 8 + RH MOD 8);
-    X64.Disassemble("");
-    X64.ClearEA(i.ea);
-    i.state     := RegRm;
-    i.ea.direct := TRUE;
-    i.ea.base   := RH;
-    IncReg
-  ELSIF IsImmediate(i) THEN
-    LoadImmediate(RH, i.ea.value);
-    X64.Disassemble("LoadValueToReg from immediate");
-    X64.ClearEA(i.ea);
-    i.state     := RegRm;
-    i.ea.direct := TRUE;
-    i.ea.base   := RH;
-    IncReg
-  ELSIF ~i.ea.direct THEN  (* Only load if not already in a register  *)
-    LoadRegFromEa(RH, i.type.size, IsSigned(i.type), i.ea);
-    X64.Disassemble("LoadValueToReg from EA");
-    X64.ClearEA(i.ea);
-    i.state     := RegRm;
-    i.ea.direct := TRUE;
-    i.ea.base   := RH;
-    IncReg
-  END
-END LoadValueToReg;
+
+PROCEDURE StoreReg(VAR dest: Item; size, reg: INTEGER);
+VAR op: INTEGER;
+BEGIN
+  size := dest.type.size;
+  X64.Undouble(dest.o);  ASSERT(dest.o.level = X64.Indirect);
+  X64.EmitPrefices(reg, size, dest.o);
+  IF size = 1 THEN X64.Emit(88H) ELSE X64.Emit(89H) END;
+  X64.EmitModRegRm(reg, dest.o)
+END StoreReg;
+
+
+PROCEDURE StoreImmediate(VAR dest: Item;  size, val: INTEGER);
+VAR reg: INTEGER;
+BEGIN startRightCol("StoreImmediate(dest: "); witem(dest); w.s(", size: "); w.i(size); w.s(", val: "); w.i(val); w.sl(")");
+  X64.Undouble(-1.o, dest);  ASSERT(~dest.o.level = X64.Direct);
+  IF (val >= -80000000H) & (val < 80000000H) THEN
+    X64.EmitPrefices(0, size, dest.o);
+    IF size = 1 THEN X64.Emit(0C6H) ELSE X64.Emit(0C7H) END;
+    X64.EmitModRegRm(0, dest.o);
+    X64.EmitBytes(Min(size, 4), val);
+  ELSE
+    (* 64 bit immediate - load immediate then store reg *)
+    reg := X64.LoadImmediate(-1, val);
+    StoreReg(dest, dest.type.size, reg);
+    X64.ReleaseReg(reg);
+  END;
+END StoreImmediate;
+*)
+
 
 PROCEDURE SetCondition(VAR x: Item; cond: INTEGER);
 BEGIN
-  X64.ClearEA(x.ea);
+  X64.ClearOperand(x.o);
   x.state    := Condition;
-  x.ea.base  := 0;       (* prev instr needing patching to after this instruction *)
-  x.ea.index := 0;       (* prev instruction needing patch to this instruction *)
-  x.ea.value := cond
+  x.o.base  := 0;       (* prev instr needing patching to after this instruction *)
+  x.o.index := 0;       (* prev instruction needing patch to this instruction *)
+  x.o.disp := cond
 END SetCondition;
 
-PROCEDURE LoadCondition(VAR x: Item);  (* Set condition flags based on x *)
-VAR oldrh: INTEGER;
+
+PROCEDURE LoadFlags(VAR x: Item);  (* Set Z condition flag based on x *)
 BEGIN
   ASSERT(x.type.form = ORB.Bool);
   IF IsImmediate(x) THEN
-    ASSERT((x.ea.value = 0) OR (x.ea.value = 1));
-    SetCondition(x, x.ea.value)
+    ASSERT((x.o.disp = 0) OR (x.o.disp = 1));
+    SetCondition(x, x.o.disp)
   ELSE
-    oldrh := RH;
-    IF x.state = RegRmInd THEN FollowIndirect(x) END;
-    (*LoadValueToReg(x);*)
-    IF x.ea.direct THEN  (* test reg,reg *)
-      X64.EmitPrefices(x.ea.base, 8, x.ea);
-      X64.Emit(1, 85H);
-      X64.EmitModRegRm(x.ea.base, SPO, x.ea)
+    X64.Undouble(x.o);
+    IF x.o.level = X64.Direct THEN  (* test reg,reg *)
+      X64.EmitRegRegOp(85H, x.o.base, 8, x.o.base)
+      (*
+      X64.EmitPrefices(x.o.base, 8, x.o);
+      X64.Emit(85H);
+      X64.EmitModRegRm(x.o.base, x.o)
+      *)
     ELSE                 (* cmp mem,0 *)
-      X64.EmitRex(FALSE, 0, 0, x.ea.base);
-      X64.Emit(1, 80H);
-      X64.EmitModRegRm(7, SPO, x.ea);
-      X64.Emit(1, 0);
+      X64.EmitOp(83H, 7, x.type.size, x.o);
+      (*
+      X64.EmitRex(FALSE, 0, 0, x.o.base);
+      X64.Emit(80H);
+      X64.EmitModRegRm(7, x.o);
+      *)
+      X64.Emit(0);
     END;
-    X64.Disassemble("LoadCondition");
-    RH := oldrh;
+    X64.FreeOperand(x.o);
     SetCondition(x, CNZ)
   END
-END LoadCondition;
+END LoadFlags;
 
 
 PROCEDURE InvertedCondition(cond: INTEGER): INTEGER;
@@ -556,83 +572,43 @@ PROCEDURE IsDyadicNoOp(op: INTEGER; src: Item): BOOLEAN;
 VAR result: BOOLEAN;
 BEGIN result := FALSE;
   IF IsImmediate(src) THEN
-    IF src.ea.value = 0 THEN
-      result := (op = Plus) OR (op = Minus) OR (op = Or) OR (op = Xor)
-    ELSIF src.ea.value = -1 THEN
-      result := op = And
+    IF src.o.disp = 0 THEN
+      result := (op = X64.Plus) OR (op = X64.Minus) OR (op = X64.Or) OR (op = X64.Xor)
+    ELSIF src.o.disp = -1 THEN
+      result := op = X64.And
     END
   END
 RETURN result END IsDyadicNoOp;
 
 PROCEDURE Dyadic(op: INTEGER;  VAR dest, src: Item);  (* dest := dest op src *)
+VAR reg: INTEGER;
 BEGIN
-  ASSERT(op IN {Plus, Minus, Cmp, And, Or, Xor});
+  ASSERT(op IN {X64.Plus, X64.Minus, X64.Cmp, X64.And, X64.Or, X64.Xor});
   startRightCol("Dyadic("); wop(op); w.s("; dest: "); witem(dest); w.s(", src: "); witem(src); wl;
 
   IF IsImmediate(src) & IsImmediate(dest) THEN
 
-    IF    op = Plus  THEN INC(dest.ea.value, src.ea.value)
-    ELSIF op = Minus THEN DEC(dest.ea.value, src.ea.value)
-    ELSIF op = Cmp   THEN DEC(dest.ea.value, src.ea.value)
-    ELSIF op = And   THEN dest.ea.value := SYSTEM.VAL(INTEGER, SYSTEM.VAL(SET,dest.ea.value) * SYSTEM.VAL(SET,src.ea.value));
-    ELSIF op = Or    THEN dest.ea.value := SYSTEM.VAL(INTEGER, SYSTEM.VAL(SET,dest.ea.value) + SYSTEM.VAL(SET,src.ea.value));
-    ELSIF op = Xor   THEN dest.ea.value := SYSTEM.VAL(INTEGER, SYSTEM.VAL(SET,dest.ea.value) / SYSTEM.VAL(SET,src.ea.value));
+    IF    op = X64.Plus  THEN INC(dest.o.disp, src.o.disp)
+    ELSIF op = X64.Minus THEN DEC(dest.o.disp, src.o.disp)
+    ELSIF op = X64.Cmp   THEN DEC(dest.o.disp, src.o.disp)
+    ELSIF op = X64.And   THEN dest.o.disp := SYSTEM.VAL(INTEGER, SYSTEM.VAL(SET,dest.o.disp) * SYSTEM.VAL(SET,src.o.disp));
+    ELSIF op = X64.Or    THEN dest.o.disp := SYSTEM.VAL(INTEGER, SYSTEM.VAL(SET,dest.o.disp) + SYSTEM.VAL(SET,src.o.disp));
+    ELSIF op = X64.Xor   THEN dest.o.disp := SYSTEM.VAL(INTEGER, SYSTEM.VAL(SET,dest.o.disp) / SYSTEM.VAL(SET,src.o.disp));
     END
 
   ELSIF ~IsDyadicNoOp(op, src) THEN
-
-    (*
-    w.s("; dyadic op "); wop(op);  wl;
-    w.s("  dest "); witem(dest); wl;
-    w.s("  src  "); witem(src);  wl;
-    *)
-
     (* TODO - avoid reg load when src is immediate such as: cmp [rsp+10],0 *)
 
-    LoadValueToReg(dest);
+    ASSERT(dest.state = Operand);
+
+    X64.Load(dest.o);
     (*w.s("  dest "); witem(dest); wl;*)
 
-    ASSERT(dest.state = RegRm);  ASSERT(dest.ea.direct);
+    ASSERT(dest.o.level = X64.Direct);
+    ASSERT(src.state    = Operand);
 
-    IF IsImmediate(src) & (src.ea.value = 1) & ((op = Plus) OR (op = Minus)) THEN
-      (* INC / DEC *)
-      X64.EmitRex(TRUE, 0, 0, dest.ea.base);
-      X64.Emit(1, 0FFH);
-      X64.Emit(1, 0C0H  +  op MOD 16  +  dest.ea.base MOD 8)
-    ELSE
-      (* Get source into a representation suitable for X64 dyadic alu operations *)
-
-      IF src.state = RegRmInd THEN FollowIndirect(src) END;
-
-      IF (IsImmediate(src))
-       & ((src.ea.value >= 80000000H) OR (src.ea.value < -80000000H)) THEN
-        LoadImmediate(RH, src.ea.value);
-        X64.ClearEA(src.ea);
-        src.ea.base := RH;
-        IncReg;
-        src.state := RegRm
-      END;
-
-      ASSERT(src.state = RegRm);
-
-      (* Generate alu operation *)
-      X64.EmitPrefices(dest.ea.base, 8, src.ea);
-      IF IsImmediate(src) THEN (* op destreg,immediate *)
-        ASSERT((src.ea.value >= -80000000H) & (src.ea.value < 80000000H));
-        INC(op, 0C0H);
-        IF (src.ea.value >= -80H) & (src.ea.value < 80H) THEN
-          X64.Emit(1, 83H);  X64.Emit(1, op + dest.ea.base MOD 8);  X64.Emit(1, src.ea.value)
-        ELSE
-          X64.Emit(1, 81H);  X64.Emit(1, op + dest.ea.base MOD 8);  X64.Emit(4, src.ea.value)
-        END
-      ELSE
-        X64.Emit(1, op + 3);
-        X64.EmitModRegRm(dest.ea.base, SPO, src.ea)
-      END
-    END;
-    X64.Disassemble("Dyadic operator");
-
-    RH := dest.ea.base + 1
+    X64.AluOp(dest.o.base, op, src.o);
+    X64.FreeOperand(src.o);
   END
 END Dyadic;
 
@@ -643,40 +619,44 @@ PROCEDURE ZeroFill(VAR obj: ARRAY OF BYTE);  VAR i: INTEGER;
 BEGIN FOR i := 0 TO LEN(obj)-1 DO obj[i] := 0 END END ZeroFill;
 
 PROCEDURE MakeItem*(VAR x: Item; y: ORB.Object; curlev: INTEGER);
+VAR base, section: INTEGER;
 BEGIN startRightCol("MakeItem(y: "); wobject(y); w.s(", curlev: "); w.i(curlev); w.s(")");
   ASSERT(y.class IN {ORB.Const, ORB.Var, ORB.Par, ORB.SProc, ORB.Typ});
 
   ZeroFill(x);
-  X64.ClearEA(x.ea);
+  X64.ClearOperand(x.o);
   x.state    := y.class;
   x.type     := y.type;
-  x.ea.value := y.val;
   x.readonly := y.rdo;
+(*x.o.disp   := y.val;*)
 
   IF y.class IN {ORB.Const, ORB.Var, ORB.Par} THEN
-    x.ea.direct := y.class = ORB.Const;
+    x.state := Operand;
 
-    IF (y.class # ORB.Const) OR (y.type.form = ORB.Proc) THEN
-      IF y.class = ORB.Par THEN  ASSERT(y.lev > 0);
-        x.state := RegRmInd
-      ELSE
-        x.state := RegRm
-      END;
-      IF y.lev > 0 THEN
-        x.ea.base := X64.RSP      (* x.level := Stack *)
-      ELSE
-        x.ea.fixup := -y.lev  (* x.level := Module - y.lev *)
-      END
+    IF y.lev > 0 THEN  (* Stack relative *)
+      section := -1;      base := X64.RSP
     ELSE
-      (* Immediate value *)
-      x.state := RegRm
+      section := -y.lev;  base := -1
+    END;
+
+    IF (y.class = ORB.Const) & (y.type.form = ORB.Proc) THEN
+      X64.MakeOperand(X64.Indirect,       base, y.val, section, 8,           FALSE,            x.o)
+    ELSIF y.class = ORB.Const THEN
+      X64.MakeOperand(X64.Direct,         -1,   y.val, -1,      8,           IsSigned(y.type), x.o)
+    ELSIF y.class = ORB.Var THEN
+      X64.MakeOperand(X64.Indirect,       base, y.val, section, y.type.size, IsSigned(y.type), x.o)
+    ELSE ASSERT(y.class = ORB.Par);
+      ASSERT(section < 0);  (* Must be on stack *)
+      X64.MakeOperand(X64.DoubleIndirect, base, y.val, section,     y.type.size, IsSigned(y.type), x.o)
     END
+  ELSE
+    X64.MakeOperand(X64.Direct, -1,   y.val, -1, 8, FALSE, x.o)
   END;
 
   w.s(" -> ");
   wstate(x.state); w.s("/"); wform(x.type.form);
   IF x.readonly THEN w.s(", readonly") END;
-  IF x.state IN {RegRm, RegRmInd} THEN w.s(" "); wRegRm(x.ea) END;
+  IF x.state = Operand THEN w.s(" "); wOperand(x.o) END;
   IF x.type.form = ORB.String THEN w.s(", length "); w.i(x.length) END;
   wl
 END MakeItem;
@@ -685,20 +665,18 @@ PROCEDURE MakeConstItem*(VAR x: Item;  t: ORB.Type;  v: INTEGER);
 BEGIN
   startRightCol("MakeConstItem, value: "); w.i(v); w.s(", type "); wtype(t); wl;
   ZeroFill(x);
-  X64.ClearEA(x.ea);
-  x.state := RegRm;
+  x.state := Operand;
   x.type  := t;
-  x.ea.value := v;
+  X64.MakeOperand(X64.Direct, -1, v, -1, t.size, IsSigned(t), x.o)
 END MakeConstItem;
 
 PROCEDURE MakeRealItem*(VAR x: Item; val: REAL);
 BEGIN
   startRightCol("MakeRealItem(x; val)"); wl;
   ZeroFill(x);
-  X64.ClearEA(x.ea);
-  x.state := RegRm;
   x.type  := ORB.realType;
-  x.ea.value := SYSTEM.VAL(INTEGER, val)
+  x.state := Operand;
+  X64.MakeOperand(X64.Direct, -1, SYSTEM.VAL(INTEGER, val), -1, 8, TRUE, x.o)
 END MakeRealItem;
 
 PROCEDURE FindString(str: ARRAY OF CHAR; len: INTEGER): INTEGER;
@@ -729,25 +707,23 @@ PROCEDURE MakeStringItem*(VAR x: Item; len: INTEGER); (* copies string from ORS-
 VAR i: INTEGER;
 BEGIN
   ZeroFill(x);
-  X64.ClearEA(x.ea);
-  x.state := RegRm;
   x.type     := ORB.strType;
   x.readonly := TRUE;
   x.length   := len;
+  x.state    := Operand;
 
-  IF len <= 8 THEN        (* Strings of up to 9 bytes are recorded in item.value *)
-    SYSTEM.GET(SYSTEM.ADR(ORS.str), x.ea.value)
+  IF len <= 8 THEN        (* Strings of up to 9 bytes are recorded in item.disp *)
+    SYSTEM.GET(SYSTEM.ADR(ORS.str), i);
+    X64.MakeOperand(X64.Direct, -1, i, -1, 8, FALSE, x.o)
   ELSE                    (* Strings of 9 or more bytes are stored in the module's string table *)
-    x.ea.direct := FALSE;
-    x.ea.value  := FindString(ORS.str, len);
-    x.ea.fixup  := 0;  (* Module data fixup *)
+    X64.MakeOperand(X64.Indirect, -1, FindString(ORS.str, len), 0, 8, FALSE, x.o)
   END;
 
   startRightCol("MakeStringItem('");
   i := 0;
   WHILE (i < len) & (ORS.str[i] # 0X) DO w.c(ORS.str[i]); INC(i) END;
   w.s("')");
-  IF (len > 8) & (x.ea.value + len < Strx) THEN w.s(" (reused)") END;
+  IF (len > 8) & (x.o.disp + len < Strx) THEN w.s(" (reused)") END;
   wl
 END MakeStringItem;
 
@@ -757,131 +733,112 @@ END MakeStringItem;
 
 PROCEDURE StrToChar*(VAR x: Item);
 BEGIN startRightCol("StrToChar(x)  x"); witem(x); wl;
-  ASSERT(x.state     = RegRm);
-  ASSERT(x.ea.base   < 0);
+  ASSERT(x.state     = Operand);
+  ASSERT(x.o.level   = X64.Direct);
+  ASSERT(x.o.base    < 0);
   ASSERT(x.type.form = ORB.String);
   ASSERT(x.length    = 2);
   ASSERT(x.readonly);
-  ASSERT(x.ea.direct);
 
-  x.type     := ORB.charType;
-  x.ea.value := x.ea.value MOD 256
+  x.type   := ORB.charType;
+  x.o.disp := x.o.disp MOD 256
 END StrToChar;
 
 
 (* ---- Assignment ---- *)
 
+
 PROCEDURE Store*(VAR dest, src: Item); (* dest := src *)
-VAR size, op: INTEGER;
 BEGIN startRightCol("Store(dest: "); witem(dest); w.s(", src: "); witem(src); wl;
-  size  := dest.type.size;
-
-  IF dest.state = RegRmInd THEN FollowIndirect(dest) END;
-
-  ASSERT(dest.state = RegRm);
-  ASSERT(~dest.ea.direct);
-
-  IF (~IsImmediate(src)) OR (src.ea.value >= 80000000H) OR (src.ea.value < -80000000H) THEN
-    LoadValueToReg(src)
-  END;
-
-  ASSERT(src.ea.direct);
-
-  IF IsImmediate(src) THEN op := 0C6H ELSE op := 88H END;
-  IF size # 1 THEN INC(op) END;
-
-  X64.EmitPrefices(src.ea.base, size, dest.ea);
-  X64.Emit(1, op);
-  X64.EmitModRegRm(src.ea.base, SPO, dest.ea);
-
   IF IsImmediate(src) THEN
-    IF size < 4 THEN X64.Emit(size, src.ea.value)
-    ELSE             X64.Emit(4,    src.ea.value) END
+    X64.StoreImmediate(src.o.disp, dest.o);
+  ELSE
+    X64.Load(src.o);
+    X64.StoreReg(src.o.base, dest.o);
   END;
-
   X64.Disassemble("Store");
-  DecReg
+  X64.FreeOperand(src.o);  X64.FreeOperand(dest.o)
 END Store;
 
 
 PROCEDURE StoreStruct*(VAR x, y: Item); (* x := y, frame = 0 *)
-BEGIN startRightCol("StoreStruct(x, y) x := y"); wl;
-  w.b(RightCol + 2); w.s("x: "); witem(x); wl;
-  w.b(RightCol + 2); w.s("y: "); witem(y); wl
+BEGIN startRightCol("StoreStruct(x: "); witem(x);  w.s(", y: "); witem(y); w.sl(")");
 END StoreStruct;
 
 PROCEDURE CopyString*(VAR x, y: Item);  (* x := y *)
-BEGIN startRightCol("CopyString(x, y) x := y"); wl;
-  w.b(RightCol + 2); w.s("x: "); witem(x); wl;
-  w.b(RightCol + 2); w.s("y: "); witem(y); wl
+BEGIN startRightCol("CopyString(x: "); witem(x);  w.s(", y: "); witem(y); w.sl(")");
 END CopyString;
 
 
 (* ---- selection - fields, indices & pointers ---- *)
 
 PROCEDURE Index*(VAR x, y: Item);   (* x := x[y] *)
-VAR elemsize: INTEGER;  oldrh: INTEGER;
-BEGIN startRightCol("Index(x, y)"); wl;
-  w.b(RightCol + 2); w.s("x: "); witem(x); wl;
-  w.b(RightCol + 2); w.s("y: "); witem(y); wl;
-  ASSERT(~IsImmediate(x));
-  ASSERT(~x.ea.direct);
-  IF x.state = RegRmInd THEN FollowIndirect(x) END;
+VAR elemsize: INTEGER;
+BEGIN startRightCol("Index(x: "); witem(x); w.s(", y: "); witem(y); wl;
   ASSERT(x.type.form = ORB.Array);
-  ASSERT(x.state = RegRm);
-  ASSERT(~x.ea.direct);
+  ASSERT(x.state = Operand);
+  ASSERT(x.o.level > X64.Direct);
+  ASSERT(y.state = Operand);
   elemsize := x.type.base.size;
   w.b(RightCol + 2); w.s("x base type: "); wtype(x.type.base); wl;
   w.b(RightCol + 2); w.s("elemsize: "); w.i(elemsize); wl;
-
   IF IsImmediate(y) THEN
-    INC(x.ea.value, y.ea.value * elemsize)
+    IF x.o.level = X64.Indirect THEN
+      INC(x.o.disp, y.o.disp * elemsize)
+    ELSE ASSERT(x.o.level = X64.DoubleIndirect);
+      INC(x.o.offset, y.o.disp * elemsize)
+    END
   ELSE
-    oldrh := RH;
-    LoadValueToReg(y);
-
+    X64.Undouble(x.o);
+    X64.Load(y.o);
     (* Use X64 SIB index and scale if possible *)
-    IF (x.ea.base >= 0) & (x.ea.index < 0) & (elemsize IN {1, 2, 4, 8}) THEN
-      x.ea.index := y.ea.base;  x.ea.scale := 0;
-      IF    elemsize = 2 THEN x.ea.scale := 1
-      ELSIF elemsize = 4 THEN x.ea.scale := 2
-      ELSIF elemsize = 8 THEN x.ea.scale := 3
-      END
+    IF (x.o.base >= 0) & (x.o.index < 0) & (elemsize IN {1, 2, 4, 8}) THEN
+      x.o.index := y.o.base;  x.o.scale := 0;
+      IF    elemsize = 2 THEN x.o.scale := 1
+      ELSIF elemsize = 4 THEN x.o.scale := 2
+      ELSIF elemsize = 8 THEN x.o.scale := 3
+      END;
+      X64.ClearOperand(y.o)
     ELSE
-      X64.EmitPrefices(x.ea.base, 8, y.ea);  (* Add y reg to x reg *)
-      X64.Emit(1, Plus + 3);
-      X64.EmitModRegRm(x.ea.base, SPO, y.ea)
-    END;
-    RH := oldrh;
-  END
+      X64.AluOpRegToReg(X64.Plus, x.o.base, y.o.base);
+      X64.FreeOperand(y.o)
+    END
+  END;
+  X64.Disassemble("Index")
 END Index;
 
 PROCEDURE DeRef*(VAR x: Item);
 BEGIN startRightCol("DeRef(x), x: "); witem(x); wl;
   ASSERT(x.type.form = ORB.Pointer);
-  LoadValueToReg(x);
-  x.ea.direct := FALSE
+  ASSERT(x.state = Operand);
+  ASSERT(x.o.level > X64.Direct);
+  X64.Load(x.o);
+  X64.Disassemble("DeRef");
+  x.o.level := X64.Indirect;
 END DeRef;
 
 PROCEDURE Field*(VAR x: Item; y: ORB.Object);   (* x := x.y *)
-BEGIN startRightCol("Field(x: Item; y: Object)"); wl;
-  w.b(RightCol + 2); w.s("x: "); witem(x);   wl;
-  w.b(RightCol + 2); w.s("y: "); wobject(y); wl;
+BEGIN startRightCol("Field(x: "); witem(x); w.s(", y: "); wobject(y); w.sl(")");
+  ASSERT(x.state = Operand);
+  ASSERT(x.o.level > X64.Direct);
+  IF x.o.level = X64.Indirect THEN
+    INC(x.o.disp, y.val)
+  ELSE
+    INC(x.o.offset, y.val)
+  END
 END Field;
 
 
 (* ---- Paramter passing ---- *)
 
 PROCEDURE ValueParam*(VAR x: Item);
-BEGIN startRightCol("ValueParam(x: Item)  x: "); witem(x);
-  w.s(" (RH "); w.i(RH); w.s(")"); wl;
-  LoadValueToReg(x)
+BEGIN startRightCol("ValueParam(x: Item)  x: "); witem(x); wl;
+  X64.Load(x.o);
+  X64.Disassemble("ValueParam")
 END ValueParam;
 
 PROCEDURE VarParam*(VAR x: Item; ftype: ORB.Type);
-BEGIN startRightCol("VarParam(x: Item; ftype: Type)"); wl;
-  w.b(RightCol + 2); w.s("x:     "); witem(x);     wl;
-  w.b(RightCol + 2); w.s("ftype: "); wtype(ftype); wl;
+BEGIN startRightCol("VarParam(x: "); witem(x); w.s(", ftype: "); wtype(ftype); wl;
 END VarParam;
 
 PROCEDURE OpenArrayParam*(VAR x: Item);
@@ -895,95 +852,123 @@ END StringParam;
 
 (* ---- Procedure / function calls ---- *)
 
-PROCEDURE SaveRegisters;
+PROCEDURE SaveRegisterSet(regs: SET);
+VAR i: INTEGER;
 BEGIN
-  ASSERT(SPO = 0);
-  WHILE SPO < RH DO
-    X64.EmitRex(FALSE, SPO, 0, 0);  X64.Emit(1, 50H + SPO MOD 8);  (* Push SPO *)
-    X64.Disassemble("save reg");
-    X64.IncReg(SPO)
+  FOR i := 0 TO 15 DO
+    IF i IN regs THEN
+      X64.EmitPrefices(i, 4, -1, -1);
+      X64.Emit(50H + i MOD 8);  (* Push reg i *)
+      X64.AdjustStack(1);
+    END
+  END
+END SaveRegisterSet;
+
+(*
+PROCEDURE SaveRegisters;
+VAR i: INTEGER;
+BEGIN
+  Saved := AllFree - Free;
+  FOR i := 0 TO 15 DO
+    IF i IN Saved THEN
+      X64.EmitRex(FALSE, i, 0, 0);  X64.Emit(50H + i MOD 8);  (* Push reg i *)
+      INC(SPO);  X64.ReserveReg(15)
+    END
   END;
-  RH := 0
+  Free := AllFree
 END SaveRegisters;
+*)
 
 PROCEDURE RestoreRegisters;
+VAR i: INTEGER;
 BEGIN
-  IF SPO > 0 THEN REPEAT
-    X64.DecReg(SPO);
-    X64.EmitRex(FALSE, SPO, 0, 0);  X64.Emit(1, 58H + SPO MOD 8);  (* Push SPO *)
-    X64.Disassemble("restore reg");
-  UNTIL SPO = 0 END
+  IF Saved # {} THEN
+    FOR i := 0 TO 15 DO
+      IF (15-i) IN Saved THEN
+        X64.EmitPrefices(15-i, 4, -1, -1);
+        X64.Emit(58H + (15-i) MOD 8);  (* Pop reg (15-i) *)
+        X64.ReserveReg(15-i);
+        X64.AdjustStack(-1);
+      END
+    END
+  END;
+  ASSERT(X64.SPO = 0)
 END RestoreRegisters;
 
 PROCEDURE PrepCall*(VAR x: Item);
+VAR regs: SET;
 BEGIN startRightCol("PrepCall(x: "); witem(x); wl;
-  (* From Wirth ??: IF x.mode > ORB.Par THEN load(x) END; *)
-  IF x.type.base.form = ORB.NoTyp THEN RH := 0 END; (* procedure *)
-  IF RH > 0 THEN SaveRegisters END
+  regs := X64.AllFree - X64.Free;  (* Potential registers to save *)
+  (* Don't save registers being used for the proc address *)
+  IF X64.IsDataReg(x.o.base)  THEN EXCL(regs, x.o.base)  END;
+  IF X64.IsDataReg(x.o.index) THEN EXCL(regs, x.o.index) END;
+  SaveRegisterSet(regs);
+  IF X64.IsDataReg(x.o.base) THEN
+    (* Move proc address to the stack *)
+    X64.Undouble(x.o);
+    X64.Push(x.o);
+    X64.AdjustStack(1);
+    X64.FreeOperand(x.o);
+    x.o.level := X64.Indirect;
+    x.o.base  := X64.RSP;
+    x.o.disp  := -8 * X64.SPO;
+  END;
+  X64.Disassemble("PrepCall")
 END PrepCall;
 
 PROCEDURE Call*(VAR x: Item);
+VAR reg: INTEGER;
 BEGIN startRightCol("Call(x: "); witem(x); wl;
-  (* Make the call *)
-  IF x.state = RegRmInd THEN FollowIndirect(x) END;
-  IF IsImmediate(x) THEN
-    X64.Emit(1, 0E8H);
-    X64.Emit(4, x.ea.value - (X64.PC + 4))
-  ELSE
-    X64.EmitRex(FALSE, 0, 0, x.ea.base);  (* call instruction defaults to 64 bit arg *)
-    X64.Emit(1, 0FFH);
-    X64.EmitModRegRm(2, SPO, x.ea)
-  END;
+  ASSERT(x.state = Operand);
+  X64.Call(x.o);
   X64.Disassemble("Call");
 
   (* Follow up on return *)
   IF x.type.base.form = ORB.NoTyp THEN (* procedure *)
-    RH := 0
-  ELSE
-    RH := SPO;
-    IF RH > 0 THEN (* Move function result from rax to RH *)
-      X64.EmitRex(TRUE, RH, 0, 0);
-      X64.Emit(1, 8BH);
-      X64.Emit(1, 0C0H + RH MOD 8 * 8);
-      X64.Disassemble("Move fn result to RH");
-      RestoreRegisters
+    X64.ClearRegs
+  ELSE                                 (* function *)
+    (* Find a register to move the result to *)
+    reg := 0;  WHILE reg IN Saved DO INC(reg) END;  ASSERT(reg < 16);
+    IF reg > 0 THEN (* Move function result from rax to reg *)
+      X64.MoveReg(reg, 0);
+      X64.Disassemble("Move fn result to reg");
     END;
-    x.state := RegRm;
-    X64.ClearEA(x.ea);
-    x.ea.base := RH; (* function result reg *)
-    IncReg
-  END
+    X64.ClearRegs;  X64.ReserveReg(reg);
+    RestoreRegisters;
+    x.state := Operand;
+    X64.FreeOperand(x.o);
+    x.o.level := X64.Indirect;
+    x.o.base  := reg (* function result reg *)
+  END;
+  X64.Disassemble("Call cleanup");
 END Call;
 
 PROCEDURE Enter*(parblksize, locblksize: INTEGER);
-VAR i: INTEGER;
+VAR reg: INTEGER;
 BEGIN
-  startRightCol("Enter(parblksize ");  w.i(parblksize);
-  w.s(", locblksize ");        w.i(locblksize);  w.sl(")");
-  RH := 0;  SPO := 0;
+  startRightCol("Enter(parblksize "); w.i(parblksize);
+  w.s(", locblksize "); w.i(locblksize); w.sl(")");
+  X64.ClearStack;  X64.ClearRegs;
 
   (* Reserve space for locals *)
   DEC(locblksize, parblksize); (* Parameter space will be reserved by pushes *)
   IF locblksize > 0 THEN
-    X64.Emit(1, 48H);
+    X64.Emit(48H);
     IF locblksize < 80H THEN
-      X64.Emit(1, 83H);  X64.Emit(1, 0ECH);  X64.Emit(1, locblksize)
+      X64.Emit(83H);  X64.Emit(0ECH);  X64.Emit(locblksize)
     ELSE
-      X64.Emit(1, 81H);  X64.Emit(1, 0ECH);  X64.Emit(4, locblksize)
+      X64.Emit(81H);  X64.Emit(0ECH);  X64.EmitBytes(4, locblksize)
     END
   END;
   X64.Disassemble("Reserve local var space");
 
   (* Push parameters backwards *)
-  i := parblksize;  RH := i DIV 8; IF RH >= 4 THEN INC(RH) END;
-  WHILE i > 0 DO
-    DecReg;
-    X64.EmitRex(FALSE, RH, 0, 0);  X64.Emit(1, 50H + RH MOD 8);
-    DEC(i, 8)
+  reg := parblksize DIV 8; IF reg >= X64.RSP THEN INC(reg) END;
+  WHILE reg > 0 DO
+    DEC(reg);  IF reg = X64.RSP THEN DEC(reg) END;
+    X64.PushReg(reg)
   END;
-  X64.Disassemble("Save parameters");
-
-  ASSERT(RH = 0)
+  X64.Disassemble("Save parameters")
 END Enter;
 
 PROCEDURE Return*(form: INTEGER; VAR x: Item; size: INTEGER);
@@ -992,19 +977,19 @@ BEGIN
   w.s(", x: "); witem(x);
   w.s(", size "); w.i(size); wl;
 
-  IF form # ORB.NoTyp THEN LoadValueToReg(x) END;
+  IF form # ORB.NoTyp THEN X64.Load(x.o) END;
 
   IF size > 0 THEN
-    X64.Emit(1, 48H);
+    X64.Emit(48H);
     IF size < 80H THEN
-      X64.Emit(1, 83H);  X64.Emit(1, 0C4H);  X64.Emit(1, size)
+      X64.Emit(83H);  X64.Emit(0C4H);  X64.Emit(size)
     ELSE
-      X64.Emit(1, 81H);  X64.Emit(1, 0C4H);  X64.Emit(4, size)
+      X64.Emit(81H);  X64.Emit(0C4H);  X64.EmitBytes(4, size)
     END;
     X64.Disassemble("Release local stack space")
   END;
 
-  X64.Emit(1, 0C3H); (* ret *)
+  X64.Emit(0C3H); (* ret *)
   X64.Disassemble("Return")
 END Return;
 
@@ -1042,9 +1027,7 @@ BEGIN startRightCol("Shift(");
   ELSIF fct = 2 THEN w.s("ROR")
   ELSE               w.i(fct)
   END;
-  w.s("; x, y)"); wl;
-  w.b(RightCol + 2); w.s("x: "); witem(x); wl;
-  w.b(RightCol + 2); w.s("y: "); witem(y); wl
+  w.s("; x: "); witem(x); w.s(", y: "); witem(y); wl
 END Shift;
 
 PROCEDURE ADC*(VAR x, y: Item);
@@ -1087,25 +1070,42 @@ END COND;
 (* ---- Standard procedures --- *)
 
 PROCEDURE Increment*(upordown: INTEGER; VAR x, y: Item);  (* x := x +/- y *)
-VAR size, op, reg, imm, immsize: INTEGER;
+VAR op: INTEGER;
 BEGIN startRightCol("Increment(");
-  IF upordown = 0 THEN w.s("up") ELSE w.s("down") END;
+  IF upordown = 0 THEN
+    op := X64.Plus;   w.s("up")
+  ELSE
+    op := X64.Minus;  w.s("down")
+  END;
   w.s(", x: "); witem(x); w.s(", y: "); witem(y); wl;
 
-  IF x.state = RegRmInd THEN FollowIndirect(x) END;
+  ASSERT(x.state = Operand);  ASSERT((y.state = Operand) OR (y.state = 0));
+
+  X64.Undouble(x.o);  ASSERT(x.o.level = X64.Indirect);
   ASSERT(~IsImmediate(x));
+
+  IF y.state = 0 THEN
+    X64.AluOpImmediateToMem(op, 1, x.o.size, x.o.base, x.o.index, x.o.scale, x.o.disp)
+  ELSIF IsImmediate(y) THEN
+    X64.AluOpImmediateToMem(op, y.o.disp, x.o.size, x.o.base, x.o.index, x.o.scale, x.o.disp)
+  ELSE
+    X64.Load(y.o);
+    X64.AluOpRegToMem(op, y.o.base, x.o.size, x.o.base, x.o.index, x.o.scale, x.o.disp)
+  END;
+
+  (*
   size := x.type.size;
-  IF (y.state = 0)
-  OR (IsImmediate(y) & (y.ea.value > -80000000H) & (y.ea.value < 80000000H)) THEN
-    IF (y.state = 0) OR (y.ea.value = 1) THEN  (* Add 1 or -1 to x *)
+  IF (y.state = X64.Direct)
+  OR (IsImmediate(y) & (y.o.disp > -80000000H) & (y.o.disp < 80000000H)) THEN
+    IF (y.state = 0) OR (y.o.disp = 1) THEN  (* Add 1 or -1 to x *)
       IF upordown = 0 THEN reg := 0    ELSE reg := 1    END;
       IF size = 1     THEN op  := 0FEH ELSE op  := 0FFH END;
-      X64.EmitPrefices(0, size, x.ea);
-      X64.Emit(1, op);
-      X64.EmitModRegRm(reg, SPO, x.ea)
-    ELSIF y.ea.value # 0 THEN  (* Add/Sub constant to/from x *)
-      IF x.ea.direct THEN size := 8 END;  (* registers are always 64 bit *)
-      imm := y.ea.value;
+      X64.EmitPrefices(0, size, x.o);
+      X64.Emit(op);
+      X64.EmitModRegRm(reg, x.o)
+    ELSIF y.o.disp # 0 THEN  (* Add/Sub constant to/from x *)
+      IF x.o.level = X64.Direct THEN size := 8 END;  (* registers are always 64 bit *)
+      imm := y.o.disp;
 
       IF    (imm >= -80H) & (imm < 80H) THEN immsize := 1
       ELSIF size >= 4                   THEN immsize := 4
@@ -1117,24 +1117,26 @@ BEGIN startRightCol("Increment(");
       ELSE                   op := 81H
       END;
 
-      X64.EmitPrefices(0, size, x.ea);
-      X64.Emit(1, op);
+      X64.EmitPrefices(0, size, x.o);
+      X64.Emit(op);
       IF upordown = 0 THEN
-        X64.EmitModRegRm(0, SPO, x.ea)
+        X64.EmitModRegRm(0, x.o)
       ELSE
-        X64.EmitModRegRm(5, SPO, x.ea)
+        X64.EmitModRegRm(5, x.o)
       END;
-      X64.Emit(immsize, imm)
+      X64.EmitBytes(immsize, imm)
     END
-  ELSE  (* Add/sub register to/from ea *)
-    LoadValueToReg(y);
+  ELSE  (* Add/sub register to/from o *)
+    X64.Load(y.o);
     IF upordown = 0 THEN op := Plus ELSE op := Minus END;
       IF size > 1 THEN INC(op) END;
-      X64.EmitPrefices(y.ea.base, size, x.ea);
-      X64.Emit(1, op);
-      X64.EmitModRegRm(y.ea.base, SPO, x.ea)
+      X64.EmitPrefices(y.o.base, size, x.o);
+      X64.Emit(op);
+      X64.EmitModRegRm(y.o.base, x.o)
   END;
-  X64.Disassemble("INC/DEC")
+  *)
+  X64.Disassemble("INC/DEC");
+  X64.FreeOperand(x.o);  X64.FreeOperand(y.o)
 END Increment;
 
 PROCEDURE Include*(inorex: INTEGER; VAR x, y: Item);
@@ -1171,12 +1173,14 @@ END Unpk;
 
 PROCEDURE Get*(VAR x, y: Item);  (* y := [x] *)
 BEGIN startRightCol("Get(x: "); witem(x); w.s(", y: "); witem(y); wl;
-  LoadValueToReg(x);  x.type := y.type;  x.ea.direct := FALSE;  Store(y, x);
+  X64.Load(x.o);  x.type := y.type;  x.o.level := X64.Indirect;  Store(y, x);
+  X64.FreeOperand(x.o);  X64.FreeOperand(y.o)
 END Get;
 
 PROCEDURE Put*(VAR x, y: Item);
 BEGIN startRightCol("Put(x: "); witem(x); w.s(", y: "); witem(y); wl;
-  LoadValueToReg(x);  x.type := y.type;  x.ea.direct := FALSE;  Store(x, y);
+  X64.Load(x.o);  x.type := y.type;  x.o.level := X64.Indirect;  Store(x, y);
+  X64.FreeOperand(x.o);  X64.FreeOperand(y.o)
 END Put;
 
 PROCEDURE LDREG*(VAR x, y: Item);
@@ -1202,87 +1206,89 @@ BEGIN startRightCol("Set(x, y)  x := {x..y}"); wl;
 END Set;
 
 PROCEDURE Singleton*(VAR x: Item);  (* x := {x} *)
+VAR reg: INTEGER;
 BEGIN startRightCol("Singleton(x: "); witem(x); w.sl(")");
   IF IsImmediate(x) THEN
-    x.ea.value := LSL(1, x.ea.value)
+    x.o.disp := LSL(1, x.o.disp)
   ELSE
-    LoadValueToReg(x);
-
-    X64.EmitRex(TRUE, x.ea.base, 0, RH);  (* mov RH, x.ea.base *)
-    X64.Emit(1, 89H);
-    X64.Emit(1, 0C0H  +  x.ea.base MOD 8 * 8  +  RH MOD 8);
+    X64.Load(x.o);
+    reg := ReserveNextFree();
+    X64.LoadImmediate(reg, 0);
+    (* bts reg, x *)
+    X64.EmitPrefices(reg, 8, x.o.base, -1);
+    X64.Emit(0FH); X64.Emit(0ABH);
+    X64.Emit(0C0H  +  reg MOD 8 * 8  +  x.o.base MOD 8);
     X64.Disassemble("Singleton");
-
-    X64.EmitRex(FALSE, x.ea.base, 0, x.ea.base);  (* xor x.ea.base, x.ea.base *)
-    X64.Emit(1, 31H);
-    X64.Emit(1, 0C0H +  x.ea.base MOD 8 * 8  +  x.ea.base MOD 8);
-    X64.Disassemble("");
-
-    X64.EmitRex(TRUE, RH, 0, x.ea.base);
-    X64.Emit(1, 0FH);  X64.Emit(1, 0ABH);
-    X64.Emit(1, 0C0H  +  RH MOD 8 * 8  +  x.ea.base MOD 8);
-    X64.Disassemble("");
+    X64.FreeOperand(x.o);
+    x.o.base := reg
   END
 END Singleton;
 
 
 PROCEDURE In*(VAR x, y: Item);  (* x := x IN y *)
-VAR oldrh: INTEGER;
 BEGIN startRightCol("In(x: "); witem(x);  w.s(", y: "); witem(y); wl;
-  oldrh := RH;
-  IF x.state = RegRmInd THEN FollowIndirect(x) END;
-  IF y.state = RegRmInd THEN FollowIndirect(y) END;
-  ASSERT(x.state = RegRm);  ASSERT(y.state = RegRm);
-  IF IsImmediate(y) THEN LoadValueToReg(y) END;
+  X64.Undouble(x.o);  X64.Undouble(y.o);
+  IF IsImmediate(y) THEN X64.Load(y.o) END;
   IF IsImmediate(x) THEN
-    X64.EmitPrefices(0, 8, y.ea);
-    X64.Emit(1, 0FH);  X64.Emit(1, 0BAH);
-    X64.EmitModRegRm(4, SPO, y.ea);
-    X64.Emit(1, x.ea.value);
-    X64.Disassemble("In");
+    (* bt x,imm *)
+    X64.EmitOp(0FBAH, 4, 8, y.o);
+    (*
+    X64.EmitPrefices(0, 8, y.o.base, -1);
+    X64.Emit(0FH);  X64.Emit(0BAH);
+    X64.EmitModRegRm(4, y.o);
+    *)
+    X64.Emit(x.o.disp)
   ELSE
-    LoadValueToReg(x);
-    X64.EmitPrefices(x.ea.base, 8, y.ea);
-    X64.Emit(1, 0FH);  X64.Emit(1, 0AFH);
-    X64.EmitModRegRm(x.ea.base, SPO, y.ea);
-    X64.Disassemble("In");
+    X64.Load(x.o);
+    (* bt x,y *)
+    X64.EmitOp(0FAFH, x.o.base, 8, y.o)
+    (*
+    X64.EmitPrefices(x.o.base, 8, y.o);
+    X64.Emit(0FH);  X64.Emit(0AFH);
+    X64.EmitModRegRm(x.o.base, y.o);
+    *)
   END;
-  SetCondition(x, CC);
-  RH := oldrh
+  X64.Disassemble("In");
+  X64.FreeOperand(x.o);
+  SetCondition(x, CC)
 END In;
 
 PROCEDURE SetOp*(op: INTEGER; VAR x, y: Item);   (* x := x op y *)
 VAR xs, ys: SET;
 BEGIN startRightCol("SetOp("); wsym(op); w.s("; x: "); witem(x); w.s(", y: "); witem(y); wl;
   IF IsImmediate(x) & IsImmediate(y) THEN
-    xs := SYSTEM.VAL(SET, x.ea.value);  ys := SYSTEM.VAL(SET, y.ea.value);
+    xs := SYSTEM.VAL(SET, x.o.disp);  ys := SYSTEM.VAL(SET, y.o.disp);
     IF    op = ORS.plus  THEN xs := xs + ys
     ELSIF op = ORS.minus THEN xs := xs - ys
     ELSIF op = ORS.times THEN xs := xs * ys
     ELSIF op = ORS.rdiv  THEN xs := xs / ys
-    END ;
-    x.ea.value := SYSTEM.VAL(INTEGER, xs)
+    END;
+    x.o.disp := SYSTEM.VAL(INTEGER, xs)
   ELSE
     (* Convert op to x86 opcode *)
     IF op = ORS.minus THEN  (* Invert y *)
       IF IsImmediate(y) THEN
-        y.ea.value := -y.ea.value - 1  (* = invert *)
+        y.o.disp := -y.o.disp - 1  (* = invert *)
       ELSE
-        LoadValueToReg(y);
-        X64.EmitRex(TRUE, 0, 0, y.ea.base);
-        X64.Emit(1, 0F7H);
-        X64.EmitModRegRm(2, SPO, y.ea);
+        X64.Load(y.o);
+        X64.EmitOp(0F7H, 2, 8, y.o);
+        (*
+        X64.EmitRex(TRUE, 0, 0, y.o.base);
+        X64.Emit(0F7H);
+        X64.EmitModRegRm(2, y.o);
+        *)
         X64.Disassemble("Invert for SET -")
       END
     END;
-    IF    op = ORS.times THEN op := And
-    ELSIF op = ORS.minus THEN op := And
-    ELSIF op = ORS.or    THEN op := Or
-    ELSIF op = ORS.rdiv  THEN op := Xor
+    IF    op = ORS.times THEN op := X64.And
+    ELSIF op = ORS.minus THEN op := X64.And
+    ELSIF op = ORS.or    THEN op := X64.Or
+    ELSIF op = ORS.rdiv  THEN op := X64.Xor
     ELSE ASSERT(FALSE)
     END;
     Dyadic(op, x, y)
-  END
+  END;
+  X64.Disassemble("SetOp")
 END SetOp;
 
 
@@ -1304,26 +1310,26 @@ END FixLink;
 
 PROCEDURE Not*(VAR x: Item);   (* x := ~x *)
 BEGIN startRightCol("Not(x: "); witem(x); w.sl(")");
-  IF x.state # Condition THEN LoadCondition(x) END;
-  x.ea.value := InvertedCondition(x.ea.value)
+  IF x.state # Condition THEN LoadFlags(x) END;
+  x.o.disp := InvertedCondition(x.o.disp)
 END Not;
 
 PROCEDURE And1*(VAR x: Item);   (* x := x & *)
 BEGIN startRightCol("And1(x: "); witem(x); w.sl(")");
-  IF x.state # Condition THEN LoadCondition(x) END;
-  X64.Emit(1, 0FH); X64.Emit(1, InvertedCondition(x.ea.value));
-  X64.Emit(4, x.ea.base);    x.ea.base  := X64.PC - 4;
+  IF x.state # Condition THEN LoadFlags(x) END;
+  X64.Emit(0FH); X64.Emit(InvertedCondition(x.o.disp));
+  X64.EmitBytes(4, x.o.base);    x.o.base  := X64.PC - 4;
   X64.Disassemble("And1");
-  FixLink(x.ea.index); x.ea.index := 0
+  FixLink(x.o.index); x.o.index := 0
 END And1;
 
 PROCEDURE Or1*(VAR x: Item);   (* x := x OR *)
 BEGIN startRightCol("Or1(x: "); witem(x); w.sl(")");
-  IF x.state # Condition THEN LoadCondition(x) END;
-  X64.Emit(1, 0FH); X64.Emit(1, x.ea.value);
-  X64.Emit(4, x.ea.index);  x.ea.index := X64.PC - 4;
-  X64.Disassemble("And2");
-  FixLink(x.ea.base); x.ea.base  := 0
+  IF x.state # Condition THEN LoadFlags(x) END;
+  X64.Emit(0FH); X64.Emit(x.o.disp);
+  X64.EmitBytes(4, x.o.index);  x.o.index := X64.PC - 4;
+  X64.Disassemble("Or1");
+  FixLink(x.o.base); x.o.base  := 0
 END Or1;
 
 
@@ -1342,18 +1348,18 @@ END merged;
 
 PROCEDURE And2*(VAR x, y: Item);   (* x := x & y *)
 BEGIN startRightCol("And2(x: "); witem(x); w.sl(")");
-  IF y.state # Condition THEN LoadCondition(y) END;
-  x.ea.base  := merged(y.ea.base, x.ea.base);
-  x.ea.index := y.ea.index;
-  x.ea.value := y.ea.value
+  IF y.state # Condition THEN LoadFlags(y) END;
+  x.o.base  := merged(y.o.base, x.o.base);
+  x.o.index := y.o.index;
+  x.o.disp := y.o.disp
 END And2;
 
 PROCEDURE Or2*(VAR x, y: Item);   (* x := x OR y *)
 BEGIN startRightCol("Or2(x: "); witem(x); w.sl(")");
-  IF y.state # Condition THEN LoadCondition(y) END;
-  x.ea.base  := y.ea.base;
-  x.ea.index := merged(y.ea.index, x.ea.index);
-  x.ea.value := y.ea.value
+  IF y.state # Condition THEN LoadFlags(y) END;
+  x.o.base  := y.o.base;
+  x.o.index := merged(y.o.index, x.o.index);
+  x.o.disp := y.o.disp
 END Or2;
 
 PROCEDURE OpToIntCondition(op: INTEGER): INTEGER;
@@ -1369,28 +1375,40 @@ BEGIN
   END
 RETURN result END OpToIntCondition;
 
-PROCEDURE IntRelation*(op: INTEGER; VAR x, y: Item);   (* x := x < y *)
-VAR oldrh, immsize: INTEGER;
-BEGIN startRightCol("IntRelation("); wsym(op); w.s(", x: "); witem(x);  w.s(", y: "); witem(y); wl;
-  ASSERT(x.state IN {RegRm, RegRmInd});  ASSERT(y.state IN {RegRm, RegRmInd});
-  oldrh := RH;
-  IF x.state = RegRmInd THEN FollowIndirect(x) END;
-  IF y.state = RegRmInd THEN FollowIndirect(y) END;
-
-  IF IsImmediate(y) & (y.ea.value >= -80000000H) & (y.ea.value < 80000000H) THEN
-    IF (y.ea.value >= -80H) & (y.ea.value < 80H) THEN immsize := 1 ELSE immsize := 4 END;
-    X64.EmitPrefices(0, x.type.size, x.ea);
-    IF    x.type.size = 1 THEN X64.Emit(1, 80H)
-    ELSIF immsize     = 1 THEN X64.Emit(1, 83H)
-    ELSE                       X64.Emit(1, 81H)
+PROCEDURE Compare(VAR x, y: Item);
+VAR immsize: INTEGER;
+BEGIN
+  ASSERT(x.state = Operand);  ASSERT(y.state = Operand);
+  X64.Undouble(x.o);  X64.Undouble(y.o);
+  IF IsImmediate(y) & (y.o.disp >= -80000000H) & (y.o.disp < 80000000H) THEN
+    IF (y.o.disp >= -80H) & (y.o.disp < 80H) THEN immsize := 1 ELSE immsize := 4 END;
+    (*
+    X64.EmitPrefices(0, x.type.size, x.o);
+    IF    x.type.size = 1 THEN X64.Emit(80H)
+    ELSIF immsize     = 1 THEN X64.Emit(83H)
+    ELSE                       X64.Emit(81H)
     END;
-    X64.EmitModRegRm(7, SPO, x.ea);
-    X64.Emit(immsize, y.ea.value);
-    X64.Disassemble("IntRelation rhs immediate")
+    X64.EmitModRegRm(7, x.o);
+    *)
+    IF    x.type.size = 1 THEN X64.EmitOp(80H, 7, x.type.size, x.o)
+    ELSIF immsize     = 1 THEN X64.EmitOp(83H, 7, x.type.size, x.o)
+    ELSE                       X64.EmitOp(81H, 7, x.type.size, x.o)
+    END;
+    X64.EmitBytes(immsize, y.o.disp);
   ELSE
-    Dyadic(Cmp, x, y);
+    Dyadic(X64.Cmp, x, y);
   END;
-  RH := oldrh;  (* Result is in flags *)
+  X64.Disassemble("Compare")
+END Compare;
+
+PROCEDURE IntRelation*(op: INTEGER; VAR x, y: Item);   (* x := x < y *)
+VAR immsize: INTEGER;
+BEGIN startRightCol("IntRelation("); wsym(op); w.s(", x: "); witem(x);  w.s(", y: "); witem(y); wl;
+  ASSERT(x.state = Operand);
+  IF y.state # Operand THEN w.s("** y.state # Operand, is "); w.i(y.state); w.sl(" **") END;
+  ASSERT(y.state = Operand);
+  Compare(x, y);
+  X64.FreeOperand(x.o);  X64.FreeOperand(y.o);  (* Result is in flags *)
   SetCondition(x, OpToIntCondition(op))
 END IntRelation;
 
@@ -1413,12 +1431,13 @@ END StringRelation;
 PROCEDURE AddOp*(op: INTEGER; VAR x, y: Item);   (* x := x +- y *)
 BEGIN startRightCol("AddOp("); wsym(op); w.s("; x: "); witem(x); w.s(", y: "); witem(y); wl;
   (* Convert op to x86 opcode *)
-  IF    op = ORS.plus  THEN op := Plus
-  ELSIF op = ORS.minus THEN op := Minus
-  ELSIF op = ORS.or    THEN op := Or
+  IF    op = ORS.plus  THEN op := X64.Plus
+  ELSIF op = ORS.minus THEN op := X64.Minus
+  ELSIF op = ORS.or    THEN op := X64.Or
   ELSE ASSERT(FALSE)
   END;
-  Dyadic(op, x, y)
+  Dyadic(op, x, y);
+  X64.Disassemble("AddOp")
 END AddOp;
 
 PROCEDURE MulOp*(VAR x, y: Item);   (* x := x * y *)
@@ -1443,12 +1462,15 @@ PROCEDURE Neg*(VAR x: Item);   (* x := -x *)
 VAR size, op: INTEGER;
 BEGIN startRightCol("Neg(x: "); witem(x); wl;
   IF IsImmediate(x) THEN
-    x.ea.value := -x.ea.value
+    x.o.disp := -x.o.disp
   ELSE
-    LoadValueToReg(x);
-    X64.EmitPrefices(3, 8, x.ea);
-    X64.Emit(1, 0F7H);
-    X64.EmitModRegRm(3, SPO, x.ea);
+    X64.Load(x.o);
+    X64.EmitRegRegOp(0F7H, 3, 8, x.o.base);
+    (*
+    X64.EmitPrefices(3, 8, x.o);
+    X64.Emit(0F7H);
+    X64.EmitModRegRm(3, x.o);
+    *)
     X64.Disassemble("Neg")
   END
 END Neg;
@@ -1456,34 +1478,34 @@ END Neg;
 
 (* ---- Control flow ---- *)
 
-(* Use of Item.ea fields for conditions:
+(* Use of Item.o fields for conditions:
 *
-*  ea.value - the condition code (uses symbol encodings ORS.eql .. ORS.geq)
-*  ea.base  - address of prev instr if any needing patching with curr target
-*  ea.index - address of any forward jump list targeting this instruction
+*  o.disp - the condition code (uses symbol encodings ORS.eql .. ORS.geq)
+*  o.base  - address of prev instr if any needing patching with curr target
+*  o.index - address of any forward jump list targeting this instruction
 *)
 
 PROCEDURE CFJump*(VAR x: Item);
 VAR cond: INTEGER;
 BEGIN startRightCol("CFJump(x: "); witem(x);  w.sl(")");
-  IF x.state # Condition THEN LoadCondition(x) END;
-  cond := InvertedCondition(x.ea.value);
+  IF x.state # Condition THEN LoadFlags(x) END;
+  cond := InvertedCondition(x.o.disp);
   ASSERT(cond DIV 16 = 8);
-  X64.Emit(1, 0FH);  X64.Emit(1, cond);
-  FixLink(x.ea.index);  (* Fix any links that target this instruction *)
-  X64.Emit(4, x.ea.base);  x.ea.base := X64.PC - 4;
+  X64.Emit(0FH);  X64.Emit(cond);
+  FixLink(x.o.index);  (* Fix any links that target this instruction *)
+  X64.EmitBytes(4, x.o.base);  x.o.base := X64.PC - 4;
   X64.Disassemble("CFJump")
 END CFJump;
 
 PROCEDURE FJump*(VAR L: INTEGER);
 BEGIN startRightCol("FJump(L "); w.i(L); w.sl(")");
-  X64.Emit(1, 0E9H);  X64.Emit(4, L);  L := X64.PC-4;
+  X64.Emit(0E9H);  X64.EmitBytes(4, L);  L := X64.PC-4;
   X64.Disassemble("FJump")
 END FJump;
 
 PROCEDURE BJump*(L: INTEGER);
 BEGIN startRightCol("BJump(L "); w.i(L); w.sl(")");
-  X64.Emit(1, 0E9H);  X64.Emit(4, L - X64.PC);
+  X64.Emit(0E9H);  X64.EmitBytes(4, L - X64.PC);
   X64.Disassemble("BJump")
 END BJump;
 
@@ -1495,31 +1517,56 @@ PROCEDURE FixOne*(at: INTEGER);
 BEGIN startRightCol("FixOne(at "); w.i(at); w.sl(")")
 END FixOne;
 
+PROCEDURE Here*(): INTEGER;  BEGIN RETURN X64.PC END Here;
+
 (*
-PROCEDURE Fixup*(VAR x: Item);  BEGIN FixLink(x.a) END Fixup;
+FOR var := ctl TO lim BY inc DO ... END
+For0:      w is immediate
+           LoadReg(ctl)
+           X64.Undouble(var.o)
+
+For1:  L0: Compare(ctl, lim);  X64.FreeOperand(lim.o)
+           ja/jb  L1
+           StoreReg(var, ctl)  [Leaves any x & y reg usage unchanged]
+
+           StatSeq
+
+For2:      Dyadic(add, ctl, inc)
+
+           jmp    L0
+       L1:
 *)
 
-PROCEDURE Here*(): INTEGER;
-BEGIN RETURN X64.PC END Here;
-
-PROCEDURE For0*(VAR x, y: Item);
-BEGIN startRightCol("For0(x, y)"); wl;
-  w.b(RightCol + 2); w.s("x: "); witem(x); wl;
-  w.b(RightCol + 2); w.s("y: "); witem(y); wl
+PROCEDURE For0*(VAR var, ctl: Item);
+BEGIN startRightCol("For0(var: "); witem(var); w.s(", ctl: "); witem(ctl); w.sl(")");
+  X64.Load(ctl.o);
+  X64.Disassemble("For0");
 END For0;
 
-PROCEDURE For1*(VAR x, y, z, incr: Item; VAR L: INTEGER);
-BEGIN startRightCol("For1(x, y, z, incr; L "); w.i(L);  w.sl(")");
-  w.b(RightCol + 2); w.s("x:    "); witem(x);    wl;
-  w.b(RightCol + 2); w.s("y:    "); witem(y);    wl;
-  w.b(RightCol + 2); w.s("z:    "); witem(z);    wl;
-  w.b(RightCol + 2); w.s("incr: "); witem(incr); wl
+PROCEDURE For1*(VAR var, ctl, lim, inc: Item; VAR L: INTEGER);
+BEGIN startRightCol("For1(var: "); witem(var); w.s(", ctl: "); witem(ctl); w.sl(",");
+  w.b(RightCol);w.s("     lim: "); witem(lim); w.s(", inc: "); witem(inc); w.sl(")");
+  ASSERT(IsImmediate(inc));
+  IF inc.o.disp = 0 THEN ORS.Mark("zero increment"); inc.o.disp := 1 END;
+  Dyadic(X64.Cmp, ctl, lim);
+  X64.Emit(0FH);
+  IF inc.o.disp > 0 THEN X64.Emit(87H) ELSE X64.Emit(83H) END; (* ja/jb *)
+  L := X64.PC;
+  X64.EmitBytes(4, 0);
+  X64.Load(ctl.o);
+  X64.StoreReg(ctl.o.base, var.o);
+  (*
+  StoreReg(var, var.type.size, ctl.o.base);
+  *)
+  X64.FreeOperand(var.o);  X64.FreeOperand(ctl.o);
+  X64.Disassemble("For1");
 END For1;
 
-PROCEDURE For2*(VAR x, y, incr: Item);
-BEGIN startRightCol("For2(x, y)"); wl;
-  w.b(RightCol + 2); w.s("x: "); witem(x); wl;
-  w.b(RightCol + 2); w.s("y: "); witem(y); wl
+PROCEDURE For2*(VAR var, ctl, inc: Item);
+BEGIN startRightCol("For2(var: "); witem(var); w.s(", ctl: "); witem(ctl); w.sl(")");
+  Dyadic(X64.Plus, ctl, inc);
+  X64.FreeOperand(ctl.o);
+  X64.Disassemble("For2");
 END For2;
 
 
@@ -1538,10 +1585,6 @@ BEGIN startRightCol("TypeTest(x, T, ");
   w.b(RightCol + 2); w.s("T: "); wtype(T); wl
 END TypeTest;
 
-PROCEDURE CheckRegs*;
-BEGIN startRightCol("CheckRegs"); wl
-END CheckRegs;
-
 
 (* ---- ---- *)
 
@@ -1550,9 +1593,9 @@ BEGIN
   w.s("ORG Open(v "); w.i(v); w.s("; '"); w.s(sourcefn); w.sl("')");
 
   sourcefile := Files.Old(sourcefn);  Files.Set(source, sourcefile, 0);
-  sourceBol := 0;  sourceLine := 1;   outcol := 0;
+  sourceBol := 0;  sourceLine := 1;
   GetChar;
-  Strx := 0;  RH := 0;  SPO := 0;
+  Strx := 0;  X64.ClearStack;  X64.ClearRegs;
   X64.Init;
 END Open;
 
