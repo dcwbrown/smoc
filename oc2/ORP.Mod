@@ -204,28 +204,29 @@ END CompTypes;
 
 PROCEDURE Parameter(par: ORB.Object);
 VAR x: ORG.Item;  varpar: BOOLEAN;
-BEGIN expression(x);
+BEGIN ORG.startRightCol("Parameter: "); ORG.wobject(par); w.sl(".");
+  expression(x);
   IF par # NIL THEN
     varpar := par.class = ORB.Par;
     IF CompTypes(par.type, x.type, varpar) THEN
-      IF ~varpar THEN ORG.ValueParam(x)
+      IF ~varpar THEN ORG.ValueParam(x, par.val)
       ELSE (*par.class = Par*)
         IF ~par.rdo THEN CheckReadOnly(x) END;
-        ORG.VarParam(x, par.type)
+        ORG.VarParam(x, par.type, par.val)
       END
     ELSIF (x.type.form = ORB.Array) & (par.type.form = ORB.Array) &
         (x.type.base = par.type.base) & (par.type.len < 0) THEN
       IF ~par.rdo THEN CheckReadOnly(x) END;
-      ORG.OpenArrayParam(x)
+      ORG.OpenArrayParam(x, par.val)
     ELSIF (x.type.form = ORB.String) & varpar & par.rdo & (par.type.form = ORB.Array) &
-        (par.type.base.form = ORB.Char) & (par.type.len < 0) THEN ORG.StringParam(x)
+        (par.type.base.form = ORB.Char) & (par.type.len < 0) THEN ORG.StringParam(x, par.val)
     (*ELSIF ~varpar & (par.type.form = ORB.Int64) & (x.type.form = ORB.Int64) THEN ORG.ValueParam(x)  (*BYTE*)*)
     ELSIF (x.type.form = ORB.String) & (x.length = 2)
         & (par.class = ORB.Var) & (par.type.form = ORB.Char) THEN
-      ORG.StrToChar(x);  ORG.ValueParam(x)
+      ORG.StrToChar(x);  ORG.ValueParam(x, par.val)
     ELSIF (par.type.form = ORB.Array) & (par.type.base = ORB.byteType) (* &
         (par.type.len >= 0) & (par.type.size = x.type.size) *) THEN
-      ORG.VarParam(x, par.type)
+      ORG.VarParam(x, par.type, par.val)
     ELSE ORS.Mark("incompatible parameters")
     END
   END
@@ -736,14 +737,14 @@ BEGIN
   IF adr >= 112 THEN ORS.Mark("too many parameters") END
 END FPSection;
 
-PROCEDURE ProcedureType(ptype: ORB.Type;  VAR parblksize: INTEGER);
-VAR obj: ORB.Object;  size: INTEGER;  nofpar: INTEGER;
-BEGIN ptype.base := ORB.noType;  size := parblksize;  nofpar := 0;  ptype.dsc := NIL;
+PROCEDURE ProcedureType(ptype: ORB.Type;  VAR frameoffset: INTEGER);
+VAR obj: ORB.Object;  offset: INTEGER;  nofpar: INTEGER;
+BEGIN ptype.base := ORB.noType;  offset := frameoffset;  nofpar := 0;  ptype.dsc := NIL;
   IF sym = ORS.lparen THEN
     ORS.Get(sym);
     IF sym = ORS.rparen THEN ORS.Get(sym)
-    ELSE FPSection(size, nofpar);
-      WHILE sym = ORS.semicolon DO ORS.Get(sym);  FPSection(size, nofpar) END;
+    ELSE FPSection(offset, nofpar);
+      WHILE sym = ORS.semicolon DO ORS.Get(sym);  FPSection(offset, nofpar) END;
       Check(ORS.rparen, "no )")
     END;
     IF sym = ORS.colon THEN  (*function*)
@@ -757,7 +758,7 @@ BEGIN ptype.base := ORB.noType;  size := parblksize;  nofpar := 0;  ptype.dsc :=
       END
     END
   END;
-  ptype.nofpar := nofpar;  parblksize := size
+  ptype.nofpar := nofpar;  frameoffset := offset
 END ProcedureType;
 
 PROCEDURE FormalType0(VAR typ: ORB.Type;  dim: INTEGER);
@@ -906,34 +907,45 @@ BEGIN (*sync*) pbsList := NIL;
 END Declarations;
 
 PROCEDURE ProcedureDecl;
-VAR proc:       ORB.Object;
-    type:       ORB.Type;
-    procid:     ORS.Ident;
-    x:          ORG.Item;
-    locblksize: INTEGER;  (* Size in bytes of local variables, 0 if none *)
-    parblksize: INTEGER;  (* Size in bytes of parameters, 0 if none *)
-    L:          INTEGER;
+VAR proc:        ORB.Object;
+    type:        ORB.Type;
+    procid:      ORS.Ident;
+    x:           ORG.Item;
+    frameoffset: INTEGER;
+    (*locblksize:  INTEGER;  (* Size in bytes of local variables, 0 if none *)*)
+    (*parblksize:  INTEGER;  (* Size in bytes of parameters, 0 if none *)*)
+    locstart:    INTEGER;
+    locsize:     INTEGER;
+    L:           INTEGER;
 BEGIN ORS.Get(sym);
   IF sym = ORS.ident THEN
     ORS.CopyId(procid);  ORS.Get(sym);
     ORB.NewObj(proc, ORS.id, ORB.Const);
-    parblksize := 0;
     NEW(type);  type.form := ORB.Proc;  type.size := ORG.WordSize;
     proc.type := type;  proc.val := -1;  proc.lev := level;
     CheckExport(proc.expo);
     IF proc.expo THEN proc.exno := exno;  INC(exno) END;
     ORB.OpenScope;  INC(level);  type.base := ORB.noType;
-    ProcedureType(type, parblksize);  (*formal parameter list*)
+
+    frameoffset := 8;  (* frame+0 is return address *)
+    ProcedureType(type, frameoffset);  (*formal parameter list*)
     Check(ORS.semicolon, "no ;");
-    locblksize := parblksize;
-    Declarations(locblksize);
-    proc.val := ORG.Here();  proc.type.dsc := ORB.topScope.next;
+
+    (*locblksize := parblksize;*)
+    locstart := frameoffset;
+    Declarations(frameoffset);
+    locsize := frameoffset - locstart;
+    proc.val      := ORG.Here();
+    proc.type.dsc := ORB.topScope.next;
+    proc.type.len := frameoffset - 8;
+
     IF sym = ORS.procedure THEN
       L := 0;  ORG.FJump(L);
       REPEAT ProcedureDecl;  Check(ORS.semicolon, "no ;") UNTIL sym # ORS.procedure;
       ORG.FixOne(L);  proc.val := ORG.Here();  proc.type.dsc := ORB.topScope.next
     END;
-    ORG.Enter(parblksize, locblksize);
+    (*ORG.Enter((*parblksize, *)locblksize);*)
+    ORG.Enter(locstart, locsize);
     IF sym = ORS.begin THEN ORS.Get(sym);  StatSequence END;
     IF sym = ORS.return THEN
       ORS.Get(sym);  expression(x);
@@ -949,7 +961,7 @@ BEGIN ORS.Get(sym);
       ORS.Get(sym)
     ELSE ORS.Mark("no proc id")
     END;
-    ORG.Return(type.base.form, x, locblksize);
+    ORG.Return(type.base.form, x, type.len);
     ORB.CloseScope;  DEC(level)
   END
 END ProcedureDecl;
