@@ -95,11 +95,11 @@ TYPE
 
   TypeDesc* = RECORD
     form*, mno*:   INTEGER;  (* <0: stack. 0: global. >0: import module num *)
-    ref*:          INTEGER;  (* Only used for import/export *)
+    ref*:          INTEGER;  (* Only used for import/export                 *)
     nofpar*:       INTEGER;  (* For procedures, extension level for records *)
-    len*:          INTEGER;  (* For arrays, len < 0 => open array
-                                For records: adr of descriptor
-                                For procedures: size of parameter block *)
+    len*:          INTEGER;  (* For arrays:     len < 0 => open array       *)
+                             (* For records:    adr of descriptor           *)
+                             (* For procedures: size of params              *)
     dsc*, typobj*: Object;
     base*:         Type;     (* For arrays, records, pointers *)
     size*:         INTEGER   (* In bytes *)

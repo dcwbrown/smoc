@@ -6,8 +6,16 @@ IMPORT SYSTEM, ORS, w := Writer;
 
 CONST
   MaxPC*   = 10000H;
+  RAX*     = 0;
+  RCX*     = 1;
+  RDX*     = 2;
+  RBX*     = 3;
   RSP*     = 4;     (* X64 stack pointer *)
-  AllFree* = {0,1,2,3,5,6,7,8,9,10,11,12,13,14,15};  (* RSP (4) is reserved *)
+  RBP*     = 5;
+  RSI*     = 6;
+  RDI*     = 7;
+
+  AllFree* = {0..3,5..15};  (* RSP (4) is reserved *)
 
   (* levels *)
   Register*         = 0;  (* immediate value (in disp) or individual register (in base) *)
@@ -22,6 +30,15 @@ CONST
   Xor*   = 30H;
   Cmp*   = 38H;
 
+  (* Memory section numbers *)
+  Absolute  = 0;
+  (* Import indices are 1 .. 28 *)
+  StringSec = 29;  (* String section offset *)
+  TypeSec   = 30;  (* Type descriptors *)
+  SystemSec = 31;  (* Standard procs like ASSERT, NEW *)
+  VarSec    = 32;
+
+
 
 TYPE
   Operand* = RECORD
@@ -32,7 +49,7 @@ TYPE
     index*:   INTEGER;  (* index register (memory only)                      *)
     scale*:   INTEGER;  (* index register scale 0,1,2,3 (memory only)        *)
     disp*:    INTEGER;  (* address offset (memory only)                      *)
-    section*: INTEGER;  (* -1: none(abs), 0: module, >=1: import             *)
+    section*: INTEGER;  (* mremory section number                            *)
     size*:    INTEGER;
   END;
 
@@ -377,7 +394,9 @@ BEGIN
       ELSIF scale = 2 THEN AddMnem("*8")
       END
     END;
-    IF disp # 0 THEN AddMnem("+");  InsHex(disp, Mnembuf, Mbi); AddMnem("H") END;
+    IF    disp < 0 THEN AddMnem("-"); InsHex(-disp, Mnembuf, Mbi); AddMnem("H")
+    ELSIF disp > 0 THEN AddMnem("+"); InsHex(disp,  Mnembuf, Mbi); AddMnem("H")
+    END;
     AddMnem("]")
   ELSE
     ASSERT(base >= 0);  InsReg(regsize, base)
@@ -389,6 +408,28 @@ BEGIN
   HexVal(size, val, Hexbuf, Hbi);  Hexbuf[Hbi] := " ";  INC(Hbi);
 END AddHex;
 
+
+PROCEDURE AddCond(cond: INTEGER);
+BEGIN ASSERT(cond > 1);  (* 0/1 = never/always *)
+  cond := cond MOD 16;
+  IF    cond =  0  THEN AddMnem("o ")
+  ELSIF cond =  1  THEN AddMnem("no")
+  ELSIF cond =  2  THEN AddMnem("c ")
+  ELSIF cond =  3  THEN AddMnem("nc")
+  ELSIF cond =  4  THEN AddMnem("z ")
+  ELSIF cond =  5  THEN AddMnem("nz")
+  ELSIF cond =  6  THEN AddMnem("be")
+  ELSIF cond =  7  THEN AddMnem("a ")
+  ELSIF cond =  8  THEN AddMnem("s ")
+  ELSIF cond =  9  THEN AddMnem("ns")
+  ELSIF cond = 0AH THEN AddMnem("pe")
+  ELSIF cond = 0BH THEN AddMnem("po")
+  ELSIF cond = 0CH THEN AddMnem("l ")
+  ELSIF cond = 0DH THEN AddMnem("ge")
+  ELSIF cond = 0EH THEN AddMnem("le")
+  ELSIF cond = 0FH THEN AddMnem("g ")
+  END
+END AddCond;
 
 PROCEDURE GetUnsigned(size: INTEGER; VAR pc, val: INTEGER);
 BEGIN
@@ -519,6 +560,16 @@ BEGIN
       END
     END
 
+  ELSIF opcode = 0E2H THEN
+
+    AddMnem("loop   ");
+    GetSigned(8, pc, disp);
+    InsHex(pc + disp, Mnembuf, Mbi);
+    AddMnem(" (disp ");
+    IF disp < 0 THEN AddMnem("-");  disp := -disp ELSE AddMnem("+") END;
+    InsDec(disp, Mnembuf, Mbi);
+    AddMnem(")")
+
   ELSIF (opcode >= 50H) & (opcode <= 57H) THEN
 
     AddMnem("push   ");
@@ -532,6 +583,22 @@ BEGIN
     reg := opcode MOD 8;
     IF reghigh   & (reg   < 8) THEN INC(reg,   8) END;
     InsReg(64, reg)
+
+  ELSIF (opcode = 68H) OR (opcode = 6AH) THEN
+
+    IF opcode = 6AH THEN regsize := 8 END;
+    AddMnem("push   ");
+    GetSigned(regsize, pc, disp);  InsHex(disp, Mnembuf, Mbi);  AddMnem("H")
+
+  ELSIF (opcode >= 70H) & (opcode <= 7FH) THEN  (* 8 bit conditional jump *)
+
+    AddMnem("j");  AddCond(opcode);  AddMnem("    ");
+    GetSigned(8, pc, disp);
+    InsHex(pc + disp, Mnembuf, Mbi);
+    AddMnem(" (disp ");
+    IF disp < 0 THEN AddMnem("-");  disp := -disp ELSE AddMnem("+") END;
+    InsDec(disp, Mnembuf, Mbi);
+    AddMnem(")")
 
   ELSIF (opcode >= 80H) & (opcode <= 83H) THEN (* alu with immediate op *)
 
@@ -598,6 +665,25 @@ BEGIN
     GetUnsigned(regsize, pc, disp);
     InsHex(disp, Mnembuf, Mbi); AddMnem("H")
 
+  ELSIF (opcode >= 0C0H) & (opcode <= 0C1H) THEN (* group 2 alu with immediate op *)
+
+    IF opcode = 80H THEN regsize := 8 END;
+    DisModRegRm(pc, opcode, base, index, disp, scale, regsize, indirect);
+    IF    opcode = 0 THEN AddMnem("rol    ")
+    ELSIF opcode = 1 THEN AddMnem("ror    ")
+    ELSIF opcode = 2 THEN AddMnem("rcl    ")
+    ELSIF opcode = 3 THEN AddMnem("rcr    ")
+    ELSIF opcode = 4 THEN AddMnem("shl    ")
+    ELSIF opcode = 5 THEN AddMnem("shr    ")
+    ELSIF opcode = 6 THEN AddMnem("sal    ")
+    ELSIF opcode = 7 THEN AddMnem("sar    ")
+    END;
+    IF indexhigh & (index < 8) THEN INC(index, 8) END;
+    IF basehigh  & (base  < 8) THEN INC(base,  8) END;
+    InsBaseIndexScaleDisp(indirect, -1, regsize, base, index, scale, disp);
+    AddMnem(",");
+    GetSigned(8, pc, disp);  InsHex(disp, Mnembuf, Mbi); AddMnem("H")
+
   ELSIF opcode = 0C2H THEN
 
     AddMnem("ret    ");  GetUnsigned(16, pc, disp);
@@ -644,6 +730,14 @@ BEGIN
     InsDec(disp, Mnembuf, Mbi);
     AddMnem(")")
 
+  ELSIF opcode = 0A4H THEN
+
+    AddMnem("movsb");
+
+  ELSIF opcode = 0F3H THEN
+
+    AddMnem("rep");
+
   ELSIF (opcode = 0F6H) OR (opcode = 0F7H) THEN
 
     IF opcode = 0F6H THEN regsize := 8 END;
@@ -667,16 +761,13 @@ BEGIN
     DisModRegRm(pc, opcode, base, index, disp, scale, regsize, indirect);
     IF indexhigh & (index < 8) THEN INC(index, 8) END;
     IF basehigh  & (base  < 8) THEN INC(base,  8) END;
-    IF opcode < 3 THEN (* INC/DEC/CALL *)
 
-      IF    opcode = 0 THEN AddMnem("inc    ")
-      ELSIF opcode = 1 THEN AddMnem("dec    ")
-      ELSE                  AddMnem("call   "); regsize := 64 END;
-      InsBaseIndexScaleDisp(indirect, -1, regsize, base, index, scale, disp)
-
-    ELSE
-      AddMnem("??5")
-    END
+    IF    opcode = 0 THEN AddMnem("inc    ")
+    ELSIF opcode = 1 THEN AddMnem("dec    ")
+    ELSIF opcode = 2 THEN AddMnem("call   "); regsize := 64
+    ELSIF opcode = 6 THEN AddMnem("push   ")
+    ELSE                  AddMnem("??5    "); END;
+    InsBaseIndexScaleDisp(indirect, -1, regsize, base, index, scale, disp)
 
   ELSIF opcode = 0FH THEN  (* Secondary opcode map *)
 
@@ -696,48 +787,29 @@ BEGIN
       InsReg(64, reg);  AddMnem(",");
       InsBaseIndexScaleDisp(indirect, -1, regsize, base, index, scale, disp)
 
+    ELSIF (opcode >= 40H) & (opcode <= 4FH) THEN  (* Conditional move *)
+
+      AddMnem("cmov");  AddCond(opcode);  AddMnem(" ");
+      DisModRegRm(pc, reg, base, index, disp, scale, 8, indirect);
+      IF reghigh   & (reg   < 8) THEN INC(reg,   8) END;
+      IF indexhigh & (index < 8) THEN INC(index, 8) END;
+      IF basehigh  & (base  < 8) THEN INC(base,  8) END;
+      InsReg(64, reg);  AddMnem(",");
+      InsBaseIndexScaleDisp(indirect, -1, regsize, base, index, scale, disp)
+
     ELSIF (opcode >= 80H) & (opcode <= 8FH) THEN  (* 32 bit conditional jump *)
 
-      IF    opcode = 80H THEN AddMnem("jo     ")
-      ELSIF opcode = 81H THEN AddMnem("jno    ")
-      ELSIF opcode = 82H THEN AddMnem("jc     ")
-      ELSIF opcode = 83H THEN AddMnem("jnc    ")
-      ELSIF opcode = 84H THEN AddMnem("jz     ")
-      ELSIF opcode = 85H THEN AddMnem("jnz    ")
-      ELSIF opcode = 86H THEN AddMnem("jbe    ")
-      ELSIF opcode = 87H THEN AddMnem("ja     ")
-      ELSIF opcode = 88H THEN AddMnem("js     ")
-      ELSIF opcode = 89H THEN AddMnem("jns    ")
-      ELSIF opcode = 8AH THEN AddMnem("jpe    ")
-      ELSIF opcode = 8BH THEN AddMnem("jpo    ")
-      ELSIF opcode = 8CH THEN AddMnem("jl     ")
-      ELSIF opcode = 8DH THEN AddMnem("jge    ")
-      ELSIF opcode = 8EH THEN AddMnem("jle    ")
-      ELSIF opcode = 8FH THEN AddMnem("jg     ")
-      END;
+      AddMnem("j");  AddCond(opcode);  AddMnem("    ");
       GetSigned(32, pc, disp);
-      IF disp < 0 THEN AddMnem("-");  disp := -disp  ELSE AddMnem("+") END;
-      InsDec(disp, Mnembuf, Mbi)
+      InsHex(pc + disp, Mnembuf, Mbi);
+      AddMnem(" (disp ");
+      IF disp < 0 THEN AddMnem("-");  disp := -disp ELSE AddMnem("+") END;
+      InsDec(disp, Mnembuf, Mbi);
+      AddMnem(")")
 
     ELSIF (opcode >= 90H) & (opcode <= 9FH) THEN  (* SetCC *)
 
-      IF    opcode = 90H THEN AddMnem("seto   ")
-      ELSIF opcode = 91H THEN AddMnem("setno  ")
-      ELSIF opcode = 92H THEN AddMnem("setc   ")
-      ELSIF opcode = 93H THEN AddMnem("setnc  ")
-      ELSIF opcode = 94H THEN AddMnem("setz   ")
-      ELSIF opcode = 95H THEN AddMnem("setnz  ")
-      ELSIF opcode = 96H THEN AddMnem("setbe  ")
-      ELSIF opcode = 97H THEN AddMnem("seta   ")
-      ELSIF opcode = 98H THEN AddMnem("sets   ")
-      ELSIF opcode = 99H THEN AddMnem("setns  ")
-      ELSIF opcode = 9AH THEN AddMnem("setpe  ")
-      ELSIF opcode = 9BH THEN AddMnem("setpo  ")
-      ELSIF opcode = 9CH THEN AddMnem("setl   ")
-      ELSIF opcode = 9DH THEN AddMnem("setge  ")
-      ELSIF opcode = 9EH THEN AddMnem("setle  ")
-      ELSIF opcode = 9FH THEN AddMnem("setg   ")
-      END;
+      AddMnem("set");  AddCond(opcode);  AddMnem("  ");
       DisModRegRm(pc, reg, base, index, disp, scale, 8, indirect);
       IF reghigh   & (reg   < 8) THEN INC(reg,   8) END;
       IF indexhigh & (index < 8) THEN INC(index, 8) END;
@@ -856,6 +928,7 @@ BEGIN
   Emit(0FH);
   Emit(0B6H);
   Emit(0C0H + reg MOD 8 * 8 + reg MOD 8);
+  Disassemble("LoadCondition")
 END LoadCondition;
 
 
@@ -886,11 +959,7 @@ END LoadImmediate;
 PROCEDURE MoveReg*(r1, r2: INTEGER);
 BEGIN
   ASSERT(r1 >= 0);  ASSERT(r2 >= 0);
-  IF r1 # r2 THEN
-    EmitPrefices(r1, 8, r2, -1);
-    Emit(8BH);
-    EmitModRegReg(r1, r2);
-  END
+  IF r1 # r2 THEN EmitRegRegOp(8BH, r1, 8, r2) END
 END MoveReg;
 
 
@@ -918,74 +987,87 @@ BEGIN
 END LoadMem;
 
 
-PROCEDURE LoadAddress(reg: INTEGER; base, index, scale, disp: INTEGER);
+PROCEDURE LoadAddressToReg*(reg, base, index, scale, disp: INTEGER);
 BEGIN
-  (*
-  w.sl("LoadAddress: reg "); w.i(reg);
-  w.s(", base "); w.i(base);
-  w.s(", index "); w.i(index);
-  w.s(", scale "); w.i(scale);
-  w.s(", disp "); w.i(disp); w.sl(".");
-  *)
-  EmitPrefices(reg, 8, index, base);
-  Emit(8DH);
-  EmitModRegMem(reg, base, index, scale, disp);
-  (*Disassemble("LoadAddress")*)
-END LoadAddress;
+  IF (reg # base) OR (index >= 0) OR (disp # 0) THEN  (* ingnore noop *)
+    ASSERT((reg = base) OR (reg IN Free));
+    EmitRegMemOp(8DH, reg, 8, base, index, scale, disp);  (* lea *)
+    Disassemble("LoadAddressToReg")
+  END
+END LoadAddressToReg;
+
+
+PROCEDURE DeparToReg*(reg: INTEGER; VAR o: Operand);
+BEGIN ASSERT(o.parptr);
+  ASSERT(reg IN Free);
+  EmitRegMemOp(8BH, reg, 8, RSP, -1, 0, o.base);
+  o.base   := reg;
+  o.parptr := FALSE;
+  Disassemble("Depar")
+END DeparToReg;
 
 
 PROCEDURE Depar*(VAR o: Operand);
 VAR reg: INTEGER;
 BEGIN
   IF o.parptr THEN
-    reg := FirstFreeReg();  ReserveReg(reg);
-    EmitPrefices(reg, 8, RSP, -1);
-    Emit(8BH);
-    EmitModRegMem(reg, RSP, -1, -1, o.base);
-    o.base   := reg;
-    o.parptr := FALSE;
-    Disassemble("Depar");
+    reg := FirstFreeReg();  DeparToReg(reg, o);  ReserveReg(reg)
   END
 END Depar;
 
-PROCEDURE IsImmediate(o: Operand): BOOLEAN;
-BEGIN RETURN o.direct & (o.base < 0) END IsImmediate;
-
-
-PROCEDURE Load*(VAR o: Operand);
-VAR reg: INTEGER;
+PROCEDURE LoadOperandToReg*(reg: INTEGER; VAR o: Operand);
 BEGIN
-  Depar(o);
-  IF IsDataReg(o.base) THEN reg := o.base ELSE reg := FirstFreeReg() END;
-  IF IsImmediate(o) OR ~o.direct THEN
-    IF ~o.direct THEN
+  ASSERT((reg = o.base) OR (reg IN Free));
+  IF o.direct & (o.base >= 0) THEN (* Already in a reg *)
+    ASSERT(~o.parptr);
+    IF reg # o.base THEN MoveReg(reg, o.base) END
+  ELSE
+    IF o.parptr THEN DeparToReg(reg, o) END;
+    IF o.direct THEN
+      LoadImmediate(reg, o.disp)
+    ELSE
       LoadMem(reg, o.signed, o.size, o.base, o.index, o.scale, o.disp);
       ReleaseReg(o.base);
       ReleaseReg(o.index)
-    ELSE
-      LoadImmediate(reg, o.disp)
-    END;
-    ReserveReg(reg);
-    o.direct := TRUE;
-    o.base   := reg;
-    o.index  := -1;
-    o.disp   := 0
-  END
-END Load;
+    END
+  END;
+  ReserveReg(reg);
+  o.direct := TRUE;
+  o.base   := reg;
+  o.index  := -1;
+  o.disp   := 0
+END LoadOperandToReg;
+
+
+PROCEDURE LoadOperand*(VAR o: Operand);
+VAR reg: INTEGER;
+BEGIN
+  IF ~o.parptr & IsDataReg(o.base) THEN reg := o.base ELSE reg := FirstFreeReg() END;
+  LoadOperandToReg(reg, o)
+END LoadOperand;
+
+
+PROCEDURE LoadAdrToReg*(reg: INTEGER; VAR o: Operand);
+BEGIN
+  ASSERT(~o.direct);
+  IF o.parptr THEN DeparToReg(reg, o) END;
+  LoadAddressToReg(reg, o.base, o.index, o.scale, o.disp);
+  ReleaseReg(o.base);
+  ReleaseReg(o.index);
+  ReserveReg(reg);
+  o.direct := TRUE;
+  o.base   := reg;
+  o.index  := -1;
+  o.disp   := 0
+END LoadAdrToReg;
+
 
 PROCEDURE LoadAdr*(VAR o: Operand);
 VAR reg: INTEGER;
 BEGIN
-  Depar(o);  ASSERT(~o.direct);
-  IF IsDataReg(o.base) THEN reg := o.base ELSE reg := FirstFreeReg() END;
-  LoadAddress(reg, o.base, o.index, o.scale, o.disp);
-  ReleaseReg(o.base);
-  ReleaseReg(o.index);
-  ReserveReg(reg);
-  o.direct := FALSE;
-  o.base   := reg;
-  o.index  := -1;
-  o.disp   := 0
+  ASSERT(~o.direct);
+  IF ~o.parptr & IsDataReg(o.base) THEN reg := o.base ELSE reg := FirstFreeReg() END;
+  LoadAdrToReg(reg, o);
 END LoadAdr;
 
 
@@ -1050,6 +1132,11 @@ BEGIN
   END
 END PushImmediate;
 
+PROCEDURE PushMem*(base, index, scale, disp: INTEGER);
+BEGIN
+  Emit(0FFH);  EmitModRegMem(6, base, index, scale, disp)
+END PushMem;
+
 PROCEDURE Push*(VAR o: Operand);
 VAR reg: INTEGER;
 BEGIN
@@ -1061,18 +1148,11 @@ BEGIN
       PushImmediate(o.disp)
     END
   ELSE  (* push indirect o *)
-    Emit(0FFH);  EmitModRegMem(6, o.base, o.index, o.scale, o.disp)
+    PushMem(o.base, o.index, o.scale, o.disp)
   END;
   FreeOperand(o)
 END Push;
 
-
-PROCEDURE AluOpRegToReg*(op, r1, r2: INTEGER);
-BEGIN
-  EmitPrefices(r1, 8, r2, -1);
-  Emit(op + 3);
-  EmitModRegReg(r1, r2)
-END AluOpRegToReg;
 
 PROCEDURE AluOpImmediateToReg*(op, reg, imm: INTEGER);
 VAR immreg, incdec: INTEGER;
@@ -1088,7 +1168,10 @@ BEGIN
     IF (imm < -80000000H) OR (imm >= 80000000H) THEN
       immreg := FirstFreeReg();
       LoadImmediate(immreg, imm);
+      (*
       AluOpRegToReg(op, immreg, reg)
+      *)
+      EmitRegRegOp(op+3, immreg, 8, reg)
     ELSE
       EmitPrefices(-1, 8, reg, -1);
       IF (imm >= -80H) & (imm < 80H) THEN
@@ -1099,13 +1182,6 @@ BEGIN
     END
   END
 END AluOpImmediateToReg;
-
-PROCEDURE AluOpRegToMem*(op, reg, size, base, index, scale, disp: INTEGER);
-BEGIN
-  EmitPrefices(reg, size, base, index);
-  Emit(op + 1);
-  EmitModRegMem(reg, base, index, scale, disp)
-END AluOpRegToMem;
 
 PROCEDURE AluOpImmediateToMem*(op, imm, size, base, index, scale, disp: INTEGER);
 VAR immsize, immreg, incdec: INTEGER;
@@ -1121,7 +1197,8 @@ BEGIN
     IF (imm < -80000000H) OR (imm >= 80000000H) THEN
       immreg := FirstFreeReg();
       LoadImmediate(immreg, imm);
-      AluOpRegToMem(op, immreg, size, base, index, scale, disp)
+      (*AluOpRegToMem(op, immreg, size, base, index, scale, disp)*)
+      EmitRegMemOp(op+1, immreg, size, base, index, scale, disp)
     ELSE
       EmitPrefices(-1, size, base, index);
       IF size = 1 THEN
@@ -1137,26 +1214,24 @@ BEGIN
   END
 END AluOpImmediateToMem;
 
-PROCEDURE AluOpMemToReg*(op, reg, size, base, index, scale, disp: INTEGER);
-BEGIN
-  EmitPrefices(reg, size, base, index);
-  IF size = 1 THEN Emit(op + 2) ELSE Emit(op + 3) END;
-  EmitModRegMem(reg, base, index, scale, disp)
-END AluOpMemToReg;
-
 PROCEDURE AluOp*(op, reg: INTEGER; VAR o: Operand);  (* Assumes reg is dest *)
 BEGIN
   Depar(o);
-  IF IsImmediate(o) THEN
+  IF o.direct & (o.base < 0) THEN
     AluOpImmediateToReg(op, reg, o.disp)
   ELSIF o.direct THEN
-    AluOpRegToReg(op, reg, o.base)
+    (*AluOpRegToReg(op, reg, o.base)*)
+    EmitRegRegOp(op+3, reg, 8, o.base)
   ELSE
     IF (o.size = 8) OR (op = Cmp) THEN
-      AluOpMemToReg(op, reg, o.size, o.base, o.index, o.scale, o.disp)
+      IF o.size = 1 THEN
+        EmitRegMemOp(op+2, reg, o.size, o.base, o.index, o.scale, o.disp)
+      ELSE
+        EmitRegMemOp(op+3, reg, o.size, o.base, o.index, o.scale, o.disp)
+      END
     ELSE
-      Load(o);
-      AluOpRegToReg(op, reg, o.base)
+      LoadOperand(o);
+      EmitRegRegOp(op+3, reg, 8, o.base)
     END
   END
 END AluOp;
@@ -1165,7 +1240,7 @@ END AluOp;
 PROCEDURE Call*(VAR o: Operand);
 BEGIN
   ASSERT(~o.parptr);
-  IF IsImmediate(o) THEN
+  IF o.direct & (o.base < 0) THEN
     Emit(0E8H);
     EmitBytes(4, o.disp - (PC + 4))
   ELSE

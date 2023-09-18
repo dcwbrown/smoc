@@ -1,6 +1,7 @@
-MODULE CompileTests;
+MODULE CompileTests;  IMPORT SYSTEM;
 
 CONST
+  c = "a";
   s = "Hello";
 
 TYPE 
@@ -8,8 +9,8 @@ TYPE
   R = RECORD x: INTEGER END;
 
 VAR 
-  a: A;
-  r: R;
+  a,b: A;
+  r:   R;
 
 PROCEDURE bottom(a: ARRAY OF INTEGER);
 BEGIN
@@ -23,7 +24,10 @@ END middle;
 PROCEDURE check(a: ARRAY OF INTEGER);
 VAR i: INTEGER;
 BEGIN
-  i := a[100]
+  i := a[100];
+  i := ABS(i);
+  i := ABS(-1);
+  IF ODD(i) THEN END;
 END check;
 
 PROCEDURE top;
@@ -31,4 +35,6 @@ BEGIN
   middle(a)
 END top;
 
+BEGIN
+  SYSTEM.COPY(10, 20, 4);
 END CompileTests.
