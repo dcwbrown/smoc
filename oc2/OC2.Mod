@@ -4,6 +4,7 @@ IMPORT ORP, ORS;
 
 BEGIN
   ORP.CompileFile("Compiletests.mod");
+ (*ORP.CompileFile("Compiletests2.mod");*)
   IF TRUE THEN
     IF ORS.errcnt = 0 THEN ORP.CompileFile("Boot.mod")    END;
     IF ORS.errcnt = 0 THEN ORP.CompileFile("Heap.mod")    END;
@@ -15,6 +16,7 @@ BEGIN
     IF ORS.errcnt = 0 THEN ORP.CompileFile("Texts.mod")   END;
     IF ORS.errcnt = 0 THEN ORP.CompileFile("Oberon.mod")  END;
     IF ORS.errcnt = 0 THEN ORP.CompileFile("ORS.mod")     END;
+    IF ORS.errcnt = 0 THEN ORP.CompileFile("X64.mod")     END;
     IF ORS.errcnt = 0 THEN ORP.CompileFile("ORB.mod")     END;
     IF ORS.errcnt = 0 THEN ORP.CompileFile("ORG.mod")     END;
     IF ORS.errcnt = 0 THEN ORP.CompileFile("ORP.mod")     END;

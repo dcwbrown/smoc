@@ -325,7 +325,9 @@ END set;
 PROCEDURE factor(VAR x: ORG.Item);
 VAR obj: ORB.Object;
 BEGIN (*sync*)
-  IF (sym < ORS.char) OR (sym > ORS.ident) THEN ORS.Mark("expression expected");
+  IF (sym < ORS.char) OR (sym > ORS.ident) THEN
+    ORS.Mark("expression expected");
+    w.s(": sym = "); w.i(sym); w.sl(".");
     REPEAT ORS.Get(sym) UNTIL (sym >= ORS.char) & (sym <= ORS.for) OR (sym >= ORS.then)
   END;
   IF sym = ORS.ident THEN
@@ -364,9 +366,9 @@ BEGIN factor(x);  f := x.type.form;
   WHILE (sym >= ORS.times) & (sym <= ORS.and) DO
     op := sym;  ORS.Get(sym);
     IF op = ORS.times THEN
-      IF    f = ORB.Int64  THEN factor(y);  CheckInt(y);  ORG.MulOp(x, y)
-      ELSIF f = ORB.Real THEN factor(y);  CheckReal(y);  ORG.RealOp(op, x, y)
-      ELSIF f = ORB.Set  THEN factor(y);  CheckSet(y);  ORG.SetOp(op, x, y)
+      IF    f = ORB.Int64 THEN factor(y);  CheckInt(y);  ORG.MulOp(x, y)
+      ELSIF f = ORB.Real  THEN factor(y);  CheckReal(y); ORG.RealOp(op, x, y)
+      ELSIF f = ORB.Set   THEN factor(y);  CheckSet(y);  ORG.SetOp(op, x, y)
       ELSE ORS.Mark("bad type")
       END
     ELSIF (op = ORS.div) OR (op = ORS.mod) THEN
@@ -505,7 +507,7 @@ VAR obj: ORB.Object;
   END SkipCase;
 
 BEGIN (* StatSequence *)
-  ORG.startRightCol("StatSequence, SPO "); w.i(X64.SPO); w.l;
+  IF X64.SPO # 0 THEN ORG.startRightCol("StatSequence, SPO "); w.i(X64.SPO); w.l END;
   REPEAT (*sync*) obj := NIL;
     IF ~((sym >= ORS.ident)  & (sym <= ORS.for) OR (sym >= ORS.semicolon)) THEN
       ORS.Mark("statement expected");
@@ -561,7 +563,7 @@ BEGIN (* StatSequence *)
         StatSequence
       END;
       IF sym = ORS.else THEN
-        ORS.Get(sym);  ORG.FJump(L0);  ORG.FixLink(x.o.index);
+        ORS.Get(sym);  ORG.FJump(L0);  ORG.FixLink(x.o.base);
         StatSequence
       ELSE
         ORG.FixLink(x.o.base)
@@ -672,7 +674,7 @@ BEGIN NEW(typ);
   ELSE
     ORS.Mark("missing OF");  typ.base := ORB.intType
   END;
-  typ.size := (len * typ.base.size + 3) DIV 8 * 8;
+  typ.size := (len * typ.base.size + 7) DIV 8 * 8;
   typ.form := ORB.Array;
   typ.len  := len;
   type     := typ
@@ -682,7 +684,8 @@ PROCEDURE RecordType(VAR type: ORB.Type);
 VAR obj, obj0, new, bot, base: ORB.Object;
     typ, tp: ORB.Type;
     offset, off, n: INTEGER;
-BEGIN NEW(typ);  typ.form := ORB.NoTyp;  typ.base := NIL;  typ.mno := -level;  typ.nofpar := 0;  offset := 0;  bot := NIL;
+BEGIN NEW(typ);  typ.form := ORB.NoTyp;  typ.base := NIL;  typ.mno := -level;  typ.nofpar := 0;
+  offset := 0;  bot := NIL;
   IF sym = ORS.lparen THEN
     ORS.Get(sym);  (*record extension*)
     IF level # 0 THEN ORS.Mark("extension of local types not implemented") END;
@@ -693,7 +696,8 @@ BEGIN NEW(typ);  typ.form := ORB.NoTyp;  typ.base := NIL;  typ.mno := -level;  t
         ELSE typ.base := ORB.intType;  ORS.Mark("invalid extension")
         END;
         typ.nofpar := typ.base.nofpar + 1;  (*"nofpar" here abused for extension level*)
-        bot := typ.base.dsc;  offset := typ.base.size
+        bot    := typ.base.dsc;
+        offset := typ.base.size
       ELSE ORS.Mark("type expected")
       END
     ELSE ORS.Mark("ident expected")
@@ -706,7 +710,8 @@ BEGIN NEW(typ);  typ.form := ORB.NoTyp;  typ.base := NIL;  typ.mno := -level;  t
       obj0 := obj;
       WHILE (obj0 # NIL) & (obj0.name # ORS.id) DO obj0 := obj0.next END;
       IF obj0 # NIL THEN ORS.Mark("mult def") END;
-      NEW(new);  ORS.CopyId(new.name);  new.class := ORB.Fld;  new.next := obj;  obj := new;  INC(n);
+      NEW(new);  ORS.CopyId(new.name);  new.class := ORB.Fld;  new.next := obj;
+      obj := new;  INC(n);
       ORS.Get(sym);  CheckExport(new.expo);
       IF (sym # ORS.comma) & (sym # ORS.colon) THEN ORS.Mark("comma expected")
       ELSIF sym = ORS.comma THEN ORS.Get(sym)
@@ -714,33 +719,40 @@ BEGIN NEW(typ);  typ.form := ORB.NoTyp;  typ.base := NIL;  typ.mno := -level;  t
     END;
     Check(ORS.colon, "colon expected");  Type(tp);
     IF (tp.form = ORB.Array) & (tp.len < 0) THEN ORS.Mark("dyn array not allowed") END;
-    IF tp.size > 1 THEN offset := (offset+3) DIV 8 * 8 END;
+    IF tp.size > 1 THEN offset := (offset + 7) DIV 8 * 8 END;
     offset := offset + n * tp.size;  off := offset;  obj0 := obj;
     WHILE obj0 # bot DO obj0.type := tp;  obj0.lev := 0;  off := off - tp.size;  obj0.val := off;  obj0 := obj0.next END;
     bot := obj;
     IF sym = ORS.semicolon THEN ORS.Get(sym) ELSIF sym # ORS.end THEN ORS.Mark(" ;  or END") END
   END;
-  typ.form := ORB.Record;  typ.dsc := bot;  typ.size := (offset + 3) DIV 8 * 8;  type := typ
+  typ.form := ORB.Record;  typ.dsc := bot;  typ.size := (offset + 7) DIV 8 * 8;  type := typ
 END RecordType;
 
+(* Formal parameter section - one or more comma separated vars of one type   *)
+(* Each parameter takes either one or two 64 bit cells on the stack          *)
+(* Parameter addresses advance downwards corresponding to x86 push behaviour *)
 PROCEDURE FPSection(VAR adr: INTEGER;  VAR nofpar: INTEGER);
 VAR obj, first: ORB.Object;  tp: ORB.Type;
     parsize: INTEGER;  cl: INTEGER;  rdo: BOOLEAN;
 BEGIN
   IF sym = ORS.var THEN ORS.Get(sym);  cl := ORB.Par ELSE cl := ORB.Var END;
   IdentList(cl, first);  FormalType(tp, 0);  rdo := FALSE;
-  IF (cl = ORB.Var) & (tp.form >= ORB.Array) THEN cl := ORB.Par;  rdo := TRUE END;
-  IF (tp.form = ORB.Array) & (tp.len < 0) OR (tp.form = ORB.Record) THEN
-    parsize := 2*ORG.WordSize  (*open array or record, needs second word for length or type tag*)
+
+  IF (cl = ORB.Var) & (tp.form >= ORB.Array) THEN
+    cl := ORB.Par;  rdo := TRUE
+  END;
+  IF (tp.form = ORB.Array) & (tp.len < 0)
+  OR (tp.form = ORB.Record) THEN  (* open arrays and records need a second *)
+    parsize := 2 * ORG.WordSize   (* word for length or type tag           *)
   ELSE parsize := ORG.WordSize
   END;
   obj := first;
   WHILE obj # NIL DO
     INC(nofpar);  obj.class := cl;  obj.type := tp;  obj.rdo := rdo;  obj.lev := level;
-    obj.val := adr;  INC(adr, parsize);
+    DEC(adr, parsize);
+    obj.val := adr;
     obj := obj.next
-  END;
-  (*IF adr >= 112 THEN ORS.Mark("too many parameters") END*)
+  END
 END FPSection;
 
 PROCEDURE ProcedureType(ptype: ORB.Type);
@@ -749,8 +761,12 @@ BEGIN ptype.base := ORB.noType;  offset := 0;  nofpar := 0;  ptype.dsc := NIL;
   IF sym = ORS.lparen THEN                     (* Parse formal parameters *)
     ORS.Get(sym);
     IF sym = ORS.rparen THEN ORS.Get(sym)
-    ELSE FPSection(offset, nofpar);
-      WHILE sym = ORS.semicolon DO ORS.Get(sym);  FPSection(offset, nofpar) END;
+    ELSE
+      FPSection(offset, nofpar);
+      WHILE sym = ORS.semicolon DO
+        ORS.Get(sym);
+        FPSection(offset, nofpar)
+      END;
       Check(ORS.rparen, "no )")
     END;
     IF sym = ORS.colon THEN                    (* Parse function result type *)
@@ -765,7 +781,7 @@ BEGIN ptype.base := ORB.noType;  offset := 0;  nofpar := 0;  ptype.dsc := NIL;
     END
   END;
   ptype.nofpar := nofpar;
-  ptype.len    := offset;
+  ptype.len    := -offset;
 END ProcedureType;
 
 PROCEDURE FormalType0(VAR typ: ORB.Type;  dim: INTEGER);
@@ -835,14 +851,23 @@ BEGIN type := ORB.intType;  (*sync*)
 END Type0;
 
 
-PROCEDURE AlignedAlloc(VAR adr: INTEGER; size: INTEGER);
+PROCEDURE AlignUp(VAR adr: INTEGER; size: INTEGER);
 (* Advance adr to be aligned suitably for a variable of given size *)
 BEGIN
   IF    size > 4 THEN adr := (adr + 7) DIV 8 * 8
   ELSIF size > 2 THEN adr := (adr + 3) DIV 4 * 4
   ELSIF size > 1 THEN adr := (adr + 1) DIV 2 * 2
   END
-END AlignedAlloc;
+END AlignUp;
+
+PROCEDURE AlignDown(VAR adr: INTEGER; size: INTEGER);
+(* Reduce adr to be aligned suitably for a variable of given size *)
+BEGIN
+  IF    size > 4 THEN adr := adr DIV 8 * 8
+  ELSIF size > 2 THEN adr := adr DIV 4 * 4
+  ELSIF size > 1 THEN adr := adr DIV 2 * 2
+  END
+END AlignDown;
 
 
 PROCEDURE Declarations(VAR varsize: INTEGER);
@@ -917,7 +942,7 @@ BEGIN (*sync*) pbsList := NIL;
       WHILE obj # NIL DO
         obj.type := tp;
         obj.lev  := level;
-        AlignedAlloc(varsize, tp.size);
+        AlignUp(varsize, tp.size);
         obj.val  := varsize;
         varsize  := varsize + tp.size;
         IF obj.expo THEN obj.exno := exno;  INC(exno) END;
@@ -939,6 +964,11 @@ BEGIN (*sync*) pbsList := NIL;
 END Declarations;
 
 
+PROCEDURE slen(s: ARRAY OF CHAR): INTEGER;
+VAR len: INTEGER;
+BEGIN len := 0;  WHILE (len < LEN(s)) & (s[len] # 0X) DO INC(len) END
+RETURN len END slen;
+
 PROCEDURE ProcedureDecl;
 VAR proc, obj:   ORB.Object;
     type:        ORB.Type;
@@ -946,8 +976,10 @@ VAR proc, obj:   ORB.Object;
     x:           ORG.Item;
     parmsize:    INTEGER;
     locsize:     INTEGER;
+    framesize:   INTEGER;
     L:           INTEGER;
-    foffset:     INTEGER;
+    i:           INTEGER;
+    longestname: INTEGER;
 BEGIN ORS.Get(sym);
   IF sym = ORS.ident THEN
     ORS.CopyId(procid);  ORS.Get(sym);
@@ -962,58 +994,59 @@ BEGIN ORS.Get(sym);
     Check(ORS.semicolon, "no ;");
 
     parmsize := type.len;
-    locsize  := type.len; (* Local vars follow parameters on stack *)
+    locsize  := 0; (* Local start at RSP + 0 *)
     Declarations(locsize);
-    locsize  := locsize - parmsize;
+
+    framesize := parmsize + locsize + 8;  (* Frame includes return address *)
+
     proc.val := ORG.Here();
     type.dsc := ORB.topScope.next;
 
     (* So far, parameter and local var addresses start at 0 and increment *)
     (* towards frame size (type.len). Since the X64 stack grows towards   *)
-    (* lower addresses, and since we push the farameters first on the     *)
+    (* lower addresses, and since we push the parameters first on the     *)
     (* stack (i.e. at higher addresses) and in source text order,we need  *)
     (* to reverse the addressing of parameters and local vars.            *)
 
+    ORG.startRightCol("Procedure declaration '");  w.s(procid);  w.sl("'.");
+    (* --- dump objects --- *)
+    ORG.startRightCol("parmsize: $"); w.h(parmsize);
+    w.s(", locsize: $"); w.h(locsize);
+    w.s(", framesize: $"); w.h(framesize); w.l;
+    longestname := 0;  obj := type.dsc;  WHILE obj # NIL DO
+      IF slen(obj.name) > longestname THEN longestname := slen(obj.name) END;
+      obj := obj.next
+    END;
     obj := type.dsc;
-    WHILE (obj # NIL) & ~(obj.class IN {ORB.Var, ORB.Par}) DO obj := obj.next END;
-    IF obj # NIL THEN
-      ORG.startRightCol("Stack frame: ");
-      L := 0;
-      WHILE obj # NIL DO
-        AlignedAlloc(L, obj.type.size);
-        w.s(obj.name); w.s(" "); w.h(obj.val); w.s("/"); w.h(obj.type.size);
-        ASSERT(obj.val = L);  INC(L, obj.type.size);
-        obj := obj.next;
-        WHILE (obj # NIL) & ~(obj.class IN {ORB.Var, ORB.Par}) DO obj := obj.next END;
-        IF obj = NIL THEN w.l ELSE w.s(", ") END
-      END
-    END;
-
-    obj  := type.dsc;
-    foffset := type.len + 8; (* Start at highest address of frame, allowing for return address *)
-    WHILE (obj # NIL) & ~(obj.class IN {ORB.Var, ORB.Par}) DO obj := obj.next END;
-    IF obj # NIL THEN
-      ORG.startRightCol("Rev'd frame: ");
-      WHILE obj # NIL DO
-        DEC(foffset, obj.type.size);
-        IF    obj.type.size > 4 THEN foffset := foffset DIV 8 * 8
-        ELSIF obj.type.size > 2 THEN foffset := foffset DIV 4 * 4
-        ELSIF obj.type.size > 1 THEN foffset := foffset DIV 2 * 2
+    WHILE obj # NIL DO
+      ORG.startRightCol("");
+      IF obj.class IN {ORB.Var, ORB.Par} THEN
+        IF obj.val < 0 THEN (* Fixup parameter offsets *)
+          INC(obj.val, framesize)
         END;
-        obj.val := foffset;
-        w.s(obj.name); w.s(" "); w.h(obj.val); w.s("/"); w.h(obj.type.size);
-        obj := obj.next;
-        WHILE (obj # NIL) & ~(obj.class IN {ORB.Var, ORB.Par}) DO obj := obj.next END;
-        IF obj = NIL THEN w.l ELSE w.s(", ") END
-      END
+        ORG.wclass(obj.class);  w.s(" "); w.sn(obj.name, longestname);
+        w.s(" adr $");         w.hn(obj.val, 6);
+      (*
+      ELSIF obj.class = ORB.Const THEN
+        ORG.wclass(obj.class);  w.s(" "); w.sn(obj.name, longestname);
+        w.s(" val $");  w.h(obj.val)
+      ELSE
+        ORG.wclass(obj.class);  w.s(" "); w.sn(obj.name, longestname);
+      *)
+      END;
+      w.s(" type ");      ORG.wtype(obj.type);
+      w.l;
+      obj := obj.next
     END;
 
+    (* Parse nested procedures *)
     IF sym = ORS.procedure THEN
       L := 0;  ORG.FJump(L);
       REPEAT ProcedureDecl;  Check(ORS.semicolon, "no ;") UNTIL sym # ORS.procedure;
-      ORG.FixOne(L);  proc.val := ORG.Here();  proc.type.dsc := ORB.topScope.next
+      ORG.FixLink(L);  proc.val := ORG.Here();  proc.type.dsc := ORB.topScope.next
     END;
 
+    (* Compile procedure body *)
     ORG.Enter(parmsize, locsize);
     IF sym = ORS.begin THEN ORS.Get(sym);  StatSequence END;
     IF sym = ORS.return THEN

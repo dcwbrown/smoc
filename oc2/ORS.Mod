@@ -1,6 +1,6 @@
 MODULE ORS; (* NW 19.9.93 / 15.3.2017  Scanner in Oberon-07*)
 
-IMPORT SYSTEM, Texts, Oberon;
+IMPORT SYSTEM, Texts, Oberon, w := Writer;
 
 (* Oberon Scanner does lexical analysis. Input is Oberon-Text, output is
   sequence of symbols, i.e identifiers, numbers, strings, and special symbols.
@@ -45,8 +45,8 @@ VAR
 
   ch:       CHAR;      (* Last character read *)
   errpos:   INTEGER;
-  linebeg*: INTEGER;  (* Position at start of current line *)
-  linenum*: INTEGER;  (* Line number of current line *)
+  linebeg*: INTEGER;   (* Position at start of current line *)
+  linenum*: INTEGER;   (* Line number of current line *)
   R:        Texts.Reader;
   W:        Texts.Writer;
   k:        INTEGER;
@@ -95,8 +95,7 @@ PROCEDURE Identifier(VAR sym: INTEGER);
   VAR i, k: INTEGER;
 BEGIN i := 0;
   REPEAT
-    IF i < IdLen-1 THEN id[i] := ch; INC(i) END ;
-    GetCh
+    IF i < IdLen-1 THEN id[i] := ch; INC(i) END;  GetCh
   UNTIL (ch < "0") OR (ch > "9") & (ch < "A") OR (ch > "Z") & (ch < "a") OR (ch > "z");
   id[i] := 0X;
   IF i < 10 THEN k := KWX[i-1];  (*search for keyword*)
@@ -138,6 +137,7 @@ BEGIN i := 0; GetCh;
   GetCh; slen := i  (*no 0X appended!*)
 END HexString;
 
+(*---
 PROCEDURE Ten(e: INTEGER): REAL;
   VAR x, t: REAL;
 BEGIN x := 1.0; t := 10.0;
@@ -147,10 +147,11 @@ BEGIN x := 1.0; t := 10.0;
   END ;
   RETURN x
 END Ten;
+---*)
 
 PROCEDURE Number(VAR sym: INTEGER);
   CONST max = 2147483647 (*2^31 - 1*);
-  VAR i, k, e, n, s, h: INTEGER; x: REAL;
+  VAR i, k, e, n, s, h: INTEGER; (*--- x: REAL; ---*)
     d: ARRAY 16 OF INTEGER;
     negE: BOOLEAN;
 BEGIN ival := 0; i := 0; n := 0; k := 0;
@@ -169,6 +170,7 @@ BEGIN ival := 0; i := 0; n := 0; k := 0;
     ELSE sym := int; ival := k
     END ;
     GetCh
+
   ELSIF ch = "." THEN
     GetCh;
     IF ch = "." THEN (*double dot*) ch := 7FX;  (*decimal integer*)
@@ -180,7 +182,11 @@ BEGIN ival := 0; i := 0; n := 0; k := 0;
         INC(i)
       UNTIL i = n;
       sym := int; ival := k
-    ELSE (*real number*) x := 0.0; e := 0;
+    ELSE
+      Mark("real not implemented"); sym := int; ival := 0
+      (*---
+      (*real number*)
+      x := 0.0; e := 0;
       REPEAT  (*integer part*) x := x * 10.0 + FLT(d[i]); INC(i) UNTIL i = n;
       WHILE (ch >= "0") & (ch <= "9") DO  (*fraction*)
         x := x * 10.0 + FLT(ORD(ch) - 30H); DEC(e); GetCh
@@ -204,6 +210,7 @@ BEGIN ival := 0; i := 0; n := 0; k := 0;
         IF e <= maxExp THEN x := Ten(e) * x ELSE x := 0.0; Mark("too large") END
       END ;
       sym := real; rval := x
+      ---*)
     END
   ELSE  (*decimal integer*)
     REPEAT
@@ -230,6 +237,20 @@ BEGIN GetCh;
   UNTIL (ch = ")") OR R.eot;
   IF ~R.eot THEN GetCh ELSE Mark("unterminated comment") END
 END comment;
+
+
+(*       ASCII == first 128 characters of Unicode:       *)
+(*                                                       *)
+(*            0 1 2 3 4 5 6 7 8 9 a b c d e f            *)
+(*          +---------------------------------+          *)
+(*   32   20|   ! " # $ % & ' ( ) * + , - . / |20    32  *)
+(*   48   30| 0 1 2 3 4 5 6 7 8 9 : ; < = > ? |30    48  *)
+(*   64   40| @ A B C D E F G H I J K L M N O |40    64  *)
+(*   80   50| P Q R S T U V W X Y Z [ \ ] ^ _ |50    80  *)
+(*   96   60| ` a b c d e f g h i j k l m n o |60    96  *)
+(*  112   70| p q r s t u v w x u z { | } ~   |70   112  *)
+(*          +---------------------------------+          *)
+(*            0 1 2 3 4 5 6 7 8 9 a b c d e f            *)
 
 PROCEDURE Get*(VAR sym: INTEGER);
 BEGIN

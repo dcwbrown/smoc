@@ -56,8 +56,10 @@ TYPE
     nextCh*:       CHAR;
     line*, class*: INTEGER;
     i*:            INTEGER;
+    (*---
     x*:            REAL;
     y*:            REAL;
+    ---*)
     c*:            CHAR;
     len*:          INTEGER;
     s*:            ARRAY 32 OF CHAR
@@ -332,6 +334,7 @@ PROCEDURE OpenScanner* (VAR S: Scanner; T: Text; pos: INTEGER);
 BEGIN OpenReader(S, T, pos); S.line := 0; S.nextCh := " "
 END OpenScanner;
 
+(* -----
 (*floating point formats:
   x = 1.m * 2^(e-127)   bit 0: sign, bits 1- 8: e, bits  9-31: m
   x = 1.m * 2^(e-1023)  bit 0: sign, bits 1-11: e, bits 12-63: m *)
@@ -345,6 +348,7 @@ BEGIN t := 1.0; p := 10.0;   (*compute 10^n *)
   END ;
   RETURN t
 END Ten;
+----- *)
 
 PROCEDURE Scan* (VAR S: Scanner);
 CONST maxExp = 38; maxM = 16777216; (*2^24*)
@@ -352,7 +356,9 @@ VAR ch, term: CHAR;
     neg, negE, hex: BOOLEAN;
     i, j, h, d, e, n, s: INTEGER;
     k: INTEGER;
+    (*---
     x: REAL;
+    ---*)
 BEGIN ch := S.nextCh; i := 0;
   WHILE ~S.eot & (ch <= " ") DO
     IF ch = CR THEN INC(S.line) END ;
@@ -375,6 +381,7 @@ BEGIN ch := S.nextCh; i := 0;
         n := 10*n + d; h := 10H*h + d; Read(S, ch)
       END ;
       IF ch = "H" THEN (*hex integer*) Read(S, ch); S.i := h; S.class := Int  (*neg?*)
+      (*---
       ELSIF ch = "." THEN (*real number*)
         Read(S, ch); x := 0.0; e := 0; j := 0;
         WHILE ("0" <= ch) & (ch <= "9") DO  (*fraction*)
@@ -401,6 +408,7 @@ BEGIN ch := S.nextCh; i := 0;
         END ;
         IF neg THEN S.x := -x ELSE S.x := x END ;
         IF hex THEN S.class := 0 ELSE S.class := Real END
+      ---*)
       ELSE (*decimal integer*)
         IF neg THEN S.i := -n ELSE S.i := n END;
         IF hex THEN S.class := Inval ELSE S.class := Int END
@@ -482,7 +490,7 @@ BEGIN i := 0; Write(W, " ");
   REPEAT DEC(i); Write(W, a[i]) UNTIL i = 0
 END WriteHex;
 
-(*
+(*---
 PROCEDURE WriteReal* (VAR W: Writer; x: REAL; n: INTEGER);
 VAR e, i, m: INTEGER;
     d: ARRAY 16 OF CHAR;
@@ -508,7 +516,6 @@ BEGIN e := ASR(ORD(x), 23) MOD 100H;  (*binary exponent*)
     Write(W, CHR(e DIV 10 + 30H)); Write(W, CHR(e MOD 10 + 30H))
   END
 END WriteReal;
-*)
 
 PROCEDURE WriteRealFix* (VAR W: Writer; x: REAL; n, k: INTEGER);
 VAR i, m: INTEGER; neg: BOOLEAN;
@@ -530,6 +537,7 @@ BEGIN
     WHILE i > 0 DO DEC(i); Write(W, d[i]) END
   END
 END WriteRealFix;
+---*)
 
 (*
 PROCEDURE WritePair(VAR W: Writer; ch: CHAR; x: INTEGER);

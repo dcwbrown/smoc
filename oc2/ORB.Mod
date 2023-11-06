@@ -1,6 +1,6 @@
 MODULE ORB;   (*NW 25.6.2014  / 17.9.2018  in Oberon-07*)
 
-IMPORT Files, ORS;
+IMPORT Files, ORS, w := Writer;
 
   (* Definition of data types Object and Type, which together form the data
      structure called "symbol table".
@@ -16,6 +16,7 @@ IMPORT Files, ORS;
      initialized.                                                             *)
 
 CONST
+  WordSize*   = 8;
   versionkey* = 1;
   maxTypTab   = 64;
 
@@ -119,6 +120,10 @@ VAR
 
   nofmod, Ref: INTEGER;
 
+  (* Compilation options *)
+  ListCodegen*:  BOOLEAN;
+  ListAssembly*: BOOLEAN;
+
   typtab: ARRAY maxTypTab OF Type;
 
 PROCEDURE NewObj*(VAR obj: Object; id: ORS.Ident; class: INTEGER);
@@ -215,7 +220,7 @@ BEGIN Read(R, ref);
   IF ref < 0 THEN T := typtab[-ref]  (*already read*)
   ELSE NEW(t); T := t; typtab[ref] := t; t.mno := thismod.lev;
     Read(R, form); t.form := form;
-    IF form = Pointer THEN InType(R, thismod, t.base); t.size := 4
+    IF form = Pointer THEN InType(R, thismod, t.base); t.size := WordSize
     ELSIF form = Array THEN
       InType(R, thismod, t.base); Files.ReadNum(R, t.len); Files.ReadNum(R, t.size)
     ELSIF form = Record THEN
@@ -238,7 +243,7 @@ BEGIN Read(R, ref);
         NEW(par); par.class := class; Read(R, readonly); par.rdo := readonly = 1;
         InType(R, thismod, par.type); par.next := obj; obj := par; INC(np); Read(R, class)
       END;
-      t.dsc := obj; t.nofpar := np; t.size := 4
+      t.dsc := obj; t.nofpar := np; t.size := WordSize
     END;
     Files.ReadString(R, modname);
     IF modname[0] #  0X THEN  (*re-import*)
@@ -287,7 +292,9 @@ BEGIN
         END;
         obj.next := thismod.dsc; thismod.dsc := obj; Read(R, class)
       END;
-    ELSE ORS.Mark("import not available")
+    ELSE
+      w.s("Import("); w.s(modid); w.s(", "); w.s(modid1); w.sl(")");
+      ORS.Mark("import not available")
     END
   END
 END Import;
@@ -427,6 +434,9 @@ BEGIN NEW(obj); obj.name := name; obj.class := cl; obj.type := type; obj.val := 
 END enter;
 
 BEGIN
+  ListCodegen  := TRUE;
+  ListAssembly := TRUE;
+
   byteType   := type(Byte,   Int64,   1);
   boolType   := type(Bool,   Bool,    1);
   charType   := type(Char,   Char,    1);
