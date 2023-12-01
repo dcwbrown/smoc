@@ -117,24 +117,33 @@ BEGIN i := 0; GetCh;
   str[i] := 0X; INC(i); GetCh; slen := i
 END String;
 
+PROCEDURE GetHexChar(): INTEGER;
+VAR val: INTEGER;
+BEGIN
+  IF    (ch >= "0") & (ch <= "9") THEN val := ORD(ch) - 30H; GetCh
+  ELSIF (ch >= "A") & (ch <= "F") THEN val := ORD(ch) - 37H; GetCh
+  ELSE  val := -1
+  END
+RETURN val END GetHexChar;
+
 PROCEDURE HexString;
   VAR i, m, n: INTEGER;
 BEGIN i := 0; GetCh;
   WHILE ~R.eot & (ch # "$") DO
-    WHILE ~R.eot  & (ch <= " ") DO GetCh END ;  (*skip*)
-    IF ("0" <= ch) & (ch <= "9") THEN m := ORD(ch) - 30H
-    ELSIF ("A" <= ch) & (ch <= "F") THEN m := ORD(ch) - 37H
-    ELSE m := 0; Mark("hexdig expected")
-    END ;
-    GetCh;
-    IF ("0" <= ch) & (ch <= "9") THEN n := ORD(ch) - 30H
-    ELSIF ("A" <= ch) & (ch <= "F") THEN n := ORD(ch) - 37H
-    ELSE n := 0; Mark("hexdig expected")
-    END ;
-    IF i < stringBufSize THEN str[i] := CHR(m*10H + n); INC(i) ELSE Mark("string too long") END ;
-    GetCh
-  END ;
-  GetCh; slen := i  (*no 0X appended!*)
+    WHILE ~R.eot  & (ch <= " ") DO GetCh END;  (* skip whitespace *)
+    m := GetHexChar();  n := GetHexChar();
+    IF n >= 0 THEN m := m * 16 + n END;
+    IF m < 0 THEN
+      Mark("hexdig expected"); IF ch # "$" THEN GetCh END
+    ELSE
+      IF i < stringBufSize THEN
+        str[i] := CHR(m); INC(i)
+      ELSE
+        Mark("string too long")
+      END
+    END
+  END;
+  GetCh; slen := i  (* No 0X appended! *)
 END HexString;
 
 (*---
