@@ -5,7 +5,7 @@ CONST
   RCX = X64.RCX;
   RSP = X64.RSP;
 
-  RightCol  = 70;     (* Col for code generation trace *)
+  RightCol = 70;     (* Col for code generation trace *)
 
 
 TYPE
@@ -312,7 +312,7 @@ END AluOp;
 
 PROCEDURE BaseIndexScaleDisp(
     indirect: BOOLEAN;
-    otherreg, regsize, base, index, scale, disp: INTEGER;
+    otherreg, regsize, base, index, scale, disp, mode: INTEGER;
     VAR b: Buffer
 );
 BEGIN
@@ -323,16 +323,22 @@ BEGIN
       ELSIF regsize = 4 THEN s("dword", b)  ELSIF regsize = 8 THEN s("qword", b) END
     END;
     c("[", b);
-    IF base >= 0  THEN Reg(8, base, b) END;
-    IF index >= 0 THEN
+    IF    mode = X64.Code   THEN s("Code+", b); h(disp, b);  c("H", b)
+    ELSIF mode = X64.String THEN s("Str+", b);  h(disp, b);  c("H", b)
+    ELSIF mode = X64.Global THEN s("VAR+", b);  h(disp, b);  c("H", b)
+    ELSIF (mode MOD 256) = X64.Import THEN
+      s("Imp:", b); i(mode DIV 1000000H MOD 10000H, b);
+      c(".", b);    i(mode DIV 100H     MOD 10000H, b)
+    ELSE
+      h(disp, b); c("H", b)
+    END;
+    IF base >= 0    THEN c("+", b); Reg(8, base, b) END;
+    IF index >= 0   THEN
       c("+", b);  Reg(8, index, b);
       IF    scale = 1 THEN s("*2", b)
       ELSIF scale = 2 THEN s("*4", b)
       ELSIF scale = 3 THEN s("*8", b)
       END
-    END;
-    IF    disp < 0 THEN c("-", b);  h(-disp, b); s("H", b)
-    ELSIF disp > 0 THEN c("+", b);  h(disp,  b); s("H", b)
     END;
     c("]", b)
   ELSE
@@ -454,8 +460,9 @@ END DisModRegRm;
 
 
 PROCEDURE DisassembleInstruction*(
-  VAR pc:   INTEGER;
-  comment:  ARRAY OF CHAR);
+  VAR pc:    INTEGER;
+  itemmode:  INTEGER;
+  comment:   ARRAY OF CHAR);
 VAR
   reghigh, indexhigh, basehigh: BOOLEAN;
   reg, base, index:             INTEGER;
@@ -509,9 +516,9 @@ BEGIN
       IF tofirst THEN
         Reg(regsize, reg, Args);
         c(",", Args);
-        BaseIndexScaleDisp(indirect, reg, regsize, base, index, scale, disp, Args)
+        BaseIndexScaleDisp(indirect, reg, regsize, base, index, scale, disp, itemmode, Args)
       ELSE
-        BaseIndexScaleDisp(indirect, reg, regsize, base, index, scale, disp, Args);
+        BaseIndexScaleDisp(indirect, reg, regsize, base, index, scale, disp, itemmode, Args);
         s(",", Args);
         Reg(regsize, reg, Args);
       END
@@ -550,7 +557,7 @@ BEGIN
     IF basehigh  & (base  < 8) THEN INC(base,  8) END;
     Reg(regsize, reg, Args);
     s(",", Args);
-    BaseIndexScaleDisp(indirect, -1, regsize, base, index, scale, disp, Args);
+    BaseIndexScaleDisp(indirect, -1, regsize, base, index, scale, disp, itemmode, Args);
     s(",", Args);
     GetSigned(dispsize, pc, disp);  h(disp, Args); s("H", Args)
 
@@ -571,7 +578,7 @@ BEGIN
     AluOp(opcode, Inst);
     IF indexhigh & (index < 8) THEN INC(index, 8) END;
     IF basehigh  & (base  < 8) THEN INC(base,  8) END;
-    BaseIndexScaleDisp(indirect, -1, regsize, base, index, scale, disp, Args);
+    BaseIndexScaleDisp(indirect, -1, regsize, base, index, scale, disp, itemmode, Args);
     s(",", Args);
     GetSigned(dispsize, pc, disp);  h(disp, Args); s("H", Args)
 
@@ -585,7 +592,7 @@ BEGIN
     IF basehigh  & (base  < 8) THEN INC(base,  8) END;
     Reg(regsize, reg, Args);
     s(",", Args);
-    BaseIndexScaleDisp(indirect, reg, regsize, base, index, scale, disp, Args)
+    BaseIndexScaleDisp(indirect, reg, regsize, base, index, scale, disp, itemmode, Args)
 
   ELSIF (opcode >= 86H) & (opcode <= 87H) THEN (* xchg *)
 
@@ -595,7 +602,7 @@ BEGIN
     IF reghigh   & (reg   < 8) THEN INC(reg,   8) END;
     IF indexhigh & (index < 8) THEN INC(index, 8) END;
     IF basehigh  & (base  < 8) THEN INC(base,  8) END;
-    BaseIndexScaleDisp(indirect, reg, regsize, base, index, scale, disp, Args);
+    BaseIndexScaleDisp(indirect, reg, regsize, base, index, scale, disp, itemmode, Args);
     s(",", Args);
     Reg(regsize, reg, Args);
 
@@ -611,9 +618,9 @@ BEGIN
     IF tofirst THEN
       Reg(regsize, reg, Args);
       s(",", Args);
-      BaseIndexScaleDisp(indirect, reg, regsize, base, index, scale, disp, Args)
+      BaseIndexScaleDisp(indirect, reg, regsize, base, index, scale, disp, itemmode, Args)
     ELSE
-      BaseIndexScaleDisp(indirect, reg, regsize, base, index, scale, disp, Args);
+      BaseIndexScaleDisp(indirect, reg, regsize, base, index, scale, disp, itemmode, Args);
       s(",", Args);
       Reg(regsize, reg, Args);
     END
@@ -627,7 +634,7 @@ BEGIN
     IF basehigh  & (base  < 8) THEN INC(base,  8) END;
     Reg(regsize, reg, Args);
     s(",", Args);
-    BaseIndexScaleDisp(indirect, reg, regsize, base, index, scale, disp, Args)
+    BaseIndexScaleDisp(indirect, reg, regsize, base, index, scale, disp, itemmode, Args)
 
   ELSIF opcode = 0A4H THEN
 
@@ -678,7 +685,7 @@ BEGIN
     END;
     IF indexhigh & (index < 8) THEN INC(index, 8) END;
     IF basehigh  & (base  < 8) THEN INC(base,  8) END;
-    BaseIndexScaleDisp(indirect, -1, regsize, base, index, scale, disp, Args);
+    BaseIndexScaleDisp(indirect, -1, regsize, base, index, scale, disp, itemmode, Args);
     s(",", Args);
     GetSigned(1, pc, disp);  h(disp, Args); s("H", Args)
 
@@ -699,7 +706,7 @@ BEGIN
     ASSERT(reg = 0);
     IF indexhigh & (index < 8) THEN INC(index, 8) END;
     IF basehigh  & (base  < 8) THEN INC(base,  8) END;
-    BaseIndexScaleDisp(indirect, -1, regsize, base, index, scale, disp, Args);
+    BaseIndexScaleDisp(indirect, -1, regsize, base, index, scale, disp, itemmode, Args);
     s(",", Args);
     IF regsize < 8 THEN
       GetUnsigned(regsize, pc, disp)
@@ -728,7 +735,7 @@ BEGIN
     END;
     IF indexhigh & (index < 8) THEN INC(index, 8) END;
     IF basehigh  & (base  < 8) THEN INC(base,  8) END;
-    BaseIndexScaleDisp(indirect, reg, regsize, base, index, scale, disp, Args);
+    BaseIndexScaleDisp(indirect, reg, regsize, base, index, scale, disp, itemmode, Args);
     IF reg < 0 THEN s(",1", Args) ELSE s(",cl", Args) END;
 
   ELSIF (opcode >= 0E0H) & (opcode <= 0E2H) THEN
@@ -789,7 +796,7 @@ BEGIN
     END;
     IF indexhigh & (index < 8) THEN INC(index, 8) END;
     IF basehigh  & (base  < 8) THEN INC(base,  8) END;
-    BaseIndexScaleDisp(indirect, -1, regsize, base, index, scale, disp, Args)
+    BaseIndexScaleDisp(indirect, -1, regsize, base, index, scale, disp, itemmode, Args)
 
   ELSIF opcode = 0FFH THEN  (* Group 5 extensions to primary opcode map *)
 
@@ -802,7 +809,7 @@ BEGIN
     ELSIF opcode = 2 THEN s("call", Inst); regsize := 8
     ELSIF opcode = 6 THEN s("push", Inst)
     ELSE                  s("??5", Inst); END;
-    BaseIndexScaleDisp(indirect, -1, regsize, base, index, scale, disp, Args)
+    BaseIndexScaleDisp(indirect, -1, regsize, base, index, scale, disp, itemmode, Args)
 
   ELSIF opcode = 0FH THEN  (* Secondary opcode map *)
 
@@ -820,7 +827,7 @@ BEGIN
       IF indexhigh & (index < 8) THEN INC(index, 8) END;
       IF basehigh  & (base  < 8) THEN INC(base,  8) END;
       Reg(8, reg, Args);  s(",", Args);
-      BaseIndexScaleDisp(indirect, -1, regsize, base, index, scale, disp, Args)
+      BaseIndexScaleDisp(indirect, -1, regsize, base, index, scale, disp, itemmode, Args)
 
     ELSIF (opcode >= 40H) & (opcode <= 4FH) THEN  (* Conditional move *)
 
@@ -831,7 +838,7 @@ BEGIN
       IF basehigh  & (base  < 8) THEN INC(base,  8) END;
       Reg(8, reg, Args);  s(",", Args);
       IF (base >= 0) & (base <= 15) THEN
-        BaseIndexScaleDisp(indirect, -1, regsize, base, index, scale, disp, Args)
+        BaseIndexScaleDisp(indirect, -1, regsize, base, index, scale, disp, itemmode, Args)
       ELSE
         c("*", Args); i(base, Args); c("*", Args)
       END
@@ -853,7 +860,7 @@ BEGIN
       IF reghigh   & (reg   < 8) THEN INC(reg,   8) END;
       IF indexhigh & (index < 8) THEN INC(index, 8) END;
       IF basehigh  & (base  < 8) THEN INC(base,  8) END;
-      BaseIndexScaleDisp(indirect, reg, 1, base, index, scale, disp, Args)
+      BaseIndexScaleDisp(indirect, reg, 1, base, index, scale, disp, itemmode, Args)
 
     ELSIF (opcode = 0A3H) OR (opcode = 0ABH)
     OR    (opcode = 0B3H) OR (opcode = 0BBH) THEN
@@ -866,7 +873,7 @@ BEGIN
       IF reghigh   & (reg   < 8) THEN INC(reg,   8) END;
       IF indexhigh & (index < 8) THEN INC(index, 8) END;
       IF basehigh  & (base  < 8) THEN INC(base,  8) END;
-      BaseIndexScaleDisp(indirect, reg, regsize, base, index, scale, disp, Args);
+      BaseIndexScaleDisp(indirect, reg, regsize, base, index, scale, disp, itemmode, Args);
       s(",", Args);  Reg(8, reg, Args)
 
     ELSIF opcode = 0AFH THEN
@@ -877,7 +884,7 @@ BEGIN
       IF indexhigh & (index < 8) THEN INC(index, 8) END;
       IF basehigh  & (base  < 8) THEN INC(base,  8) END;
       Reg(8, reg, Args);  s(",", Args);
-      BaseIndexScaleDisp(indirect, reg, regsize, base, index, scale, disp, Args)
+      BaseIndexScaleDisp(indirect, reg, regsize, base, index, scale, disp, itemmode, Args)
 
     ELSIF opcode = 0BAH THEN
 
@@ -890,7 +897,7 @@ BEGIN
       ELSIF opcode = 6 THEN s("btr", Inst)
       ELSIF opcode = 7 THEN s("btc", Inst)
       END;
-      BaseIndexScaleDisp(indirect, reg, regsize, base, index, scale, disp, Args);
+      BaseIndexScaleDisp(indirect, reg, regsize, base, index, scale, disp, itemmode, Args);
       c(",", Args);
       GetUnsigned(8, pc, disp);
       h(disp, Args); c("H", Args)
