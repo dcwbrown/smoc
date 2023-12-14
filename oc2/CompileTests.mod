@@ -1,5 +1,25 @@
 MODULE CompileTests;  IMPORT SYSTEM;
 
+
+VAR go: PROCEDURE(x,y: INTEGER);
+
+PROCEDURE a(x,y: INTEGER); BEGIN END a;
+
+PROCEDURE b(p: PROCEDURE(x,y: INTEGER)); BEGIN p(123,321) END b;
+
+BEGIN
+  go := a;
+  b(a)
+END CompileTests.
+
+
+
+
+
+
+
+(* -----------------------------------------------------------------------------
+
 CONST SomeString = "Some string.";
 
 TYPE
@@ -12,10 +32,22 @@ TYPE
   r3 = POINTER TO r3desc;
   r3desc* = RECORD (r2desc) n3: r3 END;
 
-VAR  b1, b2, b3: BOOLEAN;  i: INTEGER;
+VAR
+  b1, b2, b3: BOOLEAN;
+  i: INTEGER;
+  p: PROCEDURE(i: INTEGER);
+
+PROCEDURE fred(i: INTEGER);
+VAR j: INTEGER;
+BEGIN
+  b1 := TRUE;
+  j := i;
+END fred;
+
+PROCEDURE bert(i: INTEGER): INTEGER;
+BEGIN RETURN i + 1 END bert;
 
 BEGIN
-(*
   IF    b1 THEN
     i := 1
   ELSIF b2 THEN
@@ -25,17 +57,24 @@ BEGIN
   ELSE
     i := 0
   END;
-*)
+
+  fred(5);
 
   IF b1 OR b2 OR b3 THEN
     i := 1
   END;
 
-  i := 99
+  i := 99;
+
+  i := bert(2);
+  i := 5 + 7 + (bert(4) + (bert(3) - 6) + 2);
+
+  p := fred;
+  p(5);
+
 END CompileTests.
 
 
-(*
 CONST
   c = "a";
   s = "Hello";

@@ -92,14 +92,16 @@ BEGIN
 END Trace;
 
 PROCEDURE Disassemble(mode: INTEGER; comment: ARRAY OF CHAR);
+(* Disassemble up to X64.PC, or opcode 2EH, whichever comes first *)
 BEGIN
-  IF ORB.ListAssembly & (Disasmpc < X64.PC) THEN
+  IF ORB.ListAssembly & (Disasmpc < X64.PC) & (X64.Text[Disasmpc] # 2EH) THEN
     IF mode = X64.Import THEN INC(mode, ImpFix[ImpFInx-1].fix * 256) END;
     l.DisassembleInstruction(Disasmpc, mode, comment);
-    WHILE Disasmpc < X64.PC DO
+    WHILE (Disasmpc < X64.PC) & (X64.Text[Disasmpc] # 2EH) DO
       l.DisassembleInstruction(Disasmpc, mode, "");
     END
-  END
+  END;
+  Disasmpc := X64.PC
 END Disassemble;
 
 
@@ -207,9 +209,11 @@ BEGIN
     END;
 
     (* Fixup Code/String/Global/Import offsets *)
-    IF mode IN {Code, String, Global, Import} THEN ASSERT(dispsize = 4) END;
-    IF    mode = Code   THEN DEC(offset, X64.PC + 4)
-    ELSIF mode = String THEN StrFix[StrFInx] := X64.PC;  INC(StrFInx)
+    IF mode IN {Code, String, Global, Import} THEN
+      ASSERT(dispsize = 4);
+      DEC(offset, X64.PC + 4)
+    END;
+    IF    mode = String THEN StrFix[StrFInx] := X64.PC;  INC(StrFInx)
     ELSIF mode = Global THEN VarFix[VarFInx] := X64.PC;  INC(VarFInx)
     ELSIF mode = Import THEN ImpFix[ImpFInx].offset := X64.PC;
                              ImpFix[ImpFInx].fix := n; INC(ImpFInx)
@@ -403,6 +407,15 @@ END MoveReg;
 
 PROCEDURE LoadMem(reg, mode: INTEGER; signed: BOOLEAN; size, n, index, scale, offset: INTEGER);
 BEGIN
+  Trace(TraceAny, "LoadMem(");  l.Reg(8, reg, Trc);
+  l.s(", ", Trc);         l.Mode(mode, Trc);
+  l.s(", signed ", Trc);  l.Bool(signed, Trc);
+  l.s(", size ", Trc);    l.i(size, Trc);
+  l.s(", n ", Trc);       l.i(n, Trc);
+  l.s(", index ", Trc);   l.i(index, Trc);
+  l.s(", scale ", Trc);   l.i(scale, Trc);
+  l.s(", offset ", Trc);  l.i(offset, Trc);  l.l(Trc);
+
   ASSERT(size IN {1, 2, 4, 8});
   IF signed THEN
     IF    size = 1 THEN OpModRegRm(0FBEH, mode, reg, 8, n, index, scale, offset)  (* movsx  r64, r/m8  *)
@@ -442,17 +455,9 @@ BEGIN
     LoadMem(reg, x.mode, X64.IsSigned(x.type), x.type.size, x.n, x.index, x.scale, x.offset)
   ELSE ASSERT(FALSE)
   END;
-  FreeRegs(x);  x.mode := Reg;  x.n := reg;
+  FreeRegs(x);  x.mode := Reg;  x.n := reg;  ReserveReg(x.n);
   Disassemble(x.mode, "Load")
 END LoadReg;
-
-PROCEDURE Load(VAR x: Item);
-VAR reg: INTEGER;
-BEGIN
-  IF x.mode = Reg THEN reg := x.n ELSE reg := ReserveNextFree() END;
-  LoadReg(reg, x)
-END Load;
-
 
 PROCEDURE LoadAddressReg(reg: INTEGER; VAR x: Item);
 BEGIN
@@ -462,11 +467,22 @@ BEGIN
     MoveReg(reg, x.n)
   ELSIF (x.mode IN {Eadr, Code, String, Global, Import}) THEN
     OpModRegRm(8DH, x.mode, reg, 8, x.n, x.index, x.scale, x.offset);  (* lea *)
-    Disassemble(x.mode, "LoaddAddress")
+    Disassemble(x.mode, "LoadAddress")
   ELSE
     ASSERT(FALSE)
   END
 END LoadAddressReg;
+
+PROCEDURE Load(VAR x: Item);
+VAR reg: INTEGER;
+BEGIN
+  IF x.mode = Reg THEN reg := x.n ELSE reg := ReserveNextFree() END;
+  IF (x.mode = Code) & (x.type.form = ORB.Proc) THEN
+    LoadAddressReg(reg, x); FreeRegs(x);  x.mode := Reg;  x.n := reg;  ReserveReg(x.n);
+  ELSE
+    LoadReg(reg, x)
+  END
+END Load;
 
 PROCEDURE LoadAddress(VAR x: Item);
 VAR reg: INTEGER;
@@ -594,7 +610,8 @@ END PushAdr;
 PROCEDURE Push*(VAR x: Item);
 VAR reg: INTEGER;
 BEGIN
-  IF    x.mode = Const THEN PushImmediate(x.n)
+  IF    (x.mode = Code) & (x.type.form = ORB.Proc) THEN PushAdr(x)
+  ELSIF x.mode = Const THEN PushImmediate(x.n)
   ELSIF x.mode = Reg   THEN PushReg(x.n)
   ELSIF x.mode IN {Stkind, Eadr, Code, String, Global, Import} THEN
     Depar(x);
@@ -674,6 +691,13 @@ BEGIN
   l.s("; dest: ", Trc);  l.Item(dest, Trc);
   l.s(", src: ",  Trc);  l.Item(src, Trc); l.l(Trc);
 
+  IF (dest.mode = Reg) & (dest.n IN Free) THEN
+    l.s("** dest register ", Trc); l.Reg(8, dest.n, Trc); l.sl(" not reserved.", Trc);
+  END;
+  IF (src.mode = Reg) & (src.n IN Free) THEN
+    l.s("** src register ", Trc); l.Reg(8, src.n, Trc); l.sl(" not reserved.", Trc);
+  END;
+
   IF (src.mode = Const) & (dest.mode = Const) THEN
 
     ASSERT(op # Cmp);
@@ -700,6 +724,10 @@ BEGIN
     END;
     FreeRegs(src);
 
+  END;
+
+  IF (dest.mode = Reg) & (dest.n IN Free) THEN
+    l.s("** Warning, register dest.n (", Trc); l.Reg(8, dest.n, Trc); l.sl(") not reserved **", Trc)
   END
 END Dyadic;
 
@@ -800,7 +828,7 @@ BEGIN
   l.s(", src: ", Trc);  l.Item(src, Trc);  l.l(Trc);
   Depar(dest);
   IF src.mode = Const THEN
-    StoreImmediate(src.n, dest);
+    StoreImmediate(src.n, dest)
   ELSE
     Load(src);
     StoreReg(src.n, dest);
@@ -1053,42 +1081,34 @@ END StringParam;
 
 (* ---- Procedure / function calls ---- *)
 
-PROCEDURE PrepCall*(VAR x: Item);
+
+
+PROCEDURE PrepCall*(VAR x: Item; VAR saved: SET);
+VAR i : INTEGER;
 BEGIN
   Trace(TraceAny, "PrepCall(x: "); l.Item(x, Trc);
   l.s("), SPO ", Trc);             l.i(X64.SPO, Trc); l.l(Trc);
-  IF Free # AllFree THEN
-    l.s("** Need to save partially evaluated expression in regs ", Trc);
-    l.Set(AllFree - Free, Trc);
-    l.sl(" **", Trc)
+  saved := AllFree - Free;
+  IF saved # {} THEN  (* Save partially evaluated expression *)
+    FOR i := 0 TO 15 DO IF i IN saved THEN PushReg(i);  X64.AdjustStack(1) END END;
+    Disassemble(0, "Save registers");
+    Free := AllFree
   END;
   ASSERT(x.type.form = ORB.Proc);
   ASSERT(x.mode IN {Eadr, Global, Code, Import});
-  (*---TODO: not clear how imported procs, ptrs to procs, and imported ptrs to procs are passed *)
-  (* Wirth appears to use Const for compile time functions. *)
   IF x.mode = Eadr THEN  (* Push proc address to stack *)
-    Push(x);  X64.AdjustStack(1);
-    FreeRegs(x);
-    x.mode := Eadr;  x.n := RSP;  x.offset := -8 * X64.SPO;
+    Push(x);  X64.AdjustStack(1);  FreeRegs(x);
+    ASSERT(x.type.len MOD 8 = 0);
+    x.mode   := Eadr;
+    x.n      := RSP;
+    x.offset := -8 * (X64.SPO - (x.type.len DIV 8 + 1));
     Disassemble(x.mode, "proc address to be called")
   END
 END PrepCall;
 
 
-PROCEDURE Parmsize(t: ORB.Type): INTEGER;
-VAR obj: ORB.Object; s, i: INTEGER;
-BEGIN ASSERT(t.form = ORB.Proc);
-  obj := t.dsc;  s := 0;  i := 0;
-  WHILE i < t.nofpar DO
-    INC(s);
-    IF (obj.type.form = ORB.Array) & (obj.type.len < 0) OR (obj.type.form = ORB.Record) THEN INC(s) END;
-    obj := obj.next;  INC(i)
-  END
-RETURN s END Parmsize;
-
-
-PROCEDURE Call*(VAR x: Item);
-VAR reg: INTEGER;
+PROCEDURE Call*(VAR x: Item; saved: SET);
+VAR i, reg, resultreg: INTEGER;
 BEGIN
   Trace(TraceAny, "Call(x: "); l.Item(x, Trc);
   l.s("), SPO ", Trc);         l.i(X64.SPO, Trc); l.l(Trc);
@@ -1102,7 +1122,7 @@ BEGIN
   END;
   Disassemble(x.mode, "Call");
 
-  X64.AdjustStack(-Parmsize(x.type));  (* matches stack adjustment by <ret n> *)
+  X64.AdjustStack(-(x.type.len DIV 8));  (* matches stack adjustment by <ret n> *)
 
   IF x.mode = Eadr THEN
     (* Drop called proc address from stack *)
@@ -1112,11 +1132,24 @@ BEGIN
   END;
 
   IF x.type.base.form = ORB.NoTyp THEN (* procedure *)
+    ASSERT(saved = {});
     ClearRegs
   ELSE                                 (* function *)
     ClearRegs;
     FreeRegs(x);
-    x.mode := Reg;  x.n := RAX;  ReserveReg(RAX)  (* function result in rax *)
+    (* Move function result to another reg if RAX was in use before fn call *)
+    Free := Free - saved;
+    resultreg := FirstFreeReg();
+    IF resultreg # RAX THEN MoveReg(resultreg, RAX) END;
+    x.mode := Reg;  x.n := resultreg;  ReserveReg(resultreg);
+    IF saved # {} THEN (* Restore saved registers *)
+      i := 15;
+      WHILE i >= 0 DO
+        IF i IN saved THEN PopReg(i);  ReserveReg(i);  X64.AdjustStack(-1);  END;
+        DEC(i)
+      END;
+      Disassemble(0, "Restore saved registers")
+    END;
   END
 END Call;
 
@@ -1144,35 +1177,27 @@ BEGIN
 END Enter;
 
 
-PROCEDURE EmitStrings(str: ARRAY OF CHAR; len: INTEGER);
+PROCEDURE EmitStrings();
 VAR i: INTEGER;
 BEGIN
   IF Disasmpc < X64.PC THEN Disassemble(0, "") END;
-  IF len > 0 THEN
-    i := 0;
-    WHILE i < len DO
-      (* Identify 1 string  *)
-      WHILE (str[i] # 0X) & (i < len) DO X64.Emit(ORD(str[i])); INC(i) END;
-      IF i < len THEN ASSERT(str[i] = 0X); INC(i) END;
-      X64.Emit(0);
-      l.DisassembleString(Disasmpc);
-    END
-  END
-END EmitStrings;
-
-PROCEDURE WriteStrings();
-VAR i: INTEGER;
-BEGIN
   IF Strx > 0 THEN
     l.l(Trc);
     i := 0;
     WHILE i < StrFInx DO  (* Relocate collected string addresses *)
       X64.Patch(StrFix[i], 4, X64.PC + X64.Peek(StrFix[i], 4, FALSE));  INC(i)
     END;
-    EmitStrings(Str, Strx)
+
+    i := 0;
+    WHILE i < Strx DO  (* Emit 1 string  *)
+      WHILE (Str[i] # 0X) & (i < Strx) DO X64.Emit(ORD(Str[i])); INC(i) END;
+      IF i < Strx THEN ASSERT(Str[i] = 0X); INC(i) END;
+      X64.Emit(0);
+      l.DisassembleString(Disasmpc);
+    END
   END;
   Strx := 0;  StrFInx := 0
-END WriteStrings;
+END EmitStrings;
 
 PROCEDURE Return*(form: INTEGER;  VAR x: Item;  parmsize, locsize: INTEGER);
 BEGIN
@@ -1196,7 +1221,9 @@ BEGIN
   END;
   Disassemble(0, "Return");
 
-  WriteStrings;
+  X64.Emit(2EH);  (* Mark end of code with ignored instruction 'seg cs' *)
+
+  EmitStrings;
   X64.ClearStack;  ClearRegs
 END Return;
 
@@ -1813,6 +1840,14 @@ BEGIN
   l.s("; x: ", Trc);         l.Item(x, Trc);
   l.s(", y: ", Trc);         l.Item(y, Trc); l.sl(")", Trc);
   ASSERT(op IN {ORS.plus, ORS.minus});
+
+  IF (x.mode = Reg) & (x.n IN Free) THEN
+    l.s("** x register ", Trc); l.Reg(8, x.n, Trc); l.sl(" not reserved.", Trc);
+  END;
+  IF (y.mode = Reg) & (y.n IN Free) THEN
+    l.s("** y register ", Trc); l.Reg(8, y.n, Trc); l.sl(" not reserved.", Trc);
+  END;
+
   IF (x.mode = Const) & (y.mode = Const) THEN
     IF op = ORS.plus THEN INC(x.n, y.n) ELSE DEC(x.n, y.n) END
   ELSE
@@ -2015,9 +2050,9 @@ END Neg;
 
 (* Use of Item.o fields for conditions:
 *
-*  o.disp  - the condition code (uses symbol encodings ORS.eql .. ORS.geq)
-*  o.base  - address of prev instr if any needing patching with curr target
-*  o.index - address of any forward jump list targeting this instruction
+*  o.n      - the condition code (uses symbol encodings ORS.eql .. ORS.geq)
+*  o.offset - address of prev instr if any needing patching with curr target
+*  o.index  - address of any forward jump list targeting this instruction
 *)
 
 PROCEDURE CFJump*(VAR x: X64.Item);
@@ -2033,7 +2068,7 @@ BEGIN Trace(TraceAny, "CFJump(x: "); l.Item(x, Trc);  l.sl(")", Trc);
       ASSERT(cond DIV 16 = 8);
       X64.Emit(0FH);  X64.Emit(cond)
     END;
-    X64.EmitBytes(4, x.n);  x.n := X64.PC - 4;
+    X64.EmitBytes(4, x.offset);  x.offset := X64.PC - 4;
     FixLink(x.index);  (* Fix any links that target following this instruction *)
     Disassemble(0, "CFJump")
   END
@@ -2244,7 +2279,7 @@ END TypeTest;
 
 (* ---- ---- *)
 
-PROCEDURE Open*(sourcefn: ARRAY OF CHAR);
+PROCEDURE Open*(sourcefn, modid: ARRAY OF CHAR);
 VAR i: INTEGER;
 BEGIN
   l.Init(sourcefn);
@@ -2254,29 +2289,159 @@ BEGIN
   X64.Init;
   Strx     := 0;
   StrFInx  := 0;
+  Varsize  := 0;
   VarFInx  := 0;
-  Disasmpc := 0
+  ImpFInx  := 0;
+  Disasmpc := 0;
+  FOR i := 1 TO SYSTEM.SIZE(X64.CodeHeaderItem) DO X64.Emit(0) END;
+  X64.EmitString(modid);
+  X64.Align(16);
+  Disasmpc := X64.PC
 END Open;
 
 PROCEDURE SetDataSize*(dc: INTEGER);
-BEGIN l.s("SetDataSize(dc ", Trc); l.i(dc, Trc); l.sl(")", Trc);
-  Varsize := dc
-END SetDataSize;
+BEGIN Varsize := dc END SetDataSize;
 
 PROCEDURE Header*;
-BEGIN l.sl("Header", Trc);
-  (* Module init code entry point *)
+BEGIN
+  Trace(TraceAny, "Header - module initialisation code entry point."); l.l(Trc);
+  X64.Header.initcode := X64.PC;  (* Set entry point address *)
 END Header;
 
-PROCEDURE Close*(VAR modid: ORS.Ident; key, nofent: INTEGER);
+PROCEDURE wsize(size: INTEGER);
 BEGIN
+  l.h(size,  Trc);  l.c("H", Trc);
+  l.s(", ", Trc);   l.i(size, Trc);
+END wsize;
+
+PROCEDURE EmitPtrs(typ: ORB.Type; adr: INTEGER);
+VAR fld: ORB.Object;  i, s: INTEGER;
+BEGIN
+  IF (typ.form = ORB.Pointer) OR (typ.form = ORB.NilTyp) THEN
+    X64.EmitBytes(8, adr)
+  ELSIF typ.form = ORB.Record THEN
+    fld := typ.dsc;
+    WHILE fld # NIL DO EmitPtrs(fld.type, fld.val + adr); fld := fld.next END
+  ELSIF typ.form = ORB.Array THEN
+    s := typ.base.size;
+    FOR i := 0 TO typ.len-1 DO EmitPtrs(typ.base, i*s + adr) END
+  END
+END EmitPtrs;
+
+PROCEDURE Close*(modid: ORS.Ident; key, exno: INTEGER);
+VAR
+  i:      INTEGER;
+  reslen: INTEGER;
+  obj:    ORB.Object;
+  fname:  ARRAY 40 OF CHAR;
+  F:      Files.File;
+  R:      Files.Rider;
+BEGIN
+  X64.Emit(0C3H);  (* ret *)
+  Disassemble(0, "Return");
+  X64.Emit(2EH);  (* Mark end of code with ignored instruction 'seg cs' *)
+  EmitStrings;
+
   Trace(TraceAny, "Close:"); l.l(Trc);
-  l.s("  modid    ", Trc);  l.sl(modid, Trc);
-  l.s("  key      ", Trc);  l.i(key, Trc);     l.l(Trc);
-  l.s("  nofent   ", Trc);  l.i(nofent, Trc);  l.l(Trc);
-  l.s("  str size ", Trc);  l.i(Strx, Trc);    l.l(Trc);
+  l.s("  modid:        ", Trc);  l.sl(modid,  Trc);
+  l.s("  key:          ", Trc);  l.h(key,     Trc);  l.l(Trc);
+  l.s("  exno:         ", Trc);  l.i(exno,    Trc);  l.l(Trc);
+  l.s("  code size:    ", Trc);  wsize(X64.PC);      l.l(Trc);
+  l.s("  VAR size:     ", Trc);  wsize(Varsize);     l.l(Trc);
+  l.s("  VAR fixups:   ", Trc);  l.i(VarFInx, Trc);  l.l(Trc);
+  l.s("  Import fxups: ", Trc);  l.i(ImpFInx, Trc);  l.l(Trc);
+  l.l(Trc);
+
+  (* Prepare to patch header pointers direvtly into X64.Text *)
+
+  X64.Header.varsize := Varsize;
+
+  (* Emit global VAR pointer table *)
+  X64.Align(16);
+  X64.Header.pointers := X64.PC;  (* Set global VAR pointer table address *)
+  obj := ORB.topScope.next;
+  WHILE obj # NIL DO
+    IF obj.class = ORB.Var THEN EmitPtrs(obj.type, obj.val) END;
+    obj := obj.next
+  END;
+  X64.EmitBytes(8, -1);
+
+  (* Emit command table *)
+  X64.Align(16);
+  X64.Header.commands := X64.PC;   (* Set command table address *)
+  obj := ORB.topScope.next;
+  WHILE obj # NIL DO  (* commands *)
+    IF (obj.exno # 0) & (obj.class = ORB.Const) & (obj.type.form = ORB.Proc) &
+        (obj.type.nofpar = 0) & (obj.type.base = ORB.noType) THEN
+      X64.EmitString(obj.name); X64.EmitBytes(4, obj.val)
+    END;
+    obj := obj.next
+  END;
+  X64.Emit(0);
+
+  (* Determine export table offset and resident length *)
+  X64.Align(16);
+  reslen := ((X64.PC + (exno - 1) * 4) + 15) DIV 16 * 16;
+  X64.Header.exports := X64.PC;     (* Set export table address *)
+
+  (* Emit export table *)
+  obj := ORB.topScope.next;
+  WHILE obj # NIL DO  (* entries *)
+    IF obj.exno # 0 THEN
+      IF (obj.class = ORB.Const) & (obj.type.form = ORB.Proc) OR (obj.class = ORB.Var) THEN
+        X64.EmitBytes(4, obj.val);
+      ELSIF obj.class = ORB.Typ THEN
+        IF obj.type.form = ORB.Record THEN
+          X64.EmitBytes(4, reslen + obj.type.len MOD 10000H)
+        ELSIF (obj.type.form = ORB.Pointer)
+            & ((obj.type.base.typobj = NIL) OR (obj.type.base.typobj.exno = 0)) THEN
+          X64.EmitBytes(4, reslen + obj.type.base.len MOD 10000H)
+        END
+      END
+    END;
+    obj := obj.next
+  END;
+
+  (* End of resident code/tables *)
+
+  X64.Align(16);
+  IF X64.PC # reslen THEN
+    l.l(Trc); l.s("** PC ", Trc); l.h(X64.PC, Trc);
+    l.s(", reslen ", Trc); l.h(reslen, Trc); l.sl(" **", Trc)
+  END;
+  ASSERT(X64.PC = reslen);
+  X64.Header.residentsize := reslen; (* Set resident size / var offset *)
+
+  (* Relocate code references to module global VARs *)
+  FOR i:= 0 TO VarFInx-1 DO
+    X64.Patch(VarFix[i], 4, X64.Peek(VarFix[i], 4, FALSE) + reslen)
+  END;
+
+  (* Emit imported module names and keys *)
+  obj := ORB.topScope.next;
+  WHILE (obj # NIL) & (obj.class = ORB.Mod) DO  (* imports *)
+    IF obj.dsc # ORB.system THEN
+      X64.EmitString(obj(ORB.Module).orgname);  (* name *)
+      X64.EmitBytes(8, obj.val)                 (* key  *)
+    END;
+    obj := obj.next
+  END;
+  X64.Emit(0);
+
+  (* Emit imports *)
+  X64.Align(16);
+  X64.EmitBytes(4, ImpFInx);
+  FOR i := 0 TO ImpFInx - 1 DO
+    X64.EmitBytes(4, ImpFix[i].offset);
+    X64.EmitBytes(4, ImpFix[i].fix);
+  END;
+
   (* Write compiled module *)
-  WriteStrings;
+  fname := "";  K.Append(modid, fname);  K.Append(".code", fname);
+  F := Files.New(fname);  Files.Set(R, F, 0);
+  Files.WriteBytes(R, X64.Text, X64.PC);
+  Files.Write(R, "O");
+  Files.Register(F)
 END Close;
 
 

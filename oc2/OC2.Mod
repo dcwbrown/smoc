@@ -1,11 +1,12 @@
 MODULE OC2;  (* Command line driver for ORP *)  (*$CONSOLE*)
 
-IMPORT ORP, ORS;
+IMPORT ORP, ORS, Loader;
+
+CONST BuildCompiler = FALSE;
 
 BEGIN
   ORP.CompileFile("Compiletests.mod");
- (*ORP.CompileFile("Compiletests2.mod");*)
-  IF TRUE THEN
+  IF BuildCompiler THEN
     IF ORS.errcnt = 0 THEN ORP.CompileFile("Boot.mod")    END;
     IF ORS.errcnt = 0 THEN ORP.CompileFile("Heap.mod")    END;
     IF ORS.errcnt = 0 THEN ORP.CompileFile("Kernel.mod")  END;
@@ -21,5 +22,7 @@ BEGIN
     IF ORS.errcnt = 0 THEN ORP.CompileFile("ORG.mod")     END;
     IF ORS.errcnt = 0 THEN ORP.CompileFile("ORP.mod")     END;
     IF ORS.errcnt = 0 THEN ORP.CompileFile("OC2.mod")     END
-  END
+  END;
+
+  IF ORS.errcnt = 0 THEN Loader.Load("CompileTests.code") END
 END OC2.

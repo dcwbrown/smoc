@@ -329,7 +329,7 @@ BEGIN
 END set;
 
 PROCEDURE factor(VAR x: X64.Item);
-VAR obj: ORB.Object;
+VAR obj: ORB.Object;  saved: SET;
 BEGIN (*sync*)
   IF (sym < ORS.char) OR (sym > ORS.ident) THEN
     ORS.Mark("expression expected");
@@ -344,9 +344,9 @@ BEGIN (*sync*)
       IF sym = ORS.lparen THEN
         ORS.Get(sym);
         IF (x.type.form = ORB.Proc) & (x.type.base.form # ORB.NoTyp) THEN
-          ORG.PrepCall(x);
+          ORG.PrepCall(x, saved);
           ParamList(x);
-          ORG.Call(x);
+          ORG.Call(x, saved);
           x.type := x.type.base
         ELSE ORS.Mark("not a function");  ParamList(x)
         END
@@ -489,10 +489,11 @@ BEGIN Check(ORS.lparen, "no (");
 END StandProc;
 
 PROCEDURE StatSequence;
-VAR obj: ORB.Object;
-    orgtype: ORB.Type;  (*original type of case var*)
+VAR obj:         ORB.Object;
+    orgtype:     ORB.Type;  (*original type of case var*)
     x, y, z, by: X64.Item;
-    L0, L1: INTEGER;
+    L0, L1:      INTEGER;
+    saved:       SET;
 
   PROCEDURE TypeCase(obj: ORB.Object;  VAR x: X64.Item);
     VAR typobj: ORB.Object;
@@ -542,12 +543,16 @@ BEGIN (* StatSequence *)
         ELSIF sym = ORS.lparen THEN (*procedure call*)
           ORS.Get(sym);
           IF (x.type.form = ORB.Proc) & (x.type.base.form = ORB.NoTyp) THEN
-            ORG.PrepCall(x);  ParamList(x);  ORG.Call(x)
+            ORG.PrepCall(x, saved);  ParamList(x);  ORG.Call(x, saved)
           ELSE ORS.Mark("not a procedure");  ParamList(x)
           END
         ELSIF x.type.form = ORB.Proc THEN (*procedure call without parameters*)
           IF x.type.nofpar > 0 THEN ORS.Mark("missing parameters") END;
-          IF x.type.base.form = ORB.NoTyp THEN ORG.PrepCall(x);  ORG.Call(x) ELSE ORS.Mark("not a procedure") END
+          IF x.type.base.form = ORB.NoTyp THEN
+            ORG.PrepCall(x, saved);  ORG.Call(x, saved)
+          ELSE
+            ORS.Mark("not a procedure")
+          END
         ELSIF x.mode = ORB.Typ THEN ORS.Mark("illegal assignment")
         ELSE ORS.Mark("not a procedure")
         END
@@ -1112,7 +1117,7 @@ BEGIN Texts.WriteString(W, "  compiling ");  ORS.Get(sym);
       Check(ORS.semicolon, "no ;")
     END;
 
-    ORG.Open(sourcefn);
+    ORG.Open(sourcefn, modid);
     Declarations(dc);
     ORG.SetDataSize((dc + 7) DIV 8 * 8);
 

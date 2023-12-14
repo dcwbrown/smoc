@@ -95,15 +95,18 @@ TYPE
   (* Record   fields   extension                    *)
 
   TypeDesc* = RECORD
-    form*, mno*:   INTEGER;  (* <0: stack. 0: global. >0: import module num *)
-    ref*:          INTEGER;  (* Only used for import/export                 *)
-    nofpar*:       INTEGER;  (* For procedures, extension level for records *)
-    len*:          INTEGER;  (* For arrays:     len < 0 => open array       *)
-                             (* For records:    adr of descriptor           *)
-                             (* For procedures: size of params              *)
-    dsc*, typobj*: Object;
-    base*:         Type;     (* For arrays, records, pointers *)
-    size*:         INTEGER   (* In bytes *)
+    form*, mno*:   INTEGER;  (* <0: stack. 0: global. >0: import module num  *)
+    ref*:          INTEGER;  (* Only used for import/export                  *)
+    nofpar*:       INTEGER;  (* For procedures: parameter count              *)
+                             (* For records:    extension level              *)
+    len*:          INTEGER;  (* For arrays:     len < 0 => open array        *)
+                             (* For records:    adr of descriptor            *)
+                             (* For procedures: size of params               *)
+    dsc*:          Object;   (* For procedure:  params & local vars          *)
+                             (* For records:    fields                       *)
+    typobj*:       Object;   (* For Typ:        object representing type     *)
+    base*:         Type;     (* For arrays, records, pointers, fn procedures *)
+    size*:         INTEGER   (* In bytes. For procedures: 8                  *)
   END;
 
 

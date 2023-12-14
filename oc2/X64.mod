@@ -69,11 +69,22 @@ TYPE
     scale*:    INTEGER
   END;
 
+  CodeHeader* = POINTER TO CodeHeaderItem;
+  CodeHeaderItem* = RECORD
+    residentsize*: SYSTEM.CARD32;
+    varsize*:      SYSTEM.CARD32;
+    initcode*:     SYSTEM.CARD32;
+    pointers*:     SYSTEM.CARD32;
+    commands*:     SYSTEM.CARD32;
+    exports*:      SYSTEM.CARD32
+  END;
+
 
 VAR
-  PC*:    INTEGER;
-  SPO*:   INTEGER;
-  Text*:  ARRAY MaxPC OF BYTE;
+  PC*:     INTEGER;
+  SPO*:    INTEGER;
+  Text*:   ARRAY MaxPC OF BYTE;
+  Header*: CodeHeader;
 
 
 (* -------------------------------- Assembly -------------------------------- *)
@@ -101,6 +112,9 @@ BEGIN
   END
 END Emit;
 
+PROCEDURE Align*(size: INTEGER);
+BEGIN PC := (PC + size - 1) DIV size * size END Align;
+
 PROCEDURE EmitBytes*(size, value: INTEGER);
 BEGIN
   ASSERT(size IN {1, 2, 4, 8});
@@ -111,6 +125,13 @@ BEGIN
     ORS.Mark("Program too long")
   END
 END EmitBytes;
+
+PROCEDURE EmitString*(s: ARRAY OF CHAR);
+VAR i: INTEGER;
+BEGIN i := 0;
+  WHILE (i < LEN(s)) & (s[i] # 0X) DO Emit(ORD(s[i])); INC(i) END;
+  Emit(0)
+END EmitString;
 
 PROCEDURE IsSigned*(x: ORB.Type): BOOLEAN;  (* returns whether x represents a signed integer value *)
 BEGIN RETURN (x.ref >= ORB.Int8) & (x.ref <= ORB.Int64) END IsSigned;
@@ -124,7 +145,7 @@ RETURN result END Peek;
 
 PROCEDURE Patch*(adr, size, value: INTEGER);
 BEGIN
-  IF (adr < 0) OR (adr + size > MaxPC) THEN
+  IF (adr < 0) OR (adr + size >= MaxPC) THEN
     w.s("** Patch address $"); w.h(adr); w.sl(" out of range **");
     ASSERT(FALSE)
   END;
@@ -134,7 +155,7 @@ END Patch;
 
 
 PROCEDURE Init*;
-BEGIN PC := 0;  SPO := 0 END Init;
+BEGIN PC := 0;  SPO := 0;  Header := SYSTEM.VAL(CodeHeader, SYSTEM.ADR(Text)) END Init;
 
 BEGIN  Init
 END X64.

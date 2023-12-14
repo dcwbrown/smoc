@@ -28,8 +28,6 @@ VAR
   SourceLine: INTEGER;      (* Line number *)
   Sourcechar: CHAR;
 
-(*disasmpc:   INTEGER;*)
-
 
 (* ----------------------------- Source display ----------------------------- *)
 
@@ -429,7 +427,7 @@ BEGIN
       DisSIB(pc, base, index, scale, buf);
       IF base = X64.RBP THEN base := -1; GetSigned(4, pc, disp) END;
     ELSIF rm = 5 THEN (* disp32 *)
-      GetSigned(4, pc, disp)
+      GetSigned(4, pc, disp); INC(disp, pc); (* Code relative *)
     ELSE base := rm
     END
   ELSIF mode = 1 THEN
@@ -440,7 +438,8 @@ BEGIN
     GetSigned(1, pc, disp)
   ELSIF mode = 2 THEN
     IF rm = 4 THEN (* sib + disp32 *)
-      DisSIB(pc, base, index, scale, buf)
+      DisSIB(pc, base, index, scale, buf);
+      IF base < 0 THEN INC(disp, pc) END; (* Code relative *)
     ELSE base := rm
     END;
     GetSigned(4, pc, disp)
@@ -482,7 +481,8 @@ BEGIN
 
   IF X64.Text[pc] = 66H THEN
     AddHex(1, X64.Text[pc]);
-    regsize := 2
+    regsize := 2;
+    INC(pc)
   END;
 
   IF X64.Text[pc] DIV 16 = 4 THEN (* REX prefix *)
@@ -523,6 +523,16 @@ BEGIN
         Reg(regsize, reg, Args);
       END
     END
+
+  ELSIF (opcode DIV 32 = 1) & (opcode MOD 8 = 6) THEN
+
+    s("seg", Inst); s("; (ignored) ", Comment);
+    opcode := opcode DIV 8;
+    IF    opcode = 4 THEN s("es", Args)  (* 26 *)
+    ELSIF opcode = 5 THEN s("cs", Args)  (* 2E *)
+    ELSIF opcode = 6 THEN s("ss", Args)  (* 36 *)
+    ELSIF opcode = 7 THEN s("ds", Args)  (* 2E *)
+    END;
 
   ELSIF (opcode >= 50H) & (opcode <= 57H) THEN
 
@@ -807,7 +817,7 @@ BEGIN
     IF    opcode = 0 THEN s("inc", Inst)
     ELSIF opcode = 1 THEN s("dec", Inst)
     ELSIF opcode = 2 THEN s("call", Inst); regsize := 8
-    ELSIF opcode = 6 THEN s("push", Inst)
+    ELSIF opcode = 6 THEN s("push", Inst); IF regsize < 4 THEN regsize := 2 ELSE regsize := 8 END;
     ELSE                  s("??5", Inst); END;
     BaseIndexScaleDisp(indirect, -1, regsize, base, index, scale, disp, itemmode, Args)
 
@@ -847,7 +857,7 @@ BEGIN
 
       c("j", Inst);  CondOp(opcode, Inst);
       GetSigned(4, pc, disp);
-      i(pc + disp, Args);
+      h(pc + disp, Args);
       s(" (disp ", Args);
       IF disp < 0 THEN s("-", Args);  disp := -disp ELSE s("+", Args) END;
       i(disp, Args);
