@@ -1,15 +1,30 @@
 MODULE CompileTests;  IMPORT SYSTEM;
 
+CONST title = "Compilation Tests";
 
-VAR go: PROCEDURE(x,y: INTEGER);
+TYPE
+  mbproc = PROCEDURE#(hwnd, text, caption, type: INTEGER);
+
+VAR
+  x:  mbproc;
+  go: PROCEDURE(x,y: INTEGER);
 
 PROCEDURE a(x,y: INTEGER); BEGIN END a;
 
 PROCEDURE b(p: PROCEDURE(x,y: INTEGER)); BEGIN p(123,321) END b;
 
+PROCEDURE c(m: mbproc);
+BEGIN
+  m(0, SYSTEM.ADR("win abi by param"), SYSTEM.ADR(title), 0);
+END c;
+
 BEGIN
   go := a;
-  b(a)
+  b(a);
+  x(0, SYSTEM.ADR("Hello"), SYSTEM.ADR(title), 0);
+  go := a;
+  b(a);
+  c(x);
 END CompileTests.
 
 

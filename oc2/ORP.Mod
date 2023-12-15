@@ -210,33 +210,37 @@ BEGIN (*check for assignment compatibility*)
       OR (t0.form = ORB.Int64) & (t1.form = ORB.Int64)  (* All int types are value compatible *)
 END CompTypes;
 
-PROCEDURE Parameter(par: ORB.Object);
-VAR x: X64.Item;  varpar: BOOLEAN;
+PROCEDURE Parameter(par: ORB.Object; native: BOOLEAN);
+VAR x: X64.Item;  varpar: BOOLEAN;  stkoff: INTEGER;
 BEGIN
   l.s("Parameter: ", Tr); l.Object(par, Tr); l.sl(".", Tr);
   expression(x);
   IF par # NIL THEN
     varpar := par.class = ORB.Par;
+    IF native THEN stkoff := par.val ELSE stkoff := 0 END;
     IF CompTypes(par.type, x.type, varpar) THEN
-      IF ~varpar THEN ORG.ValueParam(x, par.val)
+      IF ~varpar THEN ORG.ValueParam(x, stkoff)
       ELSE (*par.class = Par*)
         IF ~par.rdo THEN CheckReadOnly(x) END;
-        ORG.VarParam(x, par.type, par.val)
+        ORG.VarParam(x, par.type, stkoff)
       END
-    ELSIF (x.type.form = ORB.Array) & (par.type.form = ORB.Array) &
-        (x.type.base = par.type.base) & (par.type.len < 0) THEN
+    ELSIF (x.type.form = ORB.Array)     & (par.type.form = ORB.Array)
+        & (x.type.base = par.type.base) & (par.type.len < 0) THEN
       IF ~par.rdo THEN CheckReadOnly(x) END;
-      ORG.OpenArrayParam(x, par.val)
-    ELSIF (x.type.form = ORB.String) & varpar & par.rdo & (par.type.form = ORB.Array) &
-        (par.type.base.form = ORB.Char) & (par.type.len < 0) THEN ORG.StringParam(x, par.val)
-    (*ELSIF ~varpar & (par.type.form = ORB.Int64) & (x.type.form = ORB.Int64) THEN ORG.ValueParam(x)  (*BYTE*)*)
+      ORG.OpenArrayParam(x, stkoff)
+    ELSIF (x.type.form = ORB.String) & varpar & par.rdo
+        & (par.type.form = ORB.Array) & (par.type.base.form = ORB.Char)
+        & (par.type.len < 0) THEN
+      ORG.StringParam(x, stkoff)
+  (*ELSIF ~varpar & (par.type.form = ORB.Int64) & (x.type.form = ORB.Int64) THEN
+      ORG.ValueParam(x)  (*BYTE*) *)
     ELSIF (x.type.form = ORB.String) & (x.n = 2)
         & (par.class = ORB.Var) & (par.type.form = ORB.Char) THEN
       ASSERT(x.mode = X64.String);
-      ORG.StrToChar(x);  ORG.ValueParam(x, par.val)
-    ELSIF (par.type.form = ORB.Array) & (par.type.base = ORB.byteType) (* &
-        (par.type.len >= 0) & (par.type.size = x.type.size) *) THEN
-      ORG.VarParam(x, par.type, par.val)
+      ORG.StrToChar(x);  ORG.ValueParam(x, stkoff)
+    ELSIF (par.type.form = ORB.Array) & (par.type.base = ORB.byteType)
+     (* & (par.type.len >= 0) & (par.type.size = x.type.size) *) THEN
+      ORG.VarParam(x, par.type, stkoff)
     ELSE ORS.Mark("incompatible parameters")
     END
   END
@@ -246,11 +250,11 @@ PROCEDURE ParamList(VAR x: X64.Item);
 VAR n: INTEGER;  par: ORB.Object;
 BEGIN par := x.type.dsc;  n := 0;
   IF sym # ORS.rparen THEN
-    Parameter(par);  n := 1;
+    Parameter(par, x.type.native);  n := 1;
     WHILE sym <= ORS.comma DO
       Check(sym, "comma?");
       IF par # NIL THEN par := par.next END;
-      INC(n);  Parameter(par)
+      INC(n);  Parameter(par, x.type.native)
     END;
     Check(ORS.rparen, ") missing")
   ELSE ORS.Get(sym);
@@ -808,7 +812,9 @@ BEGIN
     FormalType(typ.base, dim+1)
   ELSIF sym = ORS.procedure THEN
     ORS.Get(sym);  ORB.OpenScope;
-    NEW(typ);  typ.form := ORB.Proc;  typ.size := ORG.WordSize;  dmy := 0;  ProcedureType(typ);
+    NEW(typ);  typ.form := ORB.Proc;  typ.size := ORG.WordSize;
+    typ.native := FALSE; dmy := 0;
+    ProcedureType(typ);
     typ.dsc := ORB.topScope.next;  ORB.CloseScope
   ELSE ORS.Mark("identifier expected");  typ := ORB.noType
   END
@@ -856,6 +862,7 @@ BEGIN type := ORB.intType;  (*sync*)
   ELSIF sym = ORS.procedure THEN
     ORS.Get(sym);  ORB.OpenScope;
     NEW(type);  type.form := ORB.Proc;  type.size := ORG.WordSize;
+    type.native := sym = ORS.neq;  IF type.native THEN ORS.Get(sym) END;
     ProcedureType(type);  type.dsc := ORB.topScope.next;  ORB.CloseScope
   ELSE ORS.Mark("illegal type")
   END
@@ -998,8 +1005,13 @@ BEGIN ORS.Get(sym);
   IF sym = ORS.ident THEN
     ORS.CopyId(procid);  ORS.Get(sym);
     ORB.NewObj(proc, ORS.id, ORB.Const);
-    NEW(type);  type.form := ORB.Proc;  type.size := ORG.WordSize;
-    proc.type := type;  proc.val := -1;  proc.lev := level;
+    NEW(type);
+    type.form   := ORB.Proc;
+    type.size   := ORG.WordSize;
+    type.native := FALSE;
+    proc.type   := type;
+    proc.val    := -1;
+    proc.lev    := level;
     CheckExport(proc.expo);
     IF proc.expo THEN proc.exno := exno;  INC(exno) END;
     ORB.OpenScope;  INC(level);  type.base := ORB.noType;

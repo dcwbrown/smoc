@@ -328,7 +328,8 @@ BEGIN
       s("Imp:", b); i(mode DIV 1000000H MOD 10000H, b);
       c(".", b);    i(mode DIV 100H     MOD 10000H, b)
     ELSE
-      h(disp, b); c("H", b)
+      IF disp >= 0 THEN h(disp, b) ELSE c("-", b); h(-disp, b) END;
+      c("H", b)
     END;
     IF base >= 0    THEN c("+", b); Reg(8, base, b) END;
     IF index >= 0   THEN

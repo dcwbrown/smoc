@@ -72,7 +72,7 @@ TYPE
 
   ObjDesc*= RECORD
     class*, exno*: BYTE;
-    expo*, rdo*:   BOOLEAN;   (*exported / read-only                       *)
+    expo*, rdo*:   BOOLEAN;   (* exported / read-only                      *)
     lev*:          INTEGER;   (* >0: local stack frame, lev = proc nesting *)
                               (*  0: module globals                        *)
                               (* <0: -imported module num (-1 .. -16)      *)
@@ -95,18 +95,20 @@ TYPE
   (* Record   fields   extension                    *)
 
   TypeDesc* = RECORD
-    form*, mno*:   INTEGER;  (* <0: stack. 0: global. >0: import module num  *)
-    ref*:          INTEGER;  (* Only used for import/export                  *)
-    nofpar*:       INTEGER;  (* For procedures: parameter count              *)
-                             (* For records:    extension level              *)
-    len*:          INTEGER;  (* For arrays:     len < 0 => open array        *)
-                             (* For records:    adr of descriptor            *)
-                             (* For procedures: size of params               *)
-    dsc*:          Object;   (* For procedure:  params & local vars          *)
-                             (* For records:    fields                       *)
-    typobj*:       Object;   (* For Typ:        object representing type     *)
-    base*:         Type;     (* For arrays, records, pointers, fn procedures *)
-    size*:         INTEGER   (* In bytes. For procedures: 8                  *)
+    form*:   INTEGER;
+    mno*:    INTEGER;  (* <0: stack. 0: global. >0: import module num  *)
+    ref*:    INTEGER;  (* Only used for import/export                  *)
+    nofpar*: INTEGER;  (* For procedures: parameter count              *)
+                       (* For records:    extension level              *)
+    len*:    INTEGER;  (* For arrays:     len < 0 => open array        *)
+                       (* For records:    adr of descriptor            *)
+                       (* For procedures: size of params               *)
+    dsc*:    Object;   (* For procedure:  params & local vars          *)
+                       (* For records:    fields                       *)
+    typobj*: Object;   (* For Typ:        object representing type     *)
+    base*:   Type;     (* For arrays, records, pointers, fn procedures *)
+    size*:   INTEGER;  (* In bytes. For procedures: 8                  *)
+    native*: BOOLEAN   (* procedure using native abi                   *)
   END;
 
 

@@ -443,7 +443,7 @@ END LoadCondition;
 
 PROCEDURE LoadReg(reg: INTEGER; VAR x: Item);
 BEGIN
-  IF x.mode = Stkind THEN Depar(x) END;
+  IF x.mode = Stkind THEN DeparToReg(reg, x) END;
   IF x.mode = Cond THEN
     IF x.n < 2 THEN LoadImmediate(reg, x.n) ELSE LoadCondition(reg, x.n) END;
     x.index := -1;  x.offset := 0
@@ -755,6 +755,8 @@ BEGIN
       ELSIF y.lev = 0 THEN x.mode := Code;    x.n := 0;    x.offset := y.val;
       ELSE                 x.mode := Import;  x.n := LSL(-y.lev, 16) + y.exno;
       END
+    ELSIF y.type.form = ORB.String THEN
+      x.mode := String;  x.readonly := TRUE;  x.n := y.lev;  x.offset := y.val;
     ELSE
       x.mode := Const;  x.n := y.val
     END
@@ -803,7 +805,8 @@ BEGIN
     FOR i := 0 TO len-1 DO Str[Strx+i] := ORS.str[i] END;
     INC(Strx, len);
     IF ORS.str[len-1] # 0X THEN Str[Strx] := 0X; INC(Strx) END
-  END
+  END;
+  Trace(TraceMakeItem, ".. StringItem ");  l.Item(x, Trc);  l.l(Trc);
 END MakeStringItem;
 
 
@@ -1016,28 +1019,49 @@ END DeRef;
 
 (* ---- Paramter passing ---- *)
 
-PROCEDURE ValueParam*(VAR x: Item; adr: INTEGER);
+PROCEDURE ValueParam*(VAR x: Item;  stkoff: INTEGER);
+VAR pos, reg: INTEGER;
 BEGIN
-  Trace(TraceAny, "ValueParam["); l.i(adr, Trc); l.s("](x: ", Trc); l.Item(x, Trc); l.sl(")", Trc);
-  Push(x);
-  X64.AdjustStack(1);
+  Trace(TraceAny, "ValueParam["); l.i(stkoff, Trc); l.s("](x: ", Trc); l.Item(x, Trc); l.sl(")", Trc);
+  IF stkoff = 0 THEN  (* normal (simple) parameter passing *)
+    Push(x); X64.AdjustStack(1)
+  ELSE  (* Windows ABI parameter passing *)
+    pos := -(stkoff DIV 8 + 1);
+    IF    pos = 0 THEN reg := RCX
+    ELSIF pos = 1 THEN reg := RDX
+    ELSIF pos = 2 THEN reg := 8
+    ELSIF pos = 3 THEN reg := 9
+    ELSE reg := -1
+    END;
+    IF reg >= 0 THEN
+      LoadReg(reg, x)
+    ELSE
+      IF x.mode = Const THEN
+        StoreImmediateToMem(x.n, Eadr, 8, RBP, -1, 0, pos * 8)
+      ELSE
+        Load(x);  StoreRegToMem(x.n, Eadr, 8, RBP, -1, 0, pos * 8);  FreeRegs(x)
+      END
+    END
+  END;
   Disassemble(x.mode, "ValueParam")
 END ValueParam;
 
 
-PROCEDURE VarParam*(VAR x: Item;  ftype: ORB.Type;  adr: INTEGER);
+PROCEDURE VarParam*(VAR x: Item;  ftype: ORB.Type;  stkoff: INTEGER);
 VAR reg: INTEGER;
 BEGIN
-  Trace(TraceAny, "VarParam["); l.i(adr, Trc);
+  Trace(TraceAny, "VarParam["); l.i(stkoff, Trc);
   l.s("](x: ", Trc);            l.Item(x, Trc);
   l.s(", ftype: ", Trc);        l.Type(ftype, Trc);
   l.s(") SPO ", Trc);           l.i(X64.SPO, Trc);  l.l(Trc);
+  ASSERT(stkoff = 0);  (* Not supported for Windows ABI calls *)
   ASSERT(x.mode IN {Stkind, Eadr, String, Global, Import});
   IF (x.mode = Stkind) & ((ftype.form = ORB.Array) & (ftype.len < 0) OR (ftype.form = ORB.Record)) THEN
     (* Passing open array or record parm to same *)
     PushMem(Eadr, RSP, -1, 0, x.n + X64.SPO + 8);  X64.AdjustStack(1);  (* Length or descriptor *)
     PushMem(Eadr, RSP, -1, 0, x.n + X64.SPO);      X64.AdjustStack(1);  (* Address *)
   ELSE
+    (* First pass array length or type descriptor address, if any *)
     IF (ftype.form = ORB.Array) & (ftype.len < 0) THEN ASSERT(x.type.len >= 0);
       PushImmediate(x.type.len);  X64.AdjustStack(1) (* Pass array length *)
     ELSIF ftype.form = ORB.Record THEN
@@ -1045,18 +1069,20 @@ BEGIN
       OpModRegRm(8DH, Code, reg, 8, 0, -1, 0, ftype.len);  (* lea type desciptor *)
       PushReg(reg);  X64.AdjustStack(1)  (* Pass record descriptor *)
     END;
-    PushAdr(x);  X64.AdjustStack(1)  (* Pass array or record address *)
+    (* Pass array or record address *)
+    PushAdr(x);  X64.AdjustStack(1)
   END;
   FreeRegs(x);
   Disassemble(x.mode, "VarParam")
 END VarParam;
 
-PROCEDURE OpenArrayParam*(VAR x: Item; adr: INTEGER);
+PROCEDURE OpenArrayParam*(VAR x: Item; stkoff: INTEGER);
 (* x being passed to open array formal parameter *)
 BEGIN
-  Trace(TraceAny, "OpenArrayParam["); l.i(adr, Trc);
+  Trace(TraceAny, "OpenArrayParam["); l.i(stkoff, Trc);
   l.s("](x: ", Trc);                  l.Item(x, Trc);
   l.s(") SPO ", Trc);                 l.i(X64.SPO, Trc);  l.l(Trc);
+  ASSERT(stkoff = 0);  (* Not supported for Windows ABI calls *)
   ASSERT(x.mode IN {Stkind, Eadr, String, Global, Import});
   ASSERT(x.type.form = ORB.Array);
   ASSERT(x.type.len >= 0);  (* Passing known length array to open array parameter *)
@@ -1067,12 +1093,13 @@ BEGIN
   Trace(TraceAny, "OpenArrayParam exit: SPO "); l.i(X64.SPO, Trc);  l.l(Trc)
 END OpenArrayParam;
 
-PROCEDURE StringParam*(VAR x: Item; adr: INTEGER);
+PROCEDURE StringParam*(VAR x: Item; stkoff: INTEGER);
 BEGIN
-  Trace(TraceAny, "StringParam["); l.i(adr, Trc);
+  Trace(TraceAny, "StringParam["); l.i(stkoff, Trc);
   l.s("](x: ", Trc);               l.Item(x, Trc);
   l.s(") SPO ", Trc);              l.i(X64.SPO, Trc);  l.l(Trc);
   ASSERT(x.mode = String);
+  ASSERT(stkoff = 0);  (* Not supported for Windows ABI calls *)
   PushImmediate(x.n);  X64.AdjustStack(1);  (* Pass string length *)
   PushAdr(x);          X64.AdjustStack(1);  (* Pass string address *)
   Disassemble(x.mode, "StringParam");
@@ -1081,10 +1108,8 @@ END StringParam;
 
 (* ---- Procedure / function calls ---- *)
 
-
-
 PROCEDURE PrepCall*(VAR x: Item; VAR saved: SET);
-VAR i : INTEGER;
+VAR i : INTEGER;  stackspace: INTEGER;
 BEGIN
   Trace(TraceAny, "PrepCall(x: "); l.Item(x, Trc);
   l.s("), SPO ", Trc);             l.i(X64.SPO, Trc); l.l(Trc);
@@ -1098,11 +1123,30 @@ BEGIN
   ASSERT(x.mode IN {Eadr, Global, Code, Import});
   IF x.mode = Eadr THEN  (* Push proc address to stack *)
     Push(x);  X64.AdjustStack(1);  FreeRegs(x);
+    Disassemble(x.mode, "proc address to be called");
     ASSERT(x.type.len MOD 8 = 0);
     x.mode   := Eadr;
-    x.n      := RSP;
-    x.offset := -8 * (X64.SPO - (x.type.len DIV 8 + 1));
-    Disassemble(x.mode, "proc address to be called")
+    IF ~x.type.native THEN  (* Normal, simple calling process *)
+      x.n      := RSP;
+      x.offset := -8 * (X64.SPO - (x.type.len DIV 8 + 1))
+    ELSE  (* Windows ABI calling process *)
+      x.n      := RBP;
+      x.offset := -8 * (X64.SPO - (x.type.len DIV 8 + 2))
+    END
+  END;
+  IF x.type.native THEN  (* Prepare stack space for windows abi *)
+    (* We need to place parameters aligned so that the first parameter (at the
+       lowest address) is 16 byte aligned. This alignemnet will only be known at
+       run time. However we need to keep SPO matching SP so that expressions
+       referencing local vars and parameters work corectly. Therefore we use
+       BP to place the parameters on the stack, and advance SP 8 bytes extra to
+       allow for either alignment *)
+    ReserveReg(RBP);  MoveReg(RBP, RSP);
+    AluOpFromImmediate(Minus, Reg, x.type.len,         8, RBP, -1, 0, 0);
+    AluOpFromImmediate(And,   Reg, 0FFFFFFFFFFFFFFF0H, 8, RBP, -1, 0, 0);
+    AluOpFromImmediate(Minus, Reg, x.type.len + 8,     8, RSP, -1, 0, 0);
+    X64.AdjustStack(x.type.len DIV 8 + 1);
+    Disassemble(0, "Reserve Windows ABI stack space")
   END
 END PrepCall;
 
@@ -1115,6 +1159,10 @@ BEGIN
   ASSERT(x.type.form = ORB.Proc);
   ASSERT(x.mode IN {Eadr, Global, Code, Import});
 
+  IF x.type.native THEN  (* Adjust to 16 byte aligned pos *)
+    OpModRegRm(87H, Reg, RSP, 8, RBP, -1, 0, 0)  (* xchg *)
+  END;
+
   IF x.mode = Code THEN
     X64.Emit(0E8H);  X64.EmitBytes(4, x.offset - (X64.PC + 4))
   ELSE
@@ -1122,7 +1170,13 @@ BEGIN
   END;
   Disassemble(x.mode, "Call");
 
-  X64.AdjustStack(-(x.type.len DIV 8));  (* matches stack adjustment by <ret n> *)
+  IF ~x.type.native THEN   (* Normal (simple) stack handling *)
+    X64.AdjustStack(-(x.type.len DIV 8));  (* matches stack adjustment by <ret n> *)
+  ELSE (* Windows ABI stack handling *)
+    OpModRegRm(8DH, Eadr, RSP, 8, RBP, -1, 0, x.type.len + 8);  (* lea rsp, rbp + parmreserved *)
+    Disassemble(0, "Drop Windows ABI parameter area from stack");
+    X64.AdjustStack(-(x.type.len DIV 8 + 1))  (* matches stack adjustment by <ret n> *)
+  END;
 
   IF x.mode = Eadr THEN
     (* Drop called proc address from stack *)
@@ -1222,8 +1276,9 @@ BEGIN
   Disassemble(0, "Return");
 
   X64.Emit(2EH);  (* Mark end of code with ignored instruction 'seg cs' *)
+  Disasmpc := X64.PC;
 
-  EmitStrings;
+  (*EmitStrings;*)
   X64.ClearStack;  ClearRegs
 END Return;
 
@@ -1798,12 +1853,12 @@ Trace(TraceAny, "StringRelation("); l.Sym(op, Trc);
   OpModRegRm(0F47H, Reg, RCX, 8, y.index, -1, 0, 0);   (* cmova xlen,ylen *)
   Disassemble(0, "Determine shorter string length");
 
-  OpModRegRm(Minus+3, Reg, y.n, 8, RSI, -1, 0, 0); (* sub    y.n,rsi      *)
+  OpModRegRm(Minus+3, Reg, y.n, 8, RSI, -1, 0, 0);     (* sub    y.n,rsi      *)
   AluOpFromImmediate(Minus, Reg, 1, 8, y.n, -1, 0, 0); (* dec    y.n          *)
   Disassemble(0, "String offset y[n] from x[n+1]");
   lbl := X64.PC;                                       (* lbl:                     *)
   X64.Emit(0ACH);                                      (* lodsb                    *)
-  OpModRegRm(Cmp+2, Eadr, RAX, 1, RSI, y.n, 0, 0);      (* cmp    al,[rsi+y.n] *)
+  OpModRegRm(Cmp+2, Eadr, RAX, 1, RSI, y.n, 0, 0);     (* cmp    al,[rsi+y.n] *)
   Disassemble(0, "Compare one byte");
 
   X64.Emit(75H);  X64.Emit(0BH);                       (* jne    end               *)
@@ -2283,7 +2338,7 @@ PROCEDURE Open*(sourcefn, modid: ARRAY OF CHAR);
 VAR i: INTEGER;
 BEGIN
   l.Init(sourcefn);
-  Trflags := {TraceAny};  (*{TraceAny, TraceMakeItem};*)
+  Trflags := {TraceAny, TraceMakeItem};  (*{TraceAny, TraceMakeItem};*)
   Trace(TraceAny, "ORG Open('"); l.s(sourcefn, Trc); l.sl("')", Trc);
   X64.ClearStack;   ClearRegs;
   X64.Init;
@@ -2306,6 +2361,7 @@ PROCEDURE Header*;
 BEGIN
   Trace(TraceAny, "Header - module initialisation code entry point."); l.l(Trc);
   X64.Header.initcode := X64.PC;  (* Set entry point address *)
+  PushReg(RBP);
 END Header;
 
 PROCEDURE wsize(size: INTEGER);
@@ -2337,6 +2393,7 @@ VAR
   F:      Files.File;
   R:      Files.Rider;
 BEGIN
+  PopReg(RBP);
   X64.Emit(0C3H);  (* ret *)
   Disassemble(0, "Return");
   X64.Emit(2EH);  (* Mark end of code with ignored instruction 'seg cs' *)
