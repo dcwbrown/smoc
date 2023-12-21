@@ -5,7 +5,9 @@ IMPORT ORP, ORS, Loader;
 CONST BuildCompiler = FALSE;
 
 BEGIN
-  ORP.CompileFile("Compiletests.mod");
+(*ORP.CompileFile("Compiletests.mod");*)
+(*ORP.CompileFile("CT2.mod");         *)
+  ORP.CompileFile("Winload.mod");
   IF BuildCompiler THEN
     IF ORS.errcnt = 0 THEN ORP.CompileFile("Boot.mod")    END;
     IF ORS.errcnt = 0 THEN ORP.CompileFile("Heap.mod")    END;
@@ -24,5 +26,6 @@ BEGIN
     IF ORS.errcnt = 0 THEN ORP.CompileFile("OC2.mod")     END
   END;
 
-  IF ORS.errcnt = 0 THEN Loader.Load("CompileTests.code") END
+  (*IF ORS.errcnt = 0 THEN Loader.Load("CompileTests.code") END*)
+  IF ORS.errcnt = 0 THEN Loader.Load("Winload.code") END
 END OC2.

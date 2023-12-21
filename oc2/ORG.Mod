@@ -340,7 +340,7 @@ END SetCondition;
 PROCEDURE DeparToReg(reg: INTEGER; VAR x: Item);
 BEGIN
   ASSERT(x.mode = Stkind);
-  OpModRegRm(8BH, Eadr, reg, 8, RSP, -1, 0, x.n + X64.SPO);  (* mov reg,[rsp+x] *)
+  OpModRegRm(8BH, Eadr, reg, 8, RSP, -1, 0, x.n + 8 * X64.SPO);  (* mov reg,[rsp+x] *)
   X64.ClearMode(x);
   x.mode := Eadr;
   x.n    := reg;
@@ -416,6 +416,8 @@ BEGIN
   l.s(", scale ", Trc);   l.i(scale, Trc);
   l.s(", offset ", Trc);  l.i(offset, Trc);  l.l(Trc);
 
+  IF (mode = Eadr) & (n = RSP) THEN INC(offset, X64.SPO * 8) END;
+
   ASSERT(size IN {1, 2, 4, 8});
   IF signed THEN
     IF    size = 1 THEN OpModRegRm(0FBEH, mode, reg, 8, n, index, scale, offset)  (* movsx  r64, r/m8  *)
@@ -460,13 +462,19 @@ BEGIN
 END LoadReg;
 
 PROCEDURE LoadAddressReg(reg: INTEGER; VAR x: Item);
+VAR offset: INTEGER;
 BEGIN
+  IF (x.mode = Eadr) & (x.n = RSP) THEN
+    offset := x.offset + 8 * X64.SPO
+  ELSE
+    offset := x.offset
+  END;
   IF x.mode = Stkind THEN
     DeparToReg(reg, x)
-  ELSIF (x.mode = Eadr) & (x.index < 0) & (x.offset = 0) THEN
+  ELSIF (x.mode = Eadr) & (x.index < 0) & (offset = 0) THEN
     MoveReg(reg, x.n)
   ELSIF (x.mode IN {Eadr, Code, String, Global, Import}) THEN
-    OpModRegRm(8DH, x.mode, reg, 8, x.n, x.index, x.scale, x.offset);  (* lea *)
+    OpModRegRm(8DH, x.mode, reg, 8, x.n, x.index, x.scale, offset);  (* lea *)
     Disassemble(x.mode, "LoadAddress")
   ELSE
     ASSERT(FALSE)
@@ -500,8 +508,8 @@ BEGIN
   IF (x.type.form = ORB.Array) & (x.type.len < 0) THEN
     (* Open array parameter *)
     ASSERT(x.mode = Stkind);
-    OpModRegRm(8BH, Eadr, rbase,   8, RSP, -1, 0, x.n + X64.SPO);      (* mov reg,[rsp+x] *)
-    OpModRegRm(8BH, Eadr, rlength, 8, RSP, -1, 0, x.n + X64.SPO + 8);  (* mov reg,[rsp+x] *)
+    OpModRegRm(8BH, Eadr, rbase,   8, RSP, -1, 0, x.n + 8 * X64.SPO);      (* mov reg,[rsp+x] *)
+    OpModRegRm(8BH, Eadr, rlength, 8, RSP, -1, 0, x.n + 8 * X64.SPO + 8);  (* mov reg,[rsp+x] *)
     ASSERT(x.type.base.size >= 0);
     IF x.type.base.size > 1 THEN  (* multiply length by type size to get byte count *)
       ASSERT(x.type.base.size < 80000000H);
@@ -613,6 +621,8 @@ BEGIN
   IF    (x.mode = Code) & (x.type.form = ORB.Proc) THEN PushAdr(x)
   ELSIF x.mode = Const THEN PushImmediate(x.n)
   ELSIF x.mode = Reg   THEN PushReg(x.n)
+  ELSIF x.mode = Cond THEN
+    IF x.n < 2 THEN PushImmediate(x.n) ELSE Load(x);  PushReg(x.n) END
   ELSIF x.mode IN {Stkind, Eadr, Code, String, Global, Import} THEN
     Depar(x);
     PushMem(x.mode, x.n, x.index, x.scale, x.offset)
@@ -1058,8 +1068,8 @@ BEGIN
   ASSERT(x.mode IN {Stkind, Eadr, String, Global, Import});
   IF (x.mode = Stkind) & ((ftype.form = ORB.Array) & (ftype.len < 0) OR (ftype.form = ORB.Record)) THEN
     (* Passing open array or record parm to same *)
-    PushMem(Eadr, RSP, -1, 0, x.n + X64.SPO + 8);  X64.AdjustStack(1);  (* Length or descriptor *)
-    PushMem(Eadr, RSP, -1, 0, x.n + X64.SPO);      X64.AdjustStack(1);  (* Address *)
+    PushMem(Eadr, RSP, -1, 0, x.n + 8 * X64.SPO + 8);  X64.AdjustStack(1);  (* Length or descriptor *)
+    PushMem(Eadr, RSP, -1, 0, x.n + 8 * X64.SPO);      X64.AdjustStack(1);  (* Address *)
   ELSE
     (* First pass array length or type descriptor address, if any *)
     IF (ftype.form = ORB.Array) & (ftype.len < 0) THEN ASSERT(x.type.len >= 0);
@@ -1155,18 +1165,34 @@ PROCEDURE Call*(VAR x: Item; saved: SET);
 VAR i, reg, resultreg: INTEGER;
 BEGIN
   Trace(TraceAny, "Call(x: "); l.Item(x, Trc);
-  l.s("), SPO ", Trc);         l.i(X64.SPO, Trc); l.l(Trc);
+  l.s("), SPO ", Trc);         l.i(X64.SPO, Trc);
+  l.s(", type.len ", Trc);  l.i(x.type.len, Trc);  l.l(Trc);
   ASSERT(x.type.form = ORB.Proc);
   ASSERT(x.mode IN {Eadr, Global, Code, Import});
 
   IF x.type.native THEN  (* Adjust to 16 byte aligned pos *)
-    OpModRegRm(87H, Reg, RSP, 8, RBP, -1, 0, 0)  (* xchg *)
+    OpModRegRm(87H, Reg, RSP, 8, RBP, -1, 0, 0)  (* xchg rsp,rbp *)
   END;
 
-  IF x.mode = Code THEN
-    X64.Emit(0E8H);  X64.EmitBytes(4, x.offset - (X64.PC + 4))
+  IF x.type.form = ORB.Proc THEN
+    IF x.mode IN {Eadr, Global} THEN
+      OpModRegRm(0FFH, x.mode, 2, 4, x.n, x.index, x.scale, x.offset)  (* call [addr] *)
+    ELSE
+      X64.Emit(0E8H);
+      IF x.mode = Code THEN
+        X64.EmitBytes(4, x.offset - (X64.PC + 4))
+      ELSIF x.mode = Import THEN
+        ImpFix[ImpFInx].offset := X64.PC;
+        ImpFix[ImpFInx].fix := x.n; INC(ImpFInx);
+        X64.EmitBytes(4, 0)
+      ELSE
+        l.s("** mode ", Trc);  l.Mode(x.mode, Trc);  l.sl(" **", Trc);
+        ASSERT(FALSE)
+      END
+    END
   ELSE
-    OpModRegRm(0FFH, x.mode, 2, 4, x.n, x.index, x.scale, x.offset)
+    l.s("** form ", Trc);  l.Form(x.type.form, Trc);  l.sl(" **", Trc);
+    ASSERT(FALSE)
   END;
   Disassemble(x.mode, "Call");
 
@@ -2338,7 +2364,7 @@ PROCEDURE Open*(sourcefn, modid: ARRAY OF CHAR);
 VAR i: INTEGER;
 BEGIN
   l.Init(sourcefn);
-  Trflags := {TraceAny, TraceMakeItem};  (*{TraceAny, TraceMakeItem};*)
+  Trflags := {TraceAny};  (*{TraceAny, TraceMakeItem};*)
   Trace(TraceAny, "ORG Open('"); l.s(sourcefn, Trc); l.sl("')", Trc);
   X64.ClearStack;   ClearRegs;
   X64.Init;
@@ -2400,16 +2426,16 @@ BEGIN
   EmitStrings;
 
   Trace(TraceAny, "Close:"); l.l(Trc);
-  l.s("  modid:        ", Trc);  l.sl(modid,  Trc);
-  l.s("  key:          ", Trc);  l.h(key,     Trc);  l.l(Trc);
-  l.s("  exno:         ", Trc);  l.i(exno,    Trc);  l.l(Trc);
-  l.s("  code size:    ", Trc);  wsize(X64.PC);      l.l(Trc);
-  l.s("  VAR size:     ", Trc);  wsize(Varsize);     l.l(Trc);
-  l.s("  VAR fixups:   ", Trc);  l.i(VarFInx, Trc);  l.l(Trc);
-  l.s("  Import fxups: ", Trc);  l.i(ImpFInx, Trc);  l.l(Trc);
+  l.s("  modid:         ", Trc);  l.sl(modid,  Trc);
+  l.s("  key:           ", Trc);  l.h(key,     Trc);  l.l(Trc);
+  l.s("  exno:          ", Trc);  l.i(exno,    Trc);  l.l(Trc);
+  l.s("  code size:     ", Trc);  wsize(X64.PC);      l.l(Trc);
+  l.s("  VAR size:      ", Trc);  wsize(Varsize);     l.l(Trc);
+  l.s("  VAR fixups:    ", Trc);  l.i(VarFInx, Trc);  l.l(Trc);
+  l.s("  Import fixups: ", Trc);  l.i(ImpFInx, Trc);  l.l(Trc);
   l.l(Trc);
 
-  (* Prepare to patch header pointers direvtly into X64.Text *)
+  (* Prepare to patch header pointers directly into X64.Text *)
 
   X64.Header.varsize := Varsize;
 
@@ -2438,16 +2464,17 @@ BEGIN
 
   (* Determine export table offset and resident length *)
   X64.Align(16);
-  reslen := ((X64.PC + (exno - 1) * 4) + 15) DIV 16 * 16;
   X64.Header.exports := X64.PC;     (* Set export table address *)
+  reslen := (X64.PC + exno * 4 + 15) DIV 16 * 16;
 
   (* Emit export table *)
   obj := ORB.topScope.next;
   WHILE obj # NIL DO  (* entries *)
     IF obj.exno # 0 THEN
-      IF (obj.class = ORB.Const) & (obj.type.form = ORB.Proc) OR (obj.class = ORB.Var) THEN
-        X64.EmitBytes(4, obj.val);
-      ELSIF obj.class = ORB.Typ THEN
+      IF    obj.class = ORB.Const THEN ASSERT(obj.type.form = ORB.Proc);
+                                       X64.EmitBytes(4, obj.val)
+      ELSIF obj.class = ORB.Var   THEN X64.EmitBytes(4, reslen + obj.val)
+      ELSIF obj.class = ORB.Typ   THEN
         IF obj.type.form = ORB.Record THEN
           X64.EmitBytes(4, reslen + obj.type.len MOD 10000H)
         ELSIF (obj.type.form = ORB.Pointer)
@@ -2458,13 +2485,17 @@ BEGIN
     END;
     obj := obj.next
   END;
+  X64.EmitBytes(4, -1);  (* Mark end of table *)
 
   (* End of resident code/tables *)
 
   X64.Align(16);
   IF X64.PC # reslen THEN
-    l.l(Trc); l.s("** PC ", Trc); l.h(X64.PC, Trc);
-    l.s(", reslen ", Trc); l.h(reslen, Trc); l.sl(" **", Trc)
+    l.l(Trc); l.s("** PC ", Trc);       l.h(X64.PC, Trc);
+    l.s("H, reslen ", Trc);             l.h(reslen, Trc);
+    l.s("H, X64.Header.exports ", Trc); l.h(X64.Header.exports, Trc);
+    l.s("H, exno ", Trc);               l.h(exno, Trc);
+    l.sl("H **", Trc)
   END;
   ASSERT(X64.PC = reslen);
   X64.Header.residentsize := reslen; (* Set resident size / var offset *)
@@ -2492,6 +2523,7 @@ BEGIN
     X64.EmitBytes(4, ImpFix[i].offset);
     X64.EmitBytes(4, ImpFix[i].fix);
   END;
+  X64.EmitBytes(4, -1);
 
   (* Write compiled module *)
   fname := "";  K.Append(modid, fname);  K.Append(".code", fname);

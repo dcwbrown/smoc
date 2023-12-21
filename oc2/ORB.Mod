@@ -242,7 +242,7 @@ BEGIN Read(R, ref);
       END;
       t.dsc := obj
     ELSIF form = Proc THEN
-      InType(R, thismod, t.base);
+      InType(R, thismod, t.base);  Files.ReadNum(R, t.len);
       obj := NIL; np := 0; Read(R, class);
       WHILE class # 0 DO  (*parameters*)
         NEW(par); par.class := class; Read(R, readonly); par.rdo := readonly = 1;
@@ -356,7 +356,8 @@ BEGIN
         fld := fld.next
       END;
       Write(R, 0)
-    ELSIF t.form = Proc THEN OutType(R, t.base); OutPar(R, t.dsc, t.nofpar); Write(R, 0)
+    ELSIF t.form = Proc THEN
+      OutType(R, t.base); Files.WriteNum(R, t.len); OutPar(R, t.dsc, t.nofpar); Write(R, 0)
     END;
     IF (t.mno > 0) & (obj # NIL) THEN  (*re-export, output name*)
       mod := topScope.next;

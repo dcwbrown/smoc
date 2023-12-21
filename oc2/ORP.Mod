@@ -213,7 +213,7 @@ END CompTypes;
 PROCEDURE Parameter(par: ORB.Object; native: BOOLEAN);
 VAR x: X64.Item;  varpar: BOOLEAN;  stkoff: INTEGER;
 BEGIN
-  l.s("Parameter: ", Tr); l.Object(par, Tr); l.sl(".", Tr);
+  l.StartRightCol; l.s("Parameter: ", Tr); l.Object(par, Tr); l.sl(".", Tr);
   expression(x);
   IF par # NIL THEN
     varpar := par.class = ORB.Par;

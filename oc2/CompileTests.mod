@@ -3,28 +3,50 @@ MODULE CompileTests;  IMPORT SYSTEM;
 CONST title = "Compilation Tests";
 
 TYPE
-  mbproc = PROCEDURE#(hwnd, text, caption, type: INTEGER);
+  mbproc  = PROCEDURE#(hwnd, text, caption, type: INTEGER);
+  rec     = POINTER TO recitem;
+  recitem = RECORD c: CHAR; n: rec END;
 
 VAR
-  x:  mbproc;
-  go: PROCEDURE(x,y: INTEGER);
+  LoadLibraryA:   PROCEDURE#(libname: INTEGER): INTEGER;
+  GetProcAddress: PROCEDURE#(hmodule, procname: INTEGER): INTEGER;
+  MessageBoxA*:   mbproc;
+  go:             PROCEDURE(x,y: INTEGER);
+  pc:             rec;
+  r:              recitem;
 
 PROCEDURE a(x,y: INTEGER); BEGIN END a;
 
-PROCEDURE b(p: PROCEDURE(x,y: INTEGER)); BEGIN p(123,321) END b;
+PROCEDURE b*(p: PROCEDURE(x,y: INTEGER)); BEGIN p(123,321) END b;
 
 PROCEDURE c(m: mbproc);
 BEGIN
   m(0, SYSTEM.ADR("win abi by param"), SYSTEM.ADR(title), 0);
 END c;
 
+PROCEDURE do*;
 BEGIN
+  r.c := "A"
+END do;
+
+PROCEDURE msg*(message: ARRAY OF CHAR);
+BEGIN
+  MessageBoxA(0, SYSTEM.ADR(message), SYSTEM.ADR("CompileTests"), 0)
+END msg;
+
+
+BEGIN
+
+ IF ~TRUE THEN msg("TRUE") ELSE msg("FALSE") END
+
+(*go := a;
+  b(a);
+  MessageBoxA(0, SYSTEM.ADR("Hello"), SYSTEM.ADR(title), 0);
+
   go := a;
   b(a);
-  x(0, SYSTEM.ADR("Hello"), SYSTEM.ADR(title), 0);
-  go := a;
-  b(a);
-  c(x);
+  c(MessageBoxA);
+*)
 END CompileTests.
 
 
