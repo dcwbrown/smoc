@@ -3,19 +3,11 @@ MODULE Winload;  IMPORT SYSTEM;
 CONST title = "Compilation Tests";
 
 VAR
-  (* The first 3 64 bit values in Winload global VAR space are reloaded by
+  (* The first 3 64 bit values in Winload global VAR space are preloaded by
      directions in EXE file *)
-  LoadLibraryA:       PROCEDURE#(libname: INTEGER): INTEGER;
-  GetProcAddress:     PROCEDURE#(hmodule, procname: INTEGER): INTEGER;
+  LoadLibraryA*:      PROCEDURE#(libname: INTEGER): INTEGER;
+  GetProcAddress*:    PROCEDURE#(hmodule, procname: INTEGER): INTEGER;
   MessageBoxA*:       PROCEDURE#(hwnd, text, caption, type: INTEGER);
-  Kernel:             INTEGER;
-  GetStdHandle:       PROCEDURE#(nStdHandle: SYSTEM.CARD32): INTEGER;
-  SetConsoleOutputCP: PROCEDURE#(codepage: INTEGER) (* : INTEGER *);
-  WriteFile:          PROCEDURE#(hFile, lpBuffer, nNumberOfBytesToWrite,
-                                 lpNumberOfBytesWritten, lpOverlapped: INTEGER
-                      ): SYSTEM.CARD32;
-  StdOut:             INTEGER;
-
 
 PROCEDURE msg*(message: ARRAY OF CHAR);
 BEGIN
@@ -26,50 +18,62 @@ PROCEDURE assert(expectation: BOOLEAN);
 BEGIN IF ~expectation THEN msg("Assertion failure.") END
 END assert;
 
+PROCEDURE IntToHex*(n: INTEGER; VAR s: ARRAY OF CHAR);
+VAR d, i, j: INTEGER;  ch: CHAR;
+BEGIN
+  i := 0;  j := 0;
+  REPEAT
+    d := n MOD 16;  n := n DIV 16 MOD 1000000000000000H;
+    IF d <= 9 THEN s[j] := CHR(d + 48) ELSE s[j] := CHR(d + 55) END;
+    INC(j)
+  UNTIL n = 0;
+  s[j] := 0X;  DEC(j);
+  WHILE i < j DO ch:=s[i]; s[i]:=s[j]; s[j]:=ch; INC(i); DEC(j) END;
+END IntToHex;
+
+PROCEDURE msghex(n: INTEGER);
+VAR s: ARRAY 32 OF CHAR;
+BEGIN IntToHex(n, s);  msg(s) END msghex;
+
+PROCEDURE msgsp;
+VAR i: INTEGER;
+BEGIN msghex(SYSTEM.ADR(i)) END msgsp;
+
 PROCEDURE GetProc*(dll: INTEGER; name: ARRAY OF CHAR; VAR proc: ARRAY OF BYTE);
 VAR adr: INTEGER;
 BEGIN
-  (*msg("GetProc entry");*)
   adr := GetProcAddress(dll, SYSTEM.ADR(name));
-  (*IF adr = 0 THEN msg("Got 0") ELSE msg("Got nonzero") END;*)
-  SYSTEM.PUT(SYSTEM.ADR(proc), adr);
-  (*msg("GetProc exit");*)
+  SYSTEM.PUT(SYSTEM.ADR(proc), adr)
 END GetProc;
 
-PROCEDURE WriteConsoleBytes(adr, len: INTEGER);
-VAR written, result: INTEGER;
+PROCEDURE BOOTSTRAP;
+VAR
+  Kernel:             INTEGER;
+  GetStdHandle:       PROCEDURE#(nStdHandle: SYSTEM.INT32): INTEGER;
+  SetConsoleOutputCP: PROCEDURE#(codepage: INTEGER) (* : INTEGER *);
+  WriteFile:          PROCEDURE#(hFile, lpBuffer, nNumberOfBytesToWrite,
+                                 lpNumberOfBytesWritten, lpOverlapped: INTEGER
+                      ): SYSTEM.CARD32;
+  StdOut:             INTEGER;
+  result:             INTEGER;
+  written:            INTEGER;
+  crlf:               ARRAY 2 OF CHAR;
+  stradr:             INTEGER;
 BEGIN
-  (*msg("WriteConsoleBytes entry.");*)
-  result := WriteFile(StdOut, adr, len, SYSTEM.ADR(written), 0);
-  (*msg("WriteConsoleBytes complete.");*)
-END WriteConsoleBytes;
-
-PROCEDURE ConsoleNewline;
-VAR c: CHAR;
-BEGIN
-  c := 0DX;  WriteConsoleBytes(SYSTEM.ADR(c), 1);
-  c := 0AX;  WriteConsoleBytes(SYSTEM.ADR(c), 1);
-END ConsoleNewline;
-
-
-BEGIN
-  Kernel := LoadLibraryA(SYSTEM.ADR("kernel32"));
-  IF Kernel = 0 THEN
-    msg("Couldn't load kernel.")
-  ELSE
-    msg("Kernel loaded.")
-  END;
-
+  Kernel := LoadLibraryA(SYSTEM.ADR("kernel32")); assert(Kernel # 0);
   GetProc(Kernel, "WriteFile",          WriteFile);          assert(WriteFile          # NIL);
   GetProc(Kernel, "GetStdHandle",       GetStdHandle);       assert(GetStdHandle       # NIL);
   GetProc(Kernel, "SetConsoleOutputCP", SetConsoleOutputCP); assert(SetConsoleOutputCP # NIL);
+  StdOut := GetStdHandle(-11);  (* -11:   StdOutputHandle *)
+  SetConsoleOutputCP(65001);    (* 65001: UTF8            *)
+  stradr := SYSTEM.ADR("Hello.");
+  result := WriteFile(StdOut, stradr, 6, SYSTEM.ADR(written), 0);
+  crlf := $0D 0A$;
+  stradr := SYSTEM.ADR(crlf);
+  result := WriteFile(StdOut, stradr, 2, SYSTEM.ADR(written), 0);
+END BOOTSTRAP;
 
-  StdOut := GetStdHandle(-11);  (* StdOutputHandle = -11 *)
-  SetConsoleOutputCP(65001);    (* UTF8 = 65001 *)
 
-  WriteConsoleBytes(SYSTEM.ADR("Hello."), 6);
-  ConsoleNewline;
-
-  msg("Winload complete.")
-
+BEGIN
+  BOOTSTRAP;
 END Winload.

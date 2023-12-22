@@ -119,12 +119,13 @@ VAR rex: INTEGER;
 BEGIN  rex := 0;
   IF ~(mode IN {Reg, Eadr}) THEN n := -1 END;  (* Cases where n is not a register *)
   (* Emit prefices *)
-  IF size  =  2 THEN X64.Emit(66H)       END;
-  IF size  >  4 THEN INC(rex, 8)         END;
-  IF reg   >= 8 THEN INC(rex, 4)         END;
-  IF index >= 8 THEN INC(rex, 2)         END;
-  IF n     >= 8 THEN INC(rex, 1)         END;
-  IF rex   #  0 THEN X64.Emit(40H + rex) END;
+  IF size  =  2 THEN X64.Emit(66H) END;
+  IF size  >  4 THEN INC(rex, 8)   END;
+  IF reg   >= 8 THEN INC(rex, 4)   END;
+  IF index >= 8 THEN INC(rex, 2)   END;
+  IF n     >= 8 THEN INC(rex, 1)   END;
+
+  IF (rex # 0) OR (size = 1) & (reg IN {4,5,6,7}) THEN X64.Emit(40H + rex) END;
 END Prefices;
 
 
@@ -341,7 +342,6 @@ PROCEDURE DeparToReg(reg: INTEGER; VAR x: Item);
 BEGIN
   ASSERT(x.mode = Stkind);
   OpModRegRm(8BH, Eadr, reg, 8, RSP, -1, 0, x.n + 8 * X64.SPO);  (* mov reg,[rsp+x] *)
-  X64.ClearMode(x);
   x.mode := Eadr;
   x.n    := reg;
   Disassemble(0, "Depar")
@@ -386,7 +386,7 @@ BEGIN
   IF val = 0 THEN
     OpModRegRm(31H, Reg, reg, 4, reg, -1, 0, 0)  (* xor reg,reg *)
   ELSIF (val > 0) & (val < 100000000H) THEN   (* Load 32 bit positive value as 32 bit load with zero extension *)
-    Prefices(Reg, reg, 4, -1, -1);
+    Prefices(Reg, -1, 4, reg, -1);
     X64.Emit(0B8H + reg MOD 8);
     X64.EmitBytes(4, val);
   ELSIF (val < 0) & (val >= -80000000H) THEN  (* Load 32 bit negative value with sign extended move *)
@@ -399,10 +399,10 @@ BEGIN
   END
 END LoadImmediate;
 
-PROCEDURE MoveReg(r1, r2: INTEGER);
+PROCEDURE MoveReg(r1, r2: INTEGER);  (* r1 := r2 *)
 BEGIN
   ASSERT(r1 >= 0);  ASSERT(r2 >= 0);  ASSERT(r1 # r2);
-  OpModRegRm(8BH, Reg, r1, 8, r2, -1, 0, 0)
+  OpModRegRm(89H, Reg, r2, 8, r1, -1, 0, 0)
 END MoveReg;
 
 PROCEDURE LoadMem(reg, mode: INTEGER; signed: BOOLEAN; size, n, index, scale, offset: INTEGER);
@@ -464,11 +464,8 @@ END LoadReg;
 PROCEDURE LoadAddressReg(reg: INTEGER; VAR x: Item);
 VAR offset: INTEGER;
 BEGIN
-  IF (x.mode = Eadr) & (x.n = RSP) THEN
-    offset := x.offset + 8 * X64.SPO
-  ELSE
-    offset := x.offset
-  END;
+  offset := x.offset;
+  IF (x.mode = Eadr) & (x.n = RSP) THEN INC(offset, 8 * X64.SPO) END;
   IF x.mode = Stkind THEN
     DeparToReg(reg, x)
   ELSIF (x.mode = Eadr) & (x.index < 0) & (offset = 0) THEN
@@ -605,7 +602,9 @@ PROCEDURE PushAdr*(VAR x: Item);
 BEGIN
   IF x.mode = Stkind THEN
     PushMem(Eadr, RSP, -1, 0, x.n + 8 * X64.SPO)
-  ELSIF (x.mode = Eadr) & (x.index < 0) & (x.offset = 0) THEN
+  ELSIF (x.mode = Eadr)
+      & (x.index < 0) & (x.offset = 0)
+      & ((x.n # RSP) OR (X64.SPO = 0)) THEN
     PushReg(x.n)
   ELSIF x.mode IN {Eadr, Code, String, Global, Import} THEN
     LoadAddress(x);  PushReg(x.n)
@@ -644,7 +643,7 @@ BEGIN
     incdec := 0;
     IF op = Minus THEN incdec := 1 END;
     IF imm = -1 THEN incdec := 1 - incdec END;
-    OpModRegRm(0FFH, mode, incdec*8, size, n, index, scale, offset)  (* inc/dec dest *)
+    OpModRegRm(0FFH, mode, incdec, size, n, index, scale, offset)  (* inc/dec dest *)
   ELSE
     IF (imm < -80000000H) OR (imm >= 80000000H) THEN
       immreg := FirstFreeReg();
@@ -1131,6 +1130,10 @@ BEGIN
   END;
   ASSERT(x.type.form = ORB.Proc);
   ASSERT(x.mode IN {Eadr, Global, Code, Import});
+
+  stackspace := x.type.len;  (* Only used for Windows native ABI calls *)
+  IF stackspace < 32 THEN stackspace := 32 END;
+
   IF x.mode = Eadr THEN  (* Push proc address to stack *)
     Push(x);  X64.AdjustStack(1);  FreeRegs(x);
     Disassemble(x.mode, "proc address to be called");
@@ -1141,7 +1144,7 @@ BEGIN
       x.offset := -8 * (X64.SPO - (x.type.len DIV 8 + 1))
     ELSE  (* Windows ABI calling process *)
       x.n      := RBP;
-      x.offset := -8 * (X64.SPO - (x.type.len DIV 8 + 2))
+      x.offset := -8 * (X64.SPO - (stackspace DIV 8 + 2))
     END
   END;
   IF x.type.native THEN  (* Prepare stack space for windows abi *)
@@ -1152,17 +1155,17 @@ BEGIN
        BP to place the parameters on the stack, and advance SP 8 bytes extra to
        allow for either alignment *)
     ReserveReg(RBP);  MoveReg(RBP, RSP);
-    AluOpFromImmediate(Minus, Reg, x.type.len,         8, RBP, -1, 0, 0);
+    AluOpFromImmediate(Minus, Reg, stackspace,         8, RBP, -1, 0, 0);
     AluOpFromImmediate(And,   Reg, 0FFFFFFFFFFFFFFF0H, 8, RBP, -1, 0, 0);
-    AluOpFromImmediate(Minus, Reg, x.type.len + 8,     8, RSP, -1, 0, 0);
-    X64.AdjustStack(x.type.len DIV 8 + 1);
+    AluOpFromImmediate(Minus, Reg, stackspace + 8,     8, RSP, -1, 0, 0);
+    X64.AdjustStack(stackspace DIV 8 + 1);
     Disassemble(0, "Reserve Windows ABI stack space")
   END
 END PrepCall;
 
 
 PROCEDURE Call*(VAR x: Item; saved: SET);
-VAR i, reg, resultreg: INTEGER;
+VAR i, reg, resultreg, stackspace: INTEGER;
 BEGIN
   Trace(TraceAny, "Call(x: "); l.Item(x, Trc);
   l.s("), SPO ", Trc);         l.i(X64.SPO, Trc);
@@ -1171,7 +1174,7 @@ BEGIN
   ASSERT(x.mode IN {Eadr, Global, Code, Import});
 
   IF x.type.native THEN  (* Adjust to 16 byte aligned pos *)
-    OpModRegRm(87H, Reg, RSP, 8, RBP, -1, 0, 0)  (* xchg rsp,rbp *)
+    OpModRegRm(87H, Reg, RBP, 8, RSP, -1, 0, 0)  (* xchg rsp,rbp *)
   END;
 
   IF x.type.form = ORB.Proc THEN
@@ -1199,9 +1202,10 @@ BEGIN
   IF ~x.type.native THEN   (* Normal (simple) stack handling *)
     X64.AdjustStack(-(x.type.len DIV 8));  (* matches stack adjustment by <ret n> *)
   ELSE (* Windows ABI stack handling *)
-    OpModRegRm(8DH, Eadr, RSP, 8, RBP, -1, 0, x.type.len + 8);  (* lea rsp, rbp + parmreserved *)
+    stackspace := x.type.len;  IF stackspace < 32 THEN stackspace := 32 END;
+    OpModRegRm(8DH, Eadr, RSP, 8, RBP, -1, 0, stackspace + 8);  (* lea rsp, rbp + parmreserved *)
     Disassemble(0, "Drop Windows ABI parameter area from stack");
-    X64.AdjustStack(-(x.type.len DIV 8 + 1))  (* matches stack adjustment by <ret n> *)
+    X64.AdjustStack(-(stackspace DIV 8 + 1))  (* matches stack adjustment by <ret n> *)
   END;
 
   IF x.mode = Eadr THEN
@@ -1804,13 +1808,13 @@ VAR immsize: INTEGER;
 BEGIN
   Depar(x);  Depar(y);
   ASSERT(x.mode >= Const);  ASSERT(y.mode >= Const);
-  IF (y.mode = Const) & (y.offset >= -80000000H) & (y.offset < 80000000H) THEN
-    IF (y.offset >= -80H) & (y.offset < 80H) THEN immsize := 1 ELSE immsize := 4 END;
+  IF (y.mode = Const) & (y.n >= -80000000H) & (y.n < 80000000H) THEN
+    IF (y.n >= -80H) & (y.n < 80H) THEN immsize := 1 ELSE immsize := 4 END;
     IF    x.type.size = 1 THEN OpItem(80H, 7, x.type.size, x)
     ELSIF immsize     = 1 THEN OpItem(83H, 7, x.type.size, x)
     ELSE                       OpItem(81H, 7, x.type.size, x)
     END;
-    X64.EmitBytes(immsize, y.offset);
+    X64.EmitBytes(immsize, y.n);
   ELSE
     Dyadic(Cmp, x, y);
   END;
@@ -2176,9 +2180,9 @@ BEGIN
   cond := InvertedCondition(x.n);  ASSERT(cond DIV 16 = 8);
   ASSERT(L < X64.PC);
   IF (X64.PC + 2 - L) >= -80H THEN
-    X64.Emit(70H + cond MOD 16);    X64.Emit(X64.PC + 1 - L)
+    X64.Emit(70H + cond MOD 16);    X64.Emit(L - (X64.PC + 1))
   ELSE
-    X64.Emit(0FH);  X64.Emit(cond); X64.EmitBytes(4, X64.PC + 4 - L)
+    X64.Emit(0FH);  X64.Emit(cond); X64.EmitBytes(4, L - (X64.PC + 4))
   END;
   Disassemble(0, "CBJump");
   FixLink(x.index);
@@ -2387,7 +2391,9 @@ PROCEDURE Header*;
 BEGIN
   Trace(TraceAny, "Header - module initialisation code entry point."); l.l(Trc);
   X64.Header.initcode := X64.PC;  (* Set entry point address *)
-  PushReg(RBP);
+  (* Save non-volatile registers (for testing from Patchouli Oberon) *)
+  PushReg(RBX);  PushReg(RBP);  PushReg(RSI);  PushReg(RDI);
+  PushReg(12);   PushReg(13);   PushReg(14);   PushReg(15);
 END Header;
 
 PROCEDURE wsize(size: INTEGER);
@@ -2419,7 +2425,8 @@ VAR
   F:      Files.File;
   R:      Files.Rider;
 BEGIN
-  PopReg(RBP);
+  PopReg(15);   PopReg(14);   PopReg(13);   PopReg(12);
+  PopReg(RDI);  PopReg(RSI);  PopReg(RBP);  PopReg(RBX);
   X64.Emit(0C3H);  (* ret *)
   Disassemble(0, "Return");
   X64.Emit(2EH);  (* Mark end of code with ignored instruction 'seg cs' *)
