@@ -375,8 +375,7 @@ END LoadFlags;
 
 
 PROCEDURE InvertedCondition(cond: INTEGER): INTEGER;
-BEGIN
-  RETURN SYSTEM.VAL(INTEGER, SYSTEM.VAL(SET, cond) / {0})
+BEGIN RETURN SYSTEM.VAL(INTEGER, SYSTEM.VAL(SET, cond) / {0})
 END InvertedCondition;
 
 
@@ -589,19 +588,27 @@ BEGIN
   ELSE
     reg := FirstFreeReg();
     Prefices(Reg, reg, 8, -1, -1); X64.Emit(0B8H + reg MOD 8); X64.EmitBytes(8, i);  (* Load literal *)
-    Prefices(Reg, reg, 4, -1, -1); X64.Emit(050H + reg MOD 8);                   (* Push reg *)
+    Prefices(Reg, reg, 4, -1, -1); X64.Emit(050H + reg MOD 8);                       (* Push reg *)
   END
 END PushImmediate;
 
-PROCEDURE PushMem*(mode, n, index, scale, offset: INTEGER);
+PROCEDURE PushMem*(mode: INTEGER; signed: BOOLEAN; size, n, index, scale, offset: INTEGER);
+VAR reg: INTEGER;
 BEGIN
-  X64.Emit(0FFH);  ModRegRm(mode, 6, n, index, scale, offset)
+  IF size < 8 THEN
+    reg := FirstFreeReg();
+    LoadMem(reg, mode, signed, size, n, index, scale, offset);
+    PushReg(reg)
+  ELSE
+    Prefices(mode, -1, 8, n, index);
+    X64.Emit(0FFH);  ModRegRm(mode, 6, n, index, scale, offset)
+  END
 END PushMem;
 
 PROCEDURE PushAdr*(VAR x: Item);
 BEGIN
   IF x.mode = Stkind THEN
-    PushMem(Eadr, RSP, -1, 0, x.n + 8 * X64.SPO)
+    PushMem(Eadr, FALSE, 8, RSP, -1, 0, x.n + 8 * X64.SPO)
   ELSIF (x.mode = Eadr)
       & (x.index < 0) & (x.offset = 0)
       & ((x.n # RSP) OR (X64.SPO = 0)) THEN
@@ -624,7 +631,7 @@ BEGIN
     IF x.n < 2 THEN PushImmediate(x.n) ELSE Load(x);  PushReg(x.n) END
   ELSIF x.mode IN {Stkind, Eadr, Code, String, Global, Import} THEN
     Depar(x);
-    PushMem(x.mode, x.n, x.index, x.scale, x.offset)
+    PushMem(x.mode, X64.IsSigned(x.type), x.type.size, x.n, x.index, x.scale, x.offset)
   ELSE
     ASSERT(FALSE)
   END;
@@ -1067,8 +1074,8 @@ BEGIN
   ASSERT(x.mode IN {Stkind, Eadr, String, Global, Import});
   IF (x.mode = Stkind) & ((ftype.form = ORB.Array) & (ftype.len < 0) OR (ftype.form = ORB.Record)) THEN
     (* Passing open array or record parm to same *)
-    PushMem(Eadr, RSP, -1, 0, x.n + 8 * X64.SPO + 8);  X64.AdjustStack(1);  (* Length or descriptor *)
-    PushMem(Eadr, RSP, -1, 0, x.n + 8 * X64.SPO);      X64.AdjustStack(1);  (* Address *)
+    PushMem(Eadr, FALSE, 8, RSP, -1, 0, x.n + 8 * X64.SPO + 8);  X64.AdjustStack(1);  (* Length or descriptor *)
+    PushMem(Eadr, FALSE, 8, RSP, -1, 0, x.n + 8 * X64.SPO);      X64.AdjustStack(1);  (* Address *)
   ELSE
     (* First pass array length or type descriptor address, if any *)
     IF (ftype.form = ORB.Array) & (ftype.len < 0) THEN ASSERT(x.type.len >= 0);
@@ -1174,7 +1181,8 @@ BEGIN
   ASSERT(x.mode IN {Eadr, Global, Code, Import});
 
   IF x.type.native THEN  (* Adjust to 16 byte aligned pos *)
-    OpModRegRm(87H, Reg, RBP, 8, RSP, -1, 0, 0)  (* xchg rsp,rbp *)
+    OpModRegRm(87H, Reg, RBP, 8, RSP, -1, 0, 0);  (* xchg rsp,rbp *)
+    Disassemble(0, "Switch to Windows ABI aligned stack frame")
   END;
 
   IF x.type.form = ORB.Proc THEN
@@ -2378,7 +2386,7 @@ BEGIN
   VarFInx  := 0;
   ImpFInx  := 0;
   Disasmpc := 0;
-  FOR i := 1 TO SYSTEM.SIZE(X64.CodeHeaderItem) DO X64.Emit(0) END;
+  FOR i := 1 TO SYSTEM.SIZE(X64.CodeHeader) DO X64.Emit(0) END;
   X64.EmitString(modid);
   X64.Align(16);
   Disasmpc := X64.PC
@@ -2505,7 +2513,7 @@ BEGIN
     l.sl("H **", Trc)
   END;
   ASSERT(X64.PC = reslen);
-  X64.Header.residentsize := reslen; (* Set resident size / var offset *)
+  X64.Header.imports := reslen; (* Set resident size / var offset *)
 
   (* Relocate code references to module global VARs *)
   FOR i:= 0 TO VarFInx-1 DO
@@ -2531,12 +2539,23 @@ BEGIN
     X64.EmitBytes(4, ImpFix[i].fix);
   END;
   X64.EmitBytes(4, -1);
+  WHILE X64.PC MOD 16 # 0 DO X64.Emit(0) END;
+  X64.Header.length := X64.PC;
+
+  (* Display header content *)
+  l.sl("Header:", Trc);
+  l.s("  Length:        ", Trc);  l.h(X64.Header.length,   Trc);  l.sl("H.", Trc);
+  l.s("  Init code:     ", Trc);  l.h(X64.Header.initcode, Trc);  l.sl("H.", Trc);
+  l.s("  Pointers:      ", Trc);  l.h(X64.Header.pointers, Trc);  l.sl("H.", Trc);
+  l.s("  Commands:      ", Trc);  l.h(X64.Header.commands, Trc);  l.sl("H.", Trc);
+  l.s("  Exports:       ", Trc);  l.h(X64.Header.exports,  Trc);  l.sl("H.", Trc);
+  l.s("  Imports:       ", Trc);  l.h(X64.Header.imports,  Trc);  l.sl("H.", Trc);
+  l.s("  VAR size:      ", Trc);  l.h(X64.Header.varsize,  Trc);  l.sl("H.", Trc);
 
   (* Write compiled module *)
   fname := "";  K.Append(modid, fname);  K.Append(".code", fname);
   F := Files.New(fname);  Files.Set(R, F, 0);
   Files.WriteBytes(R, X64.Text, X64.PC);
-  Files.Write(R, "O");
   Files.Register(F)
 END Close;
 

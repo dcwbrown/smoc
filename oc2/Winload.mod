@@ -4,7 +4,7 @@ CONST title = "Compilation Tests";
 
 VAR
   (* The first 3 64 bit values in Winload global VAR space are preloaded by
-     directions in EXE file *)
+     link instructions in the EXE file *)
   LoadLibraryA*:      PROCEDURE#(libname: INTEGER): INTEGER;
   GetProcAddress*:    PROCEDURE#(hmodule, procname: INTEGER): INTEGER;
   MessageBoxA*:       PROCEDURE#(hwnd, text, caption, type: INTEGER);
@@ -37,7 +37,7 @@ BEGIN IntToHex(n, s);  msg(s) END msghex;
 
 PROCEDURE msgsp;
 VAR i: INTEGER;
-BEGIN msghex(SYSTEM.ADR(i)) END msgsp;
+BEGIN msghex(SYSTEM.ADR(i)+16) END msgsp;
 
 PROCEDURE GetProc*(dll: INTEGER; name: ARRAY OF CHAR; VAR proc: ARRAY OF BYTE);
 VAR adr: INTEGER;
@@ -58,7 +58,6 @@ VAR
   result:             INTEGER;
   written:            INTEGER;
   crlf:               ARRAY 2 OF CHAR;
-  stradr:             INTEGER;
 BEGIN
   Kernel := LoadLibraryA(SYSTEM.ADR("kernel32")); assert(Kernel # 0);
   GetProc(Kernel, "WriteFile",          WriteFile);          assert(WriteFile          # NIL);
@@ -66,11 +65,9 @@ BEGIN
   GetProc(Kernel, "SetConsoleOutputCP", SetConsoleOutputCP); assert(SetConsoleOutputCP # NIL);
   StdOut := GetStdHandle(-11);  (* -11:   StdOutputHandle *)
   SetConsoleOutputCP(65001);    (* 65001: UTF8            *)
-  stradr := SYSTEM.ADR("Hello.");
-  result := WriteFile(StdOut, stradr, 6, SYSTEM.ADR(written), 0);
+  result := WriteFile(StdOut, SYSTEM.ADR("Hello."), 6, SYSTEM.ADR(written), 0);
   crlf := $0D 0A$;
-  stradr := SYSTEM.ADR(crlf);
-  result := WriteFile(StdOut, stradr, 2, SYSTEM.ADR(written), 0);
+  result := WriteFile(StdOut, SYSTEM.ADR(crlf), 2, SYSTEM.ADR(written), 0);
 END BOOTSTRAP;
 
 

@@ -734,7 +734,15 @@ BEGIN NEW(typ);  typ.form := ORB.NoTyp;  typ.base := NIL;  typ.mno := -level;  t
     END;
     Check(ORS.colon, "colon expected");  Type(tp);
     IF (tp.form = ORB.Array) & (tp.len < 0) THEN ORS.Mark("dyn array not allowed") END;
-    IF tp.size > 1 THEN offset := (offset + 7) DIV 8 * 8 END;
+
+    (*IF tp.size > 1 THEN offset := (offset + 7) DIV 8 * 8 END;*)
+
+    (* Align suitably for size of field *)
+    IF    tp.size > 4 THEN offset := (offset + 7) DIV 8 * 8
+    ELSIF tp.size > 2 THEN offset := (offset + 3) DIV 4 * 4
+    ELSIF tp.size > 1 THEN offset := (offset + 1) DIV 2 * 2
+    END;
+
     offset := offset + n * tp.size;  off := offset;  obj0 := obj;
     WHILE obj0 # bot DO obj0.type := tp;  obj0.lev := 0;  off := off - tp.size;  obj0.val := off;  obj0 := obj0.next END;
     bot := obj;

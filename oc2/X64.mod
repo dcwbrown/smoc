@@ -69,14 +69,15 @@ TYPE
     scale*:    INTEGER
   END;
 
-  CodeHeader* = POINTER TO CodeHeaderItem;
-  CodeHeaderItem* = RECORD
-    residentsize*: SYSTEM.CARD32;
-    varsize*:      SYSTEM.CARD32;
-    initcode*:     SYSTEM.CARD32;
-    pointers*:     SYSTEM.CARD32;
-    commands*:     SYSTEM.CARD32;
-    exports*:      SYSTEM.CARD32
+  CodeHeaderPtr = POINTER TO CodeHeader;
+  CodeHeader* = RECORD
+    length*:   SYSTEM.CARD32;  (* File length *)
+    initcode*: SYSTEM.CARD32;
+    pointers*: SYSTEM.CARD32;
+    commands*: SYSTEM.CARD32;
+    exports*:  SYSTEM.CARD32;
+    imports*:  SYSTEM.CARD32;  (* VARs start here following import resolution *)
+    varsize*:  SYSTEM.CARD32
   END;
 
 
@@ -84,7 +85,7 @@ VAR
   PC*:     INTEGER;
   SPO*:    INTEGER;
   Text*:   ARRAY MaxPC OF BYTE;
-  Header*: CodeHeader;
+  Header*: CodeHeaderPtr;
 
 
 (* -------------------------------- Assembly -------------------------------- *)
@@ -155,7 +156,7 @@ END Patch;
 
 
 PROCEDURE Init*;
-BEGIN PC := 0;  SPO := 0;  Header := SYSTEM.VAL(CodeHeader, SYSTEM.ADR(Text)) END Init;
+BEGIN PC := 0;  SPO := 0;  Header := SYSTEM.VAL(CodeHeaderPtr, SYSTEM.ADR(Text)) END Init;
 
 BEGIN  Init
 END X64.
