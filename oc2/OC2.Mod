@@ -6,6 +6,7 @@ CONST BuildCompiler = FALSE;
 
 BEGIN
   ORP.CompileFile("Winboot.mod");
+  ORP.CompileFile("Linktest.mod");
   IF BuildCompiler THEN
     IF ORS.errcnt = 0 THEN ORP.CompileFile("Boot.mod")    END;
     IF ORS.errcnt = 0 THEN ORP.CompileFile("Heap.mod")    END;
@@ -23,6 +24,8 @@ BEGIN
     IF ORS.errcnt = 0 THEN ORP.CompileFile("ORP.mod")     END;
     IF ORS.errcnt = 0 THEN ORP.CompileFile("OC2.mod")     END
   END;
-
-  IF ORS.errcnt = 0 THEN WinPE.Generate("start.exe") END
+  IF ORS.errcnt = 0 THEN
+    WinPE.AddModule("Linktest.code");
+    WinPE.Generate("start.exe")
+  END
 END OC2.

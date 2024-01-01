@@ -184,6 +184,7 @@ BEGIN
   IF f = NIL THEN
     w.s("Couldn't copy '"); w.s(name); w.sl("'."); K.Halt(99)
   END;
+  w.s("Adding module "); w.s(name); w.sl(".");
   Files.Set(r, f, 0);
   WHILE ~r.eof DO
     Files.ReadBytes(r, buf, LEN(buf));
@@ -337,7 +338,7 @@ END WritePEHeader;
 (* -------------------------------------------------------------------------- *)
 (* -------------------------------------------------------------------------- *)
 
-PROCEDURE AddObject*(fn: ARRAY OF CHAR);
+PROCEDURE AddModule*(fn: ARRAY OF CHAR);
 BEGIN
   IF LastObject = NIL THEN
     NEW(Objects);  Objects.name := fn;  LastObject := Objects
@@ -345,7 +346,7 @@ BEGIN
     NEW(LastObject.next);  LastObject := LastObject.next;
     LastObject.name := fn
   END
-END AddObject;
+END AddModule;
 
 
 PROCEDURE GetBootstrap;

@@ -1,4 +1,4 @@
-MODULE WinBoot;  IMPORT SYSTEM;
+MODULE Winboot;  IMPORT SYSTEM;
 
 TYPE
   CodeHeaderPtr = POINTER TO CodeHeader;
@@ -14,7 +14,7 @@ TYPE
 
 
 VAR
-  (* WinPE.mod builds the executable with the following WinBoot variables pre-loaded *)
+  (* WinPE.mod builds the executable with the following Winboot variables pre-loaded *)
   Header:             CodeHeaderPtr;
   LoadLibraryA:       PROCEDURE#(libname: INTEGER): INTEGER;
   GetProcAddress:     PROCEDURE#(hmodule, procname: INTEGER): INTEGER;
@@ -27,12 +27,12 @@ VAR
                                 ): SYSTEM.CARD32;
   (* End of pre-loaded variables *)
 
-  Stdout:  INTEGER;
-  crlf:    ARRAY 3 OF CHAR;
-  Log:     PROCEDURE(s: ARRAY OF CHAR);
+  Stdout: INTEGER;
+  crlf:   ARRAY 3 OF CHAR;
+  Log:    PROCEDURE(s: ARRAY OF BYTE);
 
 
-PROCEDURE NoLog(s: ARRAY OF CHAR); BEGIN END NoLog;
+PROCEDURE NoLog(s: ARRAY OF BYTE); BEGIN END NoLog;
 
 PROCEDURE assert(expectation: BOOLEAN);
 BEGIN IF ~expectation THEN
@@ -55,14 +55,14 @@ BEGIN
   WHILE i < j DO ch:=s[i]; s[i]:=s[j]; s[j]:=ch; INC(i); DEC(j) END;
 END IntToHex;
 
-PROCEDURE Strlen(s: ARRAY OF CHAR): INTEGER;
+PROCEDURE Strlen(s: ARRAY OF BYTE): INTEGER;
 VAR i: INTEGER;
-BEGIN i := 0;  WHILE s[i] # 0X DO INC(i) END
+BEGIN i := 0;  WHILE (i < LEN(s)) & (s[i] # 0) DO INC(i) END
 RETURN i END Strlen;
 
 (* ---------------------------------------------------------------------------- *)
 
-PROCEDURE WriteStdout(s: ARRAY OF CHAR);
+PROCEDURE WriteStdout(s: ARRAY OF BYTE);
 VAR written, result: INTEGER;
 BEGIN
   result := WriteFile(Stdout, SYSTEM.ADR(s), Strlen(s), SYSTEM.ADR(written), 0);
@@ -70,13 +70,15 @@ END WriteStdout;
 
 (* ---------------------------------------------------------------------------- *)
 
-PROCEDURE ws(s: ARRAY OF CHAR); BEGIN Log(s) END ws;
+PROCEDURE ws*(s: ARRAY OF CHAR); BEGIN Log(s) END ws;
 
-PROCEDURE wl; BEGIN Log(crlf) END wl;
+PROCEDURE wc*(c: CHAR); BEGIN Log(c) END wc;
 
-PROCEDURE wsl(s: ARRAY OF CHAR); BEGIN Log(s);  Log(crlf) END wsl;
+PROCEDURE wl*; BEGIN Log(crlf) END wl;
 
-PROCEDURE wh(n: INTEGER);
+PROCEDURE wsl*(s: ARRAY OF CHAR); BEGIN Log(s);  Log(crlf) END wsl;
+
+PROCEDURE wh*(n: INTEGER);
 VAR hex: ARRAY 32 OF CHAR;
 BEGIN IntToHex(n, hex);  Log(hex) END wh;
 
@@ -93,6 +95,23 @@ PROCEDURE GetPC(): INTEGER;
 VAR pc: INTEGER;
 BEGIN SYSTEM.GET(SYSTEM.ADR(pc) + 8, pc);
 RETURN pc END GetPC;
+
+PROCEDURE WriteHeader(adr: INTEGER);
+VAR hdr: CodeHeaderPtr;  ch: CHAR;
+BEGIN
+  hdr := SYSTEM.VAL(CodeHeaderPtr, adr);
+  INC(adr, SYSTEM.SIZE(CodeHeader));
+  SYSTEM.GET(adr, ch);
+  WHILE ch # 0X DO wc(ch);  INC(adr);  SYSTEM.GET(adr, ch) END;
+  ws(" header at ");  wh(SYSTEM.VAL(INTEGER, hdr));  wsl("H:");
+  ws("  length:   ");  wh(hdr.length);    wsl("H.");
+  ws("  initcode: ");  wh(hdr.initcode);  wsl("H.");
+  ws("  pointers: ");  wh(hdr.pointers);  wsl("H.");
+  ws("  commands: ");  wh(hdr.commands);  wsl("H.");
+  ws("  exports:  ");  wh(hdr.exports);   wsl("H.");
+  ws("  imports:  ");  wh(hdr.imports);   wsl("H.");
+  ws("  varsize:  ");  wh(hdr.varsize);   wsl("H.");
+END WriteHeader;
 
 PROCEDURE PrepareOberonMachine;
 CONST
@@ -119,6 +138,7 @@ BEGIN
   hdr        := SYSTEM.VAL(CodeHeaderPtr, moduleadr);
   WHILE hdr.length > 0 DO
     ws("Module at "); wh(moduleadr); ws("H, length "); wh(hdr.length); wsl("H.");
+    WriteHeader(moduleadr);
     INC(modulesize, hdr.imports + hdr.varsize);
     INC(moduleadr, hdr.length);
     hdr := SYSTEM.VAL(CodeHeaderPtr, moduleadr);
@@ -134,6 +154,9 @@ BEGIN
   ws("Transferring PC from original load at ");  wh(GetPC());  wsl("H.");
   IncPC(commitadr - SYSTEM.VAL(INTEGER, Header));  (* Transfer to copied code *)
   ws("Transferred PC to code copied to Oberon memory at ");  wh(GetPC());  wsl("H.");
+
+  ws("First code module at "); wh(SYSTEM.VAL(INTEGER, Header) + bootsize); wsl("H.");
+  ws("Oberon loaded boot module ends at "); wh(commitadr + bootsize); wsl("H.");
 END PrepareOberonMachine;
 
 (* ---------------------------------------------------------------------------- *)
@@ -149,16 +172,9 @@ BEGIN
 
   wsl("Hello");
   ws("Stdout handle "); wh(Stdout);     wsl("H.");
-  ws("Winboot header at ");  wh(SYSTEM.VAL(INTEGER, Header));  wsl("H:");
-  ws("  length:   ");  wh(Header.length);    wsl("H.");
-  ws("  initcode: ");  wh(Header.initcode);  wsl("H.");
-  ws("  pointers: ");  wh(Header.pointers);  wsl("H.");
-  ws("  commands: ");  wh(Header.commands);  wsl("H.");
-  ws("  exports:  ");  wh(Header.exports);   wsl("H.");
-  ws("  imports:  ");  wh(Header.imports);   wsl("H.");
-  ws("  varsize:  ");  wh(Header.varsize);   wsl("H.");
+  WriteHeader(SYSTEM.VAL(INTEGER, Header));
 
   PrepareOberonMachine;
 
-  wsl("WinBoot complete.");  ExitProcess(0);
-END WinBoot.
+  wsl("Winboot complete.");  ExitProcess(0);
+END Winboot.

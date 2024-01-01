@@ -1079,7 +1079,12 @@ BEGIN
   ELSE
     (* First pass array length or type descriptor address, if any *)
     IF (ftype.form = ORB.Array) & (ftype.len < 0) THEN ASSERT(x.type.len >= 0);
-      PushImmediate(x.type.len);  X64.AdjustStack(1) (* Pass array length *)
+      IF x.type.form = ORB.Array THEN
+        PushImmediate(x.type.len)
+      ELSE
+        PushImmediate(x.type.size) (* Passing non-array to ARRAY OF BYTE *)
+      END;
+      X64.AdjustStack(1) (* Pass array length *)
     ELSIF ftype.form = ORB.Record THEN
       reg := FirstFreeReg();
       OpModRegRm(8DH, Code, reg, 8, 0, -1, 0, ftype.len);  (* lea type desciptor *)
@@ -2387,6 +2392,7 @@ BEGIN
   ImpFInx  := 0;
   Disasmpc := 0;
   FOR i := 1 TO SYSTEM.SIZE(X64.CodeHeader) DO X64.Emit(0) END;
+  X64.Align(8); (* Increase alignment to match PO2013 where records are aligned on 8 bytes. *)
   X64.EmitString(modid);
   X64.Align(16);
   Disasmpc := X64.PC
