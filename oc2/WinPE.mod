@@ -102,6 +102,11 @@ TYPE
     END
   END;
 
+  BootstrapBuffer = RECORD
+    Header:  X64.CodeHeader;
+    Content: ARRAY 8192 OF BYTE
+  END;
+
 
 VAR
   FileName:   ARRAY 512 OF CHAR;
@@ -112,10 +117,7 @@ VAR
   Objects:    ObjectFile;
   LastObject: ObjectFile;
 
-  Bootstrap:  RECORD
-    Header:  X64.CodeHeader;
-    Content: ARRAY 4096 OF BYTE
-  END;
+  Bootstrap:  BootstrapBuffer;
 
   Idt: ImportDirectoryTable;
 
@@ -133,14 +135,20 @@ PROCEDURE ZeroFill(VAR buf: ARRAY OF BYTE);  VAR i: INTEGER;
 BEGIN FOR i := 0 TO LEN(buf)-1 DO buf[i] := 0 END END ZeroFill;
 
 
-
-
 (* -------------------------------------------------------------------------- *)
 (* -------------------------------------------------------------------------- *)
 
 PROCEDURE Align(a: INTEGER;  align: INTEGER): INTEGER;
 BEGIN IF a > 0 THEN INC(a, align - 1) END;
 RETURN a DIV align * align END Align;
+
+PROCEDURE FileAlign(VAR r: Files.Rider; alignment: INTEGER);
+BEGIN
+  IF Files.Pos(r) MOD alignment # 0 THEN
+    spos(Align(Files.Pos(r), alignment)-1);
+    Files.WriteByte(r, 0);
+  END
+END FileAlign;
 
 
 (* -------------------------------------------------------------------------- *)
@@ -149,28 +157,38 @@ RETURN a DIV align * align END Align;
 PROCEDURE WriteImports;  (* target: RVA to receive imported addresses *)
   PROCEDURE FieldRVA(VAR field: ARRAY OF BYTE): U32;
   BEGIN RETURN RvaImport + SYSTEM.ADR(field) - SYSTEM.ADR(Idt) END FieldRVA;
-  PROCEDURE IDTentry(i: INTEGER; name: ARRAY OF CHAR);
+  PROCEDURE IDTprocentry(i: INTEGER; name: ARRAY OF CHAR);
   BEGIN
     Idt.Lookups[i]    := FieldRVA(Idt.Hints[i]);
     Idt.Hints[i].Name := name
-  END IDTentry;
+  END IDTprocentry;
 BEGIN
   ZeroFill(Idt);
   Idt.LookupTable   := FieldRVA(Idt.Lookups);
   Idt.Dllnameadr    := FieldRVA(Idt.Dllname);
   Idt.Dllname       := "KERNEL32.DLL";
   Idt.Target        := RvaModules + Bootstrap.Header.imports + 8;  (* 8 for HeaderAdr var *)
-  IDTentry(0, "LoadLibraryA");
-  IDTentry(1, "GetProcAddress");
-  IDTentry(2, "VirtualAlloc");
-  IDTentry(3, "ExitProcess");
-  IDTentry(4, "GetStdHandle");
-  IDTentry(5, "SetConsoleOutputCP");
-  IDTentry(6, "WriteFile");
+  IDTprocentry(0, "LoadLibraryA");
+  IDTprocentry(1, "GetProcAddress");
+  IDTprocentry(2, "VirtualAlloc");
+  IDTprocentry(3, "ExitProcess");
+  IDTprocentry(4, "GetStdHandle");
+  IDTprocentry(5, "SetConsoleOutputCP");
+  IDTprocentry(6, "WriteFile");
+
+  (*
+  IDTprocEntry(7, "AddVectoredExceptionHandler");
+  IDTprocEntry(8, "GetCommandLineW");
+  IDTprocEntry(9, "GetSystemTimePreciseAsFileTime");
+  IDTprocEntry(10, "GetModuleFileNameW");
+  IDTprocEntry(11, "GetCurrentDirectoryW");
+  *)
+
   spos(FadrImport);
   Files.WriteBytes(Exe, Idt, SYSTEM.SIZE(ImportDirectoryTable));
   ImportSize := Align(Files.Pos(Exe), 16) - FadrImport;
   w.s("IDT size "); w.h(ImportSize); w.sl("H.");
+  ASSERT(FadrImport + ImportSize < FadrModules);
 END WriteImports;
 
 
@@ -180,6 +198,7 @@ END WriteImports;
 PROCEDURE CopyFile(name: ARRAY OF CHAR);
 VAR  f: Files.File;  r: Files.Rider;  buf: ARRAY 1000H OF BYTE;
 BEGIN
+  ASSERT(Files.Pos(Exe) MOD 16 = 0);
   f := Files.Old(name);
   IF f = NIL THEN
     w.s("Couldn't copy '"); w.s(name); w.sl("'."); K.Halt(99)
@@ -189,7 +208,8 @@ BEGIN
   WHILE ~r.eof DO
     Files.ReadBytes(r, buf, LEN(buf));
     Files.WriteBytes(Exe, buf, LEN(buf) - r.res);
-  END
+  END;
+  FileAlign(Exe, 16);
 END CopyFile;
 
 
@@ -206,10 +226,7 @@ BEGIN
 
   (* Fill Oberon section to a whole multiple of section alignment *)
   (* by writing 0 to its last byte *)
-  IF Files.Pos(Exe) - FadrModules MOD FileAlignment # 0 THEN
-    spos(Align(Files.Pos(Exe), FileAlignment)-1);
-    Files.WriteByte(Exe, 0);
-  END;
+  FileAlign(Exe, FileAlignment);
 
   OberonSize := Files.Pos(Exe) - FadrModules;
 END WriteModules;
@@ -357,8 +374,9 @@ BEGIN
   f := Files.Old("winboot.code");
   IF f = NIL THEN w.sl("Couldn't open winboot.code."); K.Halt(99) END;
   Files.Set(r, f, 0);
-  Files.ReadBytes(r, Bootstrap.Header,  SYSTEM.SIZE(X64.CodeHeader));
-  Files.ReadBytes(r, Bootstrap.Content, LEN(Bootstrap.Content));
+  Files.ReadBytes(r, Bootstrap,  SYSTEM.SIZE(BootstrapBuffer));
+  w.s("Bootstap bytes read: "); w.i(Files.Pos(r)); w.sl(".");
+  ASSERT(r.res >= 0);
   Files.Close(f)
 END GetBootstrap;
 
@@ -372,13 +390,16 @@ BEGIN
   Files.WriteBytes(Exe, Bootstrap, Bootstrap.Header.imports);  (* Code and tables   *)
   Files.WriteInt(Exe, ImageBase + RvaModules);                 (* Header address    *)
   Files.WriteBytes(Exe, Idt.Lookups, ImportCount*8);           (* Import references *)
-  WriteZeroes(Bootstrap.Header.varsize - (ImportCount*8 + 8))
+  WriteZeroes(Bootstrap.Header.varsize - (ImportCount*8 + 8));
+  FileAlign(Exe, 16)
 END WriteBootstrap;
 
 
 PROCEDURE Generate*(filename: ARRAY OF CHAR);
 VAR fpos: INTEGER;
 BEGIN
+  w.s("WinPE.Generate. SIZE(CodeHeader) "); w.h(SYSTEM.SIZE(X64.CodeHeader)); w.sl("H.");
+
   ExeFile := Files.New(filename);
 
   GetBootstrap;

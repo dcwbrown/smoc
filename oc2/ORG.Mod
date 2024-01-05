@@ -151,7 +151,7 @@ END Prefices;
 
 *)
 
-PROCEDURE ModRegRm*(mode, reg, n, index, scale, offset: INTEGER);
+PROCEDURE ModRegRm*(mode, reg, n, index, scale, offset, immsize: INTEGER);
 VAR
   needsib:  BOOLEAN;
   dispsize: INTEGER;
@@ -204,7 +204,7 @@ BEGIN
       IF base < 0 THEN dispsize := 4;  mod := 0;  base := 5 END;
     END;
 
-    X64.Emit(mod*64 + reg*8 + rm);         (* modregrm *)
+    X64.Emit(mod*64 + reg*8 + rm);          (* modregrm *)
     IF needsib THEN
       X64.Emit(scale*64 + index*8 + base);  (* sib *)
     END;
@@ -212,7 +212,7 @@ BEGIN
     (* Fixup Code/String/Global/Import offsets *)
     IF mode IN {Code, String, Global, Import} THEN
       ASSERT(dispsize = 4);
-      DEC(offset, X64.PC + 4)
+      DEC(offset, X64.PC + 4 + immsize)  (* Make offset relative to next instruction *)
     END;
     IF    mode = String THEN StrFix[StrFInx] := X64.PC;  INC(StrFInx)
     ELSIF mode = Global THEN VarFix[VarFInx] := X64.PC;  INC(VarFInx)
@@ -232,7 +232,7 @@ BEGIN
   END
 END ModRegRm;
 
-PROCEDURE OpModRegRm(op, mode, reg, size, n, index, scale, offset: INTEGER);
+PROCEDURE OpModRegRm(op, mode, reg, size, n, index, scale, offset, immsize: INTEGER);
 BEGIN
   IF ~(mode IN {Reg, Eadr, Code, String, Global, Import}) THEN
     Trace(TraceAny, "** mode "); l.i(mode, Trc); l.sl(" **", Trc);
@@ -241,12 +241,12 @@ BEGIN
   Prefices(mode, reg, size, n, index);
   IF op >= 100H THEN X64.Emit(op DIV 100H) END;
   X64.Emit(op MOD 100H);
-  ModRegRm(mode, reg, n, index, scale, offset)
+  ModRegRm(mode, reg, n, index, scale, offset, immsize)
 END OpModRegRm;
 
-PROCEDURE OpItem*(op, reg, size: INTEGER; x: Item);
+PROCEDURE OpItem*(op, reg, size, immsize: INTEGER; x: Item);
 BEGIN
-  OpModRegRm(op, x.mode, reg, size, x.n, x.index, x.scale, x.offset)
+  OpModRegRm(op, x.mode, reg, size, x.n, x.index, x.scale, x.offset, immsize)
 END OpItem;
 
 
@@ -341,7 +341,7 @@ END SetCondition;
 PROCEDURE DeparToReg(reg: INTEGER; VAR x: Item);
 BEGIN
   ASSERT(x.mode = Stkind);
-  OpModRegRm(8BH, Eadr, reg, 8, RSP, -1, 0, x.n + 8 * X64.SPO);  (* mov reg,[rsp+x] *)
+  OpModRegRm(8BH, Eadr, reg, 8, RSP, -1, 0, x.n + 8 * X64.SPO, 0);  (* mov reg,[rsp+x] *)
   x.mode := Eadr;
   x.n    := reg;
   Disassemble(0, "Depar")
@@ -362,10 +362,10 @@ BEGIN
   ELSE
     Depar(x);
     IF x.mode = Reg THEN  (* use test reg,reg *)
-      OpModRegRm(85H, Reg, x.n, 8, x.n, -1, 0, 0)
+      OpModRegRm(85H, Reg, x.n, 8, x.n, -1, 0, 0, 0)
     ELSE  (* use cmp mem,0 *)
       ASSERT(x.mode IN {Eadr, Code, String, Global, Import});
-      OpItem(83H, 7, x.type.size, x);  X64.Emit(0)
+      OpItem(83H, 7, x.type.size, 1, x);  X64.Emit(0)
     END;
     Disassemble(x.mode, "LoadFlags");
     FreeRegs(x);
@@ -383,13 +383,13 @@ PROCEDURE LoadImmediate(reg, val: INTEGER);
 BEGIN
   ASSERT(reg >= 0);
   IF val = 0 THEN
-    OpModRegRm(31H, Reg, reg, 4, reg, -1, 0, 0)  (* xor reg,reg *)
+    OpModRegRm(31H, Reg, reg, 4, reg, -1, 0, 0, 0)  (* xor reg,reg *)
   ELSIF (val > 0) & (val < 100000000H) THEN   (* Load 32 bit positive value as 32 bit load with zero extension *)
     Prefices(Reg, -1, 4, reg, -1);
     X64.Emit(0B8H + reg MOD 8);
     X64.EmitBytes(4, val);
   ELSIF (val < 0) & (val >= -80000000H) THEN  (* Load 32 bit negative value with sign extended move *)
-    OpModRegRm(0C7H, Reg, 0, 8, reg, -1, 0, 0);
+    OpModRegRm(0C7H, Reg, 0, 8, reg, -1, 0, 0, 4);
     X64.EmitBytes(4,val);
   ELSE                                        (* Need full 64 bit literal *)
     Prefices(Reg, reg, 8, -1, -1);
@@ -401,7 +401,7 @@ END LoadImmediate;
 PROCEDURE MoveReg(r1, r2: INTEGER);  (* r1 := r2 *)
 BEGIN
   ASSERT(r1 >= 0);  ASSERT(r2 >= 0);  ASSERT(r1 # r2);
-  OpModRegRm(89H, Reg, r2, 8, r1, -1, 0, 0)
+  OpModRegRm(89H, Reg, r2, 8, r1, -1, 0, 0, 0)
 END MoveReg;
 
 PROCEDURE LoadMem(reg, mode: INTEGER; signed: BOOLEAN; size, n, index, scale, offset: INTEGER);
@@ -419,16 +419,16 @@ BEGIN
 
   ASSERT(size IN {1, 2, 4, 8});
   IF signed THEN
-    IF    size = 1 THEN OpModRegRm(0FBEH, mode, reg, 8, n, index, scale, offset)  (* movsx  r64, r/m8  *)
-    ELSIF size = 2 THEN OpModRegRm(0FBFH, mode, reg, 8, n, index, scale, offset)  (* movsx  r64, r/m16 *)
-    ELSIF size = 4 THEN OpModRegRm(63H,   mode, reg, 8, n, index, scale, offset)  (* movsxd r64, r/m32 *)
-    ELSIF size = 8 THEN OpModRegRm(8BH,   mode, reg, 8, n, index, scale, offset)  (* mov    r64, r/m64 *)
+    IF    size = 1 THEN OpModRegRm(0FBEH, mode, reg, 8, n, index, scale, offset, 0)  (* movsx  r64, r/m8  *)
+    ELSIF size = 2 THEN OpModRegRm(0FBFH, mode, reg, 8, n, index, scale, offset, 0)  (* movsx  r64, r/m16 *)
+    ELSIF size = 4 THEN OpModRegRm(63H,   mode, reg, 8, n, index, scale, offset, 0)  (* movsxd r64, r/m32 *)
+    ELSIF size = 8 THEN OpModRegRm(8BH,   mode, reg, 8, n, index, scale, offset, 0)  (* mov    r64, r/m64 *)
     END
   ELSE (* unsigned *)
-    IF    size = 1 THEN OpModRegRm(0FB6H, mode, reg, 8, n, index, scale, offset)  (* movzx  r64, r/m8  *)
-    ELSIF size = 2 THEN OpModRegRm(0FB7H, mode, reg, 8, n, index, scale, offset)  (* movzx  r64, r/m16 *)
-    ELSIF size = 4 THEN OpModRegRm(8BH,   mode, reg, 4, n, index, scale, offset)  (* mov    r32, r/m32 *)
-    ELSIF size = 8 THEN OpModRegRm(8BH,   mode, reg, 8, n, index, scale, offset)  (* mov    r64, r/m64 *)
+    IF    size = 1 THEN OpModRegRm(0FB6H, mode, reg, 8, n, index, scale, offset, 0)  (* movzx  r64, r/m8  *)
+    ELSIF size = 2 THEN OpModRegRm(0FB7H, mode, reg, 8, n, index, scale, offset, 0)  (* movzx  r64, r/m16 *)
+    ELSIF size = 4 THEN OpModRegRm(8BH,   mode, reg, 4, n, index, scale, offset, 0)  (* mov    r32, r/m32 *)
+    ELSIF size = 8 THEN OpModRegRm(8BH,   mode, reg, 8, n, index, scale, offset, 0)  (* mov    r64, r/m64 *)
     END
   END
 END LoadMem;
@@ -436,8 +436,8 @@ END LoadMem;
 PROCEDURE LoadCondition(reg, c: INTEGER);  (* Set register to 0/1 based on condition flags *)
 BEGIN
   ASSERT((reg >= 0) & (reg <= 15));
-  OpModRegRm(0F90H + c MOD 16, Reg, 0,   4, reg, -1, 0, 0);  (* setcc byte-reg           *)
-  OpModRegRm(0FB6H,            Reg, reg, 4, reg, -1, 0, 0);  (* movzx qword-reg,byte-reg *)
+  OpModRegRm(0F90H + c MOD 16, Reg, 0,   4, reg, -1, 0, 0, 0);  (* setcc byte-reg           *)
+  OpModRegRm(0FB6H,            Reg, reg, 4, reg, -1, 0, 0, 0);  (* movzx qword-reg,byte-reg *)
   Disassemble(0, "LoadCondition")
 END LoadCondition;
 
@@ -470,7 +470,7 @@ BEGIN
   ELSIF (x.mode = Eadr) & (x.index < 0) & (offset = 0) THEN
     MoveReg(reg, x.n)
   ELSIF (x.mode IN {Eadr, Code, String, Global, Import}) THEN
-    OpModRegRm(8DH, x.mode, reg, 8, x.n, x.index, x.scale, offset);  (* lea *)
+    OpModRegRm(8DH, x.mode, reg, 8, x.n, x.index, x.scale, offset, 0);  (* lea *)
     Disassemble(x.mode, "LoadAddress")
   ELSE
     ASSERT(FALSE)
@@ -504,16 +504,16 @@ BEGIN
   IF (x.type.form = ORB.Array) & (x.type.len < 0) THEN
     (* Open array parameter *)
     ASSERT(x.mode = Stkind);
-    OpModRegRm(8BH, Eadr, rbase,   8, RSP, -1, 0, x.n + 8 * X64.SPO);      (* mov reg,[rsp+x] *)
-    OpModRegRm(8BH, Eadr, rlength, 8, RSP, -1, 0, x.n + 8 * X64.SPO + 8);  (* mov reg,[rsp+x] *)
+    OpModRegRm(8BH, Eadr, rbase,   8, RSP, -1, 0, x.n + 8 * X64.SPO,     0);  (* mov reg,[rsp+x] *)
+    OpModRegRm(8BH, Eadr, rlength, 8, RSP, -1, 0, x.n + 8 * X64.SPO + 8, 0);  (* mov reg,[rsp+x] *)
     ASSERT(x.type.base.size >= 0);
     IF x.type.base.size > 1 THEN  (* multiply length by type size to get byte count *)
       ASSERT(x.type.base.size < 80000000H);
       (* TODO - optimise powers of 2 with a shift *)
       IF x.type.base.size >= 80H THEN
-        OpItem(69H, rlength, 8, x);  X64.EmitBytes(4, x.type.base.size)
+        OpItem(69H, rlength, 8, 4, x);  X64.EmitBytes(4, x.type.base.size)
       ELSE
-        OpItem(6BH, rlength, 8, x);  X64.Emit(x.type.base.size)
+        OpItem(6BH, rlength, 8, 1, x);  X64.Emit(x.type.base.size)
       END;
     END
   ELSE
@@ -536,7 +536,7 @@ PROCEDURE StoreRegToMem*(sreg, mode, size, n, index, scale, offset: INTEGER);
 VAR op: INTEGER;
 BEGIN
   IF size = 1 THEN op := 088H ELSE op := 089H END;
-  OpModRegRm(op, mode, sreg, size, n, index, scale, offset);
+  OpModRegRm(op, mode, sreg, size, n, index, scale, offset, 0);
   Disassemble(mode, "StoreRegToMem")
 END StoreRegToMem;
 
@@ -551,12 +551,13 @@ BEGIN
 END StoreReg;
 
 PROCEDURE StoreImmediateToMem(imm, mode, size, n, index, scale, offset: INTEGER);
-VAR op, reg: INTEGER;
+VAR op, reg, immsize: INTEGER;
 BEGIN
   IF (imm >= -80000000H) & (imm < 80000000H) THEN  (* imm fits 32 bits *)
     IF size = 1 THEN op := 0C6H ELSE op := 0C7H END;
-    OpModRegRm(op, mode, 0, size, n, index, scale, offset);
-    X64.EmitBytes(Min(size, 4), imm);
+    immsize := Min(size, 4);
+    OpModRegRm(op, mode, 0, size, n, index, scale, offset, immsize);
+    X64.EmitBytes(immsize, imm);
     Disassemble(mode, "StoreImmediate")
   ELSE  (* 64 bit immediate - load immediate then store reg *)
     reg := FirstFreeReg();
@@ -601,7 +602,7 @@ BEGIN
     PushReg(reg)
   ELSE
     Prefices(mode, -1, 8, n, index);
-    X64.Emit(0FFH);  ModRegRm(mode, 6, n, index, scale, offset)
+    X64.Emit(0FFH);  ModRegRm(mode, 6, n, index, scale, offset, 0)
   END
 END PushMem;
 
@@ -650,18 +651,18 @@ BEGIN
     incdec := 0;
     IF op = Minus THEN incdec := 1 END;
     IF imm = -1 THEN incdec := 1 - incdec END;
-    OpModRegRm(0FFH, mode, incdec, size, n, index, scale, offset)  (* inc/dec dest *)
+    OpModRegRm(0FFH, mode, incdec, size, n, index, scale, offset, 0)  (* inc/dec dest *)
   ELSE
     IF (imm < -80000000H) OR (imm >= 80000000H) THEN
       immreg := FirstFreeReg();
       LoadImmediate(immreg, imm);                                                       (* mov immreg,imm64 *)
-      OpModRegRm(op+1, mode, immreg, size, n, index, scale, offset)                     (* op  dest,immreg  *)
+      OpModRegRm(op+1, mode, immreg, size, n, index, scale, offset, 0)                     (* op  dest,immreg  *)
     ELSIF size = 1 THEN
-      OpModRegRm(80H, mode, op DIV 8, size, n, index, scale, offset);  X64.Emit(imm)          (* op  dest8,imm8    *)
+      OpModRegRm(80H, mode, op DIV 8, size, n, index, scale, offset, 1);  X64.Emit(imm)          (* op  dest8,imm8    *)
     ELSIF (imm >= -80H) & (imm < 80H) THEN
-      OpModRegRm(83H, mode, op DIV 8, size, n, index, scale, offset);  X64.Emit(imm)         (* op  dest,imm8     *)
+      OpModRegRm(83H, mode, op DIV 8, size, n, index, scale, offset, 1);  X64.Emit(imm)         (* op  dest,imm8     *)
     ELSE
-      OpModRegRm(81H, mode, op DIV 8, size, n, index, scale, offset);  X64.EmitBytes(4, imm)  (* op  dest,imm32    *)
+      OpModRegRm(81H, mode, op DIV 8, size, n, index, scale, offset, 4);  X64.EmitBytes(4, imm)  (* op  dest,imm32    *)
     END
   END
 END AluOpFromImmediate;
@@ -678,7 +679,7 @@ BEGIN
     LoadMem(srcreg, mode, signed, size, n, index, scale, offset);
     mode := Reg;  n := srcreg;  index := -1;  scale := 0;  offset := 0;
   END;
-  OpModRegRm(op+3, mode, reg, 8, n, index, scale, offset)
+  OpModRegRm(op+3, mode, reg, 8, n, index, scale, offset, 0)
 END AluOpToReg;
 
 PROCEDURE IsDyadicNoOp(op: INTEGER; src: Item): BOOLEAN;
@@ -769,7 +770,7 @@ BEGIN
     IF y.type.form = ORB.Proc THEN
       IF    y.lev > 0 THEN x.mode := Eadr;    x.n := RSP;  x.offset := y.val;
       ELSIF y.lev = 0 THEN x.mode := Code;    x.n := 0;    x.offset := y.val;
-      ELSE                 x.mode := Import;  x.n := LSL(-y.lev, 16) + y.exno;
+      ELSE                 x.mode := Import;  x.n := LSL(-y.lev, 16) + y.val;
       END
     ELSIF y.type.form = ORB.String THEN
       x.mode := String;  x.readonly := TRUE;  x.n := y.lev;  x.offset := y.val;
@@ -779,7 +780,7 @@ BEGIN
   ELSIF y.class = ORB.Var THEN
       IF    y.lev > 0 THEN x.mode := Eadr;    x.n := RSP;  x.offset := y.val;
       ELSIF y.lev = 0 THEN x.mode := Global;  x.n := 0;    x.offset := y.val;
-      ELSE(*y.lev < 0 *)   x.mode := Import;  x.n := LSL(-y.lev, 16) + y.exno;
+      ELSE(*y.lev < 0 *)   x.mode := Import;  x.n := LSL(-y.lev, 16) + y.val;
       END
   ELSIF y.class = ORB.Par THEN
     x.mode := Stkind;  x.n := y.val
@@ -866,7 +867,7 @@ BEGIN
     save := -1
   ELSE
     save := current;
-    OpModRegRm(87H, Reg, current, 8, required, -1, 0, 0)  (* xchg *)
+    OpModRegRm(87H, Reg, current, 8, required, -1, 0, 0, 0)  (* xchg *)
   END
 END SaveExchange;
 
@@ -886,8 +887,10 @@ BEGIN
   ImpFix[ImpFInx].offset := X64.PC;
   ImpFix[ImpFInx].fix    := sysfn;  (* 16/module 0, 16/impno sysfn *)
   INC(ImpFInx);
-  X64.EmitBytes(4, 0);
+  X64.EmitBytes(4, -(X64.PC + 4))  (* Offset from next instruction to module address 0 *)
 END CallSysFn;
+
+
 
 PROCEDURE StoreStruct*(VAR x, y: Item);   (* x := y *)
 VAR sadr, slen, dadr, dlen, xchgrsi, xchgrdi, xchgrcx: INTEGER;
@@ -914,7 +917,7 @@ BEGIN Trace(TraceAny, "StoreStruct(x: "); l.Item(x, Trc);  l.s(", y: ", Trc); l.
         END
       ELSE
         (* Generate code to fail on differing size *)
-        OpModRegRm(Cmp+1, Reg, slen, 8, dlen, -1, 0, 0);
+        OpModRegRm(Cmp+1, Reg, slen, 8, dlen, -1, 0, 0, 0);
         X64.Emit(74H);   X64.Emit(5);  (* je: if sizes match skip failure *)
         CallSysFn(ArraySizeMismatchProc)
       END
@@ -963,7 +966,7 @@ BEGIN Trace(TraceAny, "CopyString(x: "); l.Item(x, Trc);  l.s(", y: ", Trc); l.I
     dlen := ReserveNextFree();
     LoadStructure(dadr, dlen, x);
     (* Check length at run time *)
-    OpModRegRm(Cmp+1, Reg, slen, 8, dlen, -1, 0, 0);
+    OpModRegRm(Cmp+1, Reg, slen, 8, dlen, -1, 0, 0, 0);
     X64.Emit(76H);   X64.Emit(5);  (* jbe: if source fits in dest skip failure *)
     CallSysFn(ArraySizeMismatchProc)
   END;
@@ -1071,30 +1074,33 @@ BEGIN
   l.s(", ftype: ", Trc);        l.Type(ftype, Trc);
   l.s(") SPO ", Trc);           l.i(X64.SPO, Trc);  l.l(Trc);
   ASSERT(stkoff = 0);  (* Not supported for Windows ABI calls *)
-  ASSERT(x.mode IN {Stkind, Eadr, String, Global, Import});
-  IF (x.mode = Stkind) & ((ftype.form = ORB.Array) & (ftype.len < 0) OR (ftype.form = ORB.Record)) THEN
-    (* Passing open array or record parm to same *)
-    PushMem(Eadr, FALSE, 8, RSP, -1, 0, x.n + 8 * X64.SPO + 8);  X64.AdjustStack(1);  (* Length or descriptor *)
-    PushMem(Eadr, FALSE, 8, RSP, -1, 0, x.n + 8 * X64.SPO);      X64.AdjustStack(1);  (* Address *)
+  IF x.mode = Reg THEN ORS.Mark("Not compatible with VAR parameter")
   ELSE
-    (* First pass array length or type descriptor address, if any *)
-    IF (ftype.form = ORB.Array) & (ftype.len < 0) THEN ASSERT(x.type.len >= 0);
-      IF x.type.form = ORB.Array THEN
-        PushImmediate(x.type.len)
-      ELSE
-        PushImmediate(x.type.size) (* Passing non-array to ARRAY OF BYTE *)
+    ASSERT(x.mode IN {Stkind, Eadr, String, Global, Import});
+    IF (x.mode = Stkind) & ((ftype.form = ORB.Array) & (ftype.len < 0) OR (ftype.form = ORB.Record)) THEN
+      (* Passing open array or record parm to same *)
+      PushMem(Eadr, FALSE, 8, RSP, -1, 0, x.n + 8 * X64.SPO + 8);  X64.AdjustStack(1);  (* Length or descriptor *)
+      PushMem(Eadr, FALSE, 8, RSP, -1, 0, x.n + 8 * X64.SPO);      X64.AdjustStack(1);  (* Address *)
+    ELSE
+      (* First pass array length or type descriptor address, if any *)
+      IF (ftype.form = ORB.Array) & (ftype.len < 0) THEN ASSERT(x.type.len >= 0);
+        IF x.type.form = ORB.Array THEN
+          PushImmediate(x.type.len)
+        ELSE
+          PushImmediate(x.type.size) (* Passing non-array to ARRAY OF BYTE *)
+        END;
+        X64.AdjustStack(1) (* Pass array length *)
+      ELSIF ftype.form = ORB.Record THEN
+        reg := FirstFreeReg();
+        OpModRegRm(8DH, Code, reg, 8, 0, -1, 0, ftype.len, 0);  (* lea type desciptor *)
+        PushReg(reg);  X64.AdjustStack(1)  (* Pass record descriptor *)
       END;
-      X64.AdjustStack(1) (* Pass array length *)
-    ELSIF ftype.form = ORB.Record THEN
-      reg := FirstFreeReg();
-      OpModRegRm(8DH, Code, reg, 8, 0, -1, 0, ftype.len);  (* lea type desciptor *)
-      PushReg(reg);  X64.AdjustStack(1)  (* Pass record descriptor *)
+      (* Pass array or record address *)
+      PushAdr(x);  X64.AdjustStack(1)
     END;
-    (* Pass array or record address *)
-    PushAdr(x);  X64.AdjustStack(1)
+    Disassemble(x.mode, "VarParam")
   END;
-  FreeRegs(x);
-  Disassemble(x.mode, "VarParam")
+  FreeRegs(x)
 END VarParam;
 
 PROCEDURE OpenArrayParam*(VAR x: Item; stkoff: INTEGER);
@@ -1186,21 +1192,21 @@ BEGIN
   ASSERT(x.mode IN {Eadr, Global, Code, Import});
 
   IF x.type.native THEN  (* Adjust to 16 byte aligned pos *)
-    OpModRegRm(87H, Reg, RBP, 8, RSP, -1, 0, 0);  (* xchg rsp,rbp *)
+    OpModRegRm(87H, Reg, RBP, 8, RSP, -1, 0, 0, 0);  (* xchg rsp,rbp *)
     Disassemble(0, "Switch to Windows ABI aligned stack frame")
   END;
 
   IF x.type.form = ORB.Proc THEN
     IF x.mode IN {Eadr, Global} THEN
-      OpModRegRm(0FFH, x.mode, 2, 4, x.n, x.index, x.scale, x.offset)  (* call [addr] *)
+      OpModRegRm(0FFH, x.mode, 2, 4, x.n, x.index, x.scale, x.offset, 0)  (* call [addr] *)
     ELSE
       X64.Emit(0E8H);
       IF x.mode = Code THEN
         X64.EmitBytes(4, x.offset - (X64.PC + 4))
       ELSIF x.mode = Import THEN
         ImpFix[ImpFInx].offset := X64.PC;
-        ImpFix[ImpFInx].fix := x.n; INC(ImpFInx);
-        X64.EmitBytes(4, 0)
+        ImpFix[ImpFInx].fix    := x.n;  INC(ImpFInx);
+        X64.EmitBytes(4, -(X64.PC + 4))  (* Offset from next instruction to module address 0 *)
       ELSE
         l.s("** mode ", Trc);  l.Mode(x.mode, Trc);  l.sl(" **", Trc);
         ASSERT(FALSE)
@@ -1216,7 +1222,7 @@ BEGIN
     X64.AdjustStack(-(x.type.len DIV 8));  (* matches stack adjustment by <ret n> *)
   ELSE (* Windows ABI stack handling *)
     stackspace := x.type.len;  IF stackspace < 32 THEN stackspace := 32 END;
-    OpModRegRm(8DH, Eadr, RSP, 8, RBP, -1, 0, stackspace + 8);  (* lea rsp, rbp + parmreserved *)
+    OpModRegRm(8DH, Eadr, RSP, 8, RBP, -1, 0, stackspace + 8, 0);  (* lea rsp, rbp + parmreserved *)
     Disassemble(0, "Drop Windows ABI parameter area from stack");
     X64.AdjustStack(-(stackspace DIV 8 + 1))  (* matches stack adjustment by <ret n> *)
   END;
@@ -1336,8 +1342,8 @@ BEGIN Trace(TraceAny, "Abs(x "); l.Item(x, Trc); l.sl(")", Trc);
   ELSE
     Load(x);  reg := FirstFreeReg();
     MoveReg(reg, x.n);                              (* mov     reg,x.n *)
-    OpModRegRm(0F7H,  Reg, 3,   8, x.n, -1, 0, 0);  (* neg     x.n     *)
-    OpModRegRm(0F4CH, Reg, x.n, 8, reg, -1, 0, 0)   (* cmovl   x.n,reg *)
+    OpModRegRm(0F7H,  Reg, 3,   8, x.n, -1, 0, 0, 0);  (* neg     x.n     *)
+    OpModRegRm(0F4CH, Reg, x.n, 8, reg, -1, 0, 0, 0)   (* cmovl   x.n,reg *)
   END;
   Disassemble(x.mode, "Abs")
 END Abs;
@@ -1397,7 +1403,7 @@ BEGIN
   Trace(TraceAny, "Shift("); l.s(name, Trc); l.s(", x: ", Trc); l.Item(x, Trc); l.s(", y: ", Trc); l.Item(y, Trc); l.l(Trc);
   IF y.mode = Const THEN
     Load(x);
-    OpModRegRm(0C1H, Reg, op, 8, x.n, -1, 0, 0);  X64.Emit(y.n);
+    OpModRegRm(0C1H, Reg, op, 8, x.n, -1, 0, 0, 1);  X64.Emit(y.n);
   ELSE
     IF x.mode # Reg THEN LoadReg(FindAndReserveReg(RAX, -{RCX}), x) END;
     IF x.n = RCX THEN  (* Use a different register as we'll need cl for shift count *)
@@ -1406,7 +1412,7 @@ BEGIN
     (* Get shift amount to rcx *)
     IF y.mode # Reg THEN LoadReg(FindAndReserveReg(RCX, AllFree), y) END;
     SaveExchange(y.n, RCX, xchgrcx);
-    OpModRegRm(0D3H, Reg, op, 8, x.n, -1, 0, 0);  (* shiftop reg,cl *)
+    OpModRegRm(0D3H, Reg, op, 8, x.n, -1, 0, 0, 0);  (* shiftop reg,cl *)
     RestoreReg(RCX, xchgrcx)
   END;
   Disassemble(0, name)
@@ -1475,22 +1481,12 @@ BEGIN Trace(TraceAny, "Increment(");
     Load(y);
     (*X64.AluOpRegToMem(op, y.n, x.size, x.n, x.index, x.scale, x.offset)*)
     (*X64.EmitRegMemOp(op+1, y.n, x.size, x.n, x.index, x.scale, x.offset)*)
-    OpItem(op+1, y.n, 8, x)
+    OpItem(op+1, y.n, 8, 0, x)
   END;
 
   Disassemble(x.mode, "INC/DEC");
   FreeRegs(x);  FreeRegs(y)
 END Increment;
-
-
-PROCEDURE CallRuntime(procnum: INTEGER);
-BEGIN
-  X64.Emit(0E8H);
-  ImpFix[ImpFInx].offset := X64.PC;
-  ImpFix[ImpFInx].fix    := procnum;  (* 16/0, 16/procnum *)
-  INC(ImpFInx);
-  X64.EmitBytes(4, 0)
-END CallRuntime;
 
 
 PROCEDURE Assert*(VAR x: Item);
@@ -1500,7 +1496,7 @@ BEGIN Trace(TraceAny, "Assert(x: ");  l.Item(x, Trc);  l.sl(")", Trc);
     ASSERT(x.n DIV 16 = 8);
     X64.Emit(x.n - 10H);  X64.Emit(5);  (* Skip over call instruction if condition met *)
   END;
-  IF x.n # 1 THEN CallRuntime(AssertionFailureProc) END;  (* Jump to assert failure handler *)
+  IF x.n # 1 THEN CallSysFn(AssertionFailureProc) END;  (* Jump to assert failure handler *)
   Disassemble(x.mode, "ASSERT")
 END Assert;
 
@@ -1511,7 +1507,7 @@ BEGIN
   ASSERT(x.mode IN {Stkind, Eadr, Global, Import});
   PushAdr(x);  FreeRegs(x);          X64.AdjustStack(1);
   PushImmediate(x.type.base.size);   X64.AdjustStack(1);
-  CallRuntime(NewProc);
+  CallSysFn(NewProc);
   X64.AdjustStack(-2);
   Disassemble(x.mode, "New")
 END New;
@@ -1599,7 +1595,7 @@ BEGIN Trace(TraceAny, "Singleton(x: "); l.Item(x, Trc); l.sl(")", Trc);
     Load(x);
     reg := ReserveNextFree();
     LoadImmediate(reg, 1);
-    OpModRegRm(0FABH, Reg, reg, 8, x.n, -1, 0, 0);  (* bts reg, x *)
+    OpModRegRm(0FABH, Reg, reg, 8, x.n, -1, 0, 0, 0);  (* bts reg, x *)
     Disassemble(x.mode, "Singleton");
     FreeRegs(x);
     x.mode := Reg;  x.n := reg
@@ -1619,11 +1615,11 @@ BEGIN
   Depar(x);  Depar(y);
   IF y.mode = Const THEN Load(y) END;
   IF x.mode = Const THEN
-    OpItem(0FBAH, 4, 8, y);   (* bt y,imm *)
+    OpItem(0FBAH, 4, 8, 1, y);   (* bt y,imm *)
     X64.Emit(x.n)
   ELSE
     Load(x);
-    OpItem(0FA3H, x.n, 8, y)  (* bt y,x *)
+    OpItem(0FA3H, x.n, 8, 0, y)  (* bt y,x *)
   END;
   Disassemble(y.mode, "In");
   FreeRegs(x);  FreeRegs(y);
@@ -1651,7 +1647,7 @@ BEGIN
       IF y.mode = Const THEN
         y.n := -y.n - 1  (* = invert *)
       ELSE
-        Load(y);  OpItem(0F7H, 2, 8, y);
+        Load(y);  OpItem(0F7H, 2, 8, 0, y);
         Disassemble(y.mode, "Invert for SET -")
       END
     END;
@@ -1677,17 +1673,17 @@ BEGIN
   Depar(x);  Depar(y);
   IF y.mode = Const THEN
     IF op = 0 THEN
-      OpItem(0FBAH, 5, 8, x)  (* bts x,imm *)
+      OpItem(0FBAH, 5, 8, 0, x)  (* bts x,imm *)
     ELSE
-      OpItem(0FBAH, 6, 8, x)  (* btr x,imm *)
+      OpItem(0FBAH, 6, 8, 0, x)  (* btr x,imm *)
     END;
     X64.Emit(y.offset)
   ELSE
     Load(y);
     IF op = 0 THEN
-      OpItem(0FABH, y.n, 8, x)  (* bts x,y *)
+      OpItem(0FABH, y.n, 8, 0, x)  (* bts x,y *)
     ELSE
-      OpItem(0FB3H, y.n, 8, x)  (* btr x,y *)
+      OpItem(0FB3H, y.n, 8, 0, x)  (* btr x,y *)
     END
   END;
   FreeRegs(x);  FreeRegs(y);
@@ -1823,9 +1819,9 @@ BEGIN
   ASSERT(x.mode >= Const);  ASSERT(y.mode >= Const);
   IF (y.mode = Const) & (y.n >= -80000000H) & (y.n < 80000000H) THEN
     IF (y.n >= -80H) & (y.n < 80H) THEN immsize := 1 ELSE immsize := 4 END;
-    IF    x.type.size = 1 THEN OpItem(80H, 7, x.type.size, x)
-    ELSIF immsize     = 1 THEN OpItem(83H, 7, x.type.size, x)
-    ELSE                       OpItem(81H, 7, x.type.size, x)
+    IF    x.type.size = 1 THEN OpItem(80H, 7, x.type.size, immsize, x)
+    ELSIF immsize     = 1 THEN OpItem(83H, 7, x.type.size, immsize, x)
+    ELSE                       OpItem(81H, 7, x.type.size, immsize, x)
     END;
     X64.EmitBytes(immsize, y.n);
   ELSE
@@ -1892,29 +1888,29 @@ Trace(TraceAny, "StringRelation("); l.Sym(op, Trc);
   SaveExchange(-1,   RAX, saveax);
   Disassemble(0, "Adjust registers for loop lodsb");
 
-  OpModRegRm(003BH, Reg, RCX, 8, y.index, -1, 0, 0);   (* cmp   xlen,ylen *)
-  OpModRegRm(0F47H, Reg, RCX, 8, y.index, -1, 0, 0);   (* cmova xlen,ylen *)
+  OpModRegRm(003BH, Reg, RCX, 8, y.index, -1, 0, 0, 0); (* cmp   xlen,ylen *)
+  OpModRegRm(0F47H, Reg, RCX, 8, y.index, -1, 0, 0, 0); (* cmova xlen,ylen *)
   Disassemble(0, "Determine shorter string length");
 
-  OpModRegRm(Minus+3, Reg, y.n, 8, RSI, -1, 0, 0);     (* sub    y.n,rsi      *)
-  AluOpFromImmediate(Minus, Reg, 1, 8, y.n, -1, 0, 0); (* dec    y.n          *)
+  OpModRegRm(Minus+3, Reg, y.n, 8, RSI, -1, 0, 0, 0);   (* sub    y.n,rsi      *)
+  AluOpFromImmediate(Minus, Reg, 1, 8, y.n, -1, 0, 0);  (* dec    y.n          *)
   Disassemble(0, "String offset y[n] from x[n+1]");
-  lbl := X64.PC;                                       (* lbl:                     *)
-  X64.Emit(0ACH);                                      (* lodsb                    *)
-  OpModRegRm(Cmp+2, Eadr, RAX, 1, RSI, y.n, 0, 0);     (* cmp    al,[rsi+y.n] *)
+  lbl := X64.PC;                                        (* lbl:                     *)
+  X64.Emit(0ACH);                                       (* lodsb                    *)
+  OpModRegRm(Cmp+2, Eadr, RAX, 1, RSI, y.n, 0, 0, 0);   (* cmp    al,[rsi+y.n] *)
   Disassemble(0, "Compare one byte");
 
-  X64.Emit(75H);  X64.Emit(0BH);                       (* jne    end               *)
+  X64.Emit(75H);  X64.Emit(0BH);                        (* jne    end               *)
   Disassemble(0, "If string mismatch");
 
-  X64.Emit(8); X64.Emit(0C0H);                         (* or     al,al             *)
-  X64.Emit(0E0H); X64.Emit(lbl-(X64.PC+1));            (* loopne lbl               *)
+  X64.Emit(8); X64.Emit(0C0H);                          (* or     al,al             *)
+  X64.Emit(0E0H); X64.Emit(lbl-(X64.PC+1));             (* loopne lbl               *)
   Disassemble(0, "If not out of bytes, loop back");
 
-  X64.Emit(74H);  X64.Emit(5);                         (* je     end               *)
+  X64.Emit(74H);  X64.Emit(5);                          (* je     end               *)
   Disassemble(0, "If strings match");
 
-  CallRuntime(UnterminatedStringProc);  (* error handler *)
+  CallSysFn(UnterminatedStringProc);  (* error handler *)
   Disassemble(0, "Unterminated string error trap");
 
   RestoreReg(RSI, xchgsi);
@@ -1971,14 +1967,14 @@ BEGIN
   IF (y < -80000000H) OR (y >= 80000000H) THEN
     reg := FirstFreeReg();
     LoadImmediate(reg, y);
-    OpModRegRm(0FAFH, Reg, x.n, 8, reg, -1, 0, 0)
+    OpModRegRm(0FAFH, Reg, x.n, 8, reg, -1, 0, 0, 0)
   ELSE
     Depar(x);
     IF x.mode IN {Reg, Eadr} THEN reg := x.n ELSE reg := FirstFreeReg() END;
     IF (y < -80H) OR (y >= 80H) THEN
-      OpItem(69H, reg, 8, x);  X64.EmitBytes(4, y)  (* imul reg,x,imm32 *)
+      OpItem(69H, reg, 8, 4, x);  X64.EmitBytes(4, y)  (* imul reg,x,imm32 *)
     ELSE
-      OpItem(6BH, reg, 8, x);  X64.Emit(y)          (* imul reg,x,imm8 *)
+      OpItem(6BH, reg, 8, 1, x);  X64.Emit(y)          (* imul reg,x,imm8 *)
     END;
     FreeRegs(x);  x.n := reg;  ReserveReg(reg)
   END
@@ -1996,13 +1992,13 @@ BEGIN Trace(TraceAny, "MulOp(x: "); l.Item(x, Trc); l.s(", y: ", Trc); l.Item(y,
       (* TODO: if y.n = 2 use shorter shl r/m64,1 instruction REX D1 /4 *)
       IF (y.n >= 2) & (log2(y.n, exponent) = 1) THEN
         Load(x);
-        OpModRegRm(0C1H, Reg, 4, 8, x.n, -1, 0, 0);  X64.Emit(exponent);  (* shl *)
+        OpModRegRm(0C1H, Reg, 4, 8, x.n, -1, 0, 0, 1);  X64.Emit(exponent);  (* shl *)
       ELSE
         MulImmediate(x, y.n)
       END
     ELSE
       Load(x); Depar(y);
-      OpItem(0FAFH, x.n, 8, y)  (* imul x.n,y *)
+      OpItem(0FAFH, x.n, 8, 0, y)  (* imul x.n,y *)
     END;
     FreeRegs(y);
     Disassemble(y.mode, "MulOp")
@@ -2029,7 +2025,7 @@ BEGIN
 
       Load(x);
       IF op = ORS.div THEN (* DIV by power of 2 *)
-        OpModRegRm(0C1H, Reg, 7, 8, x.n, -1, 0, 0);  X64.Emit(exponent);  (* sar *)
+        OpModRegRm(0C1H, Reg, 7, 8, x.n, -1, 0, 0, 1);  X64.Emit(exponent);  (* sar *)
       ELSE (* MOD power of 2 *)
         AluOpFromImmediate(And, Reg, y.n-1, 8, x.n, -1, 0, 0);
       END;
@@ -2068,10 +2064,10 @@ BEGIN
 
       IF y.mode = Const THEN
         reg := FirstFreeReg();  LoadImmediate(reg, y.n);
-        OpModRegRm(0F7H, Reg, 7, 8, reg, -1, 0, 0);   (* idiv reg *)
+        OpModRegRm(0F7H, Reg, 7, 8, reg, -1, 0, 0, 0);   (* idiv reg *)
       ELSE
         Depar(y);
-        OpItem(0F7H, 7, 8, y);                        (* idiv y *)
+        OpItem(0F7H, 7, 8, 0, y);                        (* idiv y *)
       END;
       Disassemble(y.mode, "DivOp divide");
 
@@ -2138,7 +2134,7 @@ BEGIN Trace(TraceAny, "Neg(x: "); l.Item(x, Trc); l.l(Trc);
     x.n := -x.n
   ELSE
     Load(x);
-    OpModRegRm(0F7H, Reg, 3, 8, x.n, -1, 0, 0);
+    OpModRegRm(0F7H, Reg, 3, 8, x.n, -1, 0, 0, 0);
     Disassemble(x.mode, "Neg")
   END
 END Neg;
@@ -2381,7 +2377,7 @@ PROCEDURE Open*(sourcefn, modid: ARRAY OF CHAR);
 VAR i: INTEGER;
 BEGIN
   l.Init(sourcefn);
-  Trflags := {TraceAny};  (*{TraceAny, TraceMakeItem};*)
+  Trflags := {TraceAny, TraceMakeItem};  (*{TraceAny, TraceMakeItem};*)
   Trace(TraceAny, "ORG Open('"); l.s(sourcefn, Trc); l.sl("')", Trc);
   X64.ClearStack;   ClearRegs;
   X64.Init;
@@ -2459,6 +2455,7 @@ BEGIN
   (* Prepare to patch header pointers directly into X64.Text *)
 
   X64.Header.varsize := Varsize;
+  X64.Header.key     := key;
 
   (* Emit global VAR pointer table *)
   X64.Align(16);
@@ -2475,8 +2472,8 @@ BEGIN
   X64.Header.commands := X64.PC;   (* Set command table address *)
   obj := ORB.topScope.next;
   WHILE obj # NIL DO  (* commands *)
-    IF (obj.exno # 0) & (obj.class = ORB.Const) & (obj.type.form = ORB.Proc) &
-        (obj.type.nofpar = 0) & (obj.type.base = ORB.noType) THEN
+    IF (obj.exno # 0) & (obj.class = ORB.Const) & (obj.type.form = ORB.Proc)
+     & (obj.type.nofpar = 0) & (obj.type.base = ORB.noType) THEN
       X64.EmitString(obj.name); X64.EmitBytes(4, obj.val)
     END;
     obj := obj.next
@@ -2489,23 +2486,29 @@ BEGIN
   reslen := (X64.PC + exno * 4 + 15) DIV 16 * 16;
 
   (* Emit export table *)
+  l.l(Trc);  l.sl("Exports:", Trc);
   obj := ORB.topScope.next;
   WHILE obj # NIL DO  (* entries *)
     IF obj.exno # 0 THEN
       IF    obj.class = ORB.Const THEN ASSERT(obj.type.form = ORB.Proc);
+                                       l.s("  proc   ", Trc); l.h(obj.val, Trc); l.sl("H.", Trc);
                                        X64.EmitBytes(4, obj.val)
-      ELSIF obj.class = ORB.Var   THEN X64.EmitBytes(4, reslen + obj.val)
+      ELSIF obj.class = ORB.Var   THEN l.s("  var    ", Trc); l.h(reslen + obj.val, Trc); l.sl("H.", Trc);
+                                       X64.EmitBytes(4, reslen + obj.val)
       ELSIF obj.class = ORB.Typ   THEN
         IF obj.type.form = ORB.Record THEN
-          X64.EmitBytes(4, reslen + obj.type.len MOD 10000H)
+          l.s("  record ", Trc); l.h(obj.type.len, Trc); l.sl("H.", Trc);
+          X64.EmitBytes(4, obj.type.len MOD 10000H)
         ELSIF (obj.type.form = ORB.Pointer)
             & ((obj.type.base.typobj = NIL) OR (obj.type.base.typobj.exno = 0)) THEN
-          X64.EmitBytes(4, reslen + obj.type.base.len MOD 10000H)
+          l.s("  ptr    ", Trc); l.h(obj.type.base.len, Trc); l.sl("H.", Trc);
+          X64.EmitBytes(4, obj.type.base.len MOD 10000H)
         END
       END
     END;
     obj := obj.next
   END;
+  l.s("Export count ", Trc); l.i((X64.PC - X64.Header.exports) DIV 4, Trc); l.sl(".", Trc);
   X64.EmitBytes(4, -1);  (* Mark end of table *)
 
   (* End of resident code/tables *)
