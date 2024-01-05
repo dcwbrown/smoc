@@ -9,9 +9,11 @@ CONST
 
   ImageBase   = 400000H;
   FadrImport  = 400H;  RvaImport  = 1000H;  (* Import directory table *)
-  FadrModules = 600H;  RvaModules = 2000H;  (* Oberon modules starting with Winboot *)
+  FadrModules = 800H;  RvaModules = 2000H;  (* Oberon modules starting with Winboot *)
 
-  ImportCount = 7;          (* Number of Kernel32 imports *)
+  Kernel32ImportCount = 12;
+  User32ImportCount   =  2;
+  Shell32ImportCount  =  1;
 
 TYPE
   ObjectFile = POINTER TO ObjectFileDesc;
@@ -84,22 +86,36 @@ TYPE
   END;
 
   ImportDirectoryTable = RECORD
-    (* Just one import directory table entry - for kernel32 *)
-    LookupTable:  U32;   (*  0: RVA of table of import hint RVAs              *)
-    Datestamp:    U32;   (*  4: 0                                             *)
-    FwdChain:     U32;   (*  8: 0                                             *)
-    Dllnameadr:   U32;   (* 12: RVA of dll name                               *)
-    Target:       U32;   (* 16: Where to write imported addresses             *)
+    (* Import directory table entry for Kernel32 *)
+    Kernel32LookupTable:  U32;   (*  0: RVA of table of import hint RVAs              *)
+    Kernel32Datestamp:    U32;   (*  4: 0                                             *)
+    Kernel32FwdChain:     U32;   (*  8: 0                                             *)
+    Kernel32Dllnameadr:   U32;   (* 12: RVA of dll name                               *)
+    Kernel32Target:       U32;   (* 16: Where to write imported addresses             *)
+
+    (* Import directory table entry for User32 *)
+    User32LookupTable:  U32;   (*  0: RVA of table of import hint RVAs              *)
+    User32Datestamp:    U32;   (*  4: 0                                             *)
+    User32FwdChain:     U32;   (*  8: 0                                             *)
+    User32Dllnameadr:   U32;   (* 12: RVA of dll name                               *)
+    User32Target:       U32;   (* 16: Where to write imported addresses             *)
+
+    (* Import directory table entry for Shell32 *)
+    Shell32LookupTable:  U32;   (*  0: RVA of table of import hint RVAs              *)
+    Shell32Datestamp:    U32;   (*  4: 0                                             *)
+    Shell32FwdChain:     U32;   (*  8: 0                                             *)
+    Shell32Dllnameadr:   U32;   (* 12: RVA of dll name                               *)
+    Shell32Target:       U32;   (* 16: Where to write imported addresses             *)
+
     DirectoryEnd: ARRAY 5 OF U32;  (* Sentinel 0 filled directory table entry *)
-    (* Import lookup table for kernel32.dll *)
-    Lookups:      ARRAY ImportCount + 1 OF I64; (* 40-72: RVA of Hints[] entry below *)
-    (* dll name *)
-    Dllname:      ARRAY 16 OF CHAR;  (*  80: "kernel32.dll" *)
-    (* hint table *)
-    Hints:        ARRAY ImportCount OF RECORD
-      Num:          U16;               (*  0 - Import 1 import number *)
-      Name:         ARRAY 20 OF CHAR;  (*  E.g. "LoadLibraryA"             *)
-    END
+
+    Kernel32Lookups: ARRAY Kernel32ImportCount + 1 OF I64; (* RVAs of Hints[] entry below *)
+    User32Lookups:   ARRAY User32ImportCount   + 1 OF I64; (* RVAs of Hints[] entry below *)
+    Shell32Lookups:  ARRAY Shell32ImportCount  + 1 OF I64; (* RVAs of Hints[] entry below *)
+
+    Kernel32Dllname: ARRAY 14 OF CHAR;  (*  80: "kernel32.dll" *)
+    User32Dllname:   ARRAY 12 OF CHAR;  (*  80: "user32.dll"   *)
+    Shell32Dllname:  ARRAY 12 OF CHAR;  (*  80: "shell32.dll"  *)
   END;
 
   BootstrapBuffer = RECORD
@@ -119,7 +135,10 @@ VAR
 
   Bootstrap:  BootstrapBuffer;
 
-  Idt: ImportDirectoryTable;
+  Idt:         ImportDirectoryTable;
+  ImportHints: ARRAY 512 OF BYTE;
+  HintSize:    INTEGER;
+
 
   (* Section layout - generates 2 sections:
      1. Imports section requesting standard system functions
@@ -154,38 +173,75 @@ END FileAlign;
 (* -------------------------------------------------------------------------- *)
 (* -------------------------------------------------------------------------- *)
 
-PROCEDURE WriteImports;  (* target: RVA to receive imported addresses *)
+PROCEDURE WriteImports;
+VAR i: INTEGER;
+
   PROCEDURE FieldRVA(VAR field: ARRAY OF BYTE): U32;
   BEGIN RETURN RvaImport + SYSTEM.ADR(field) - SYSTEM.ADR(Idt) END FieldRVA;
-  PROCEDURE IDTprocentry(i: INTEGER; name: ARRAY OF CHAR);
+
+  PROCEDURE AddProc(VAR hints: ARRAY OF BYTE; VAR i: INTEGER; name: ARRAY OF CHAR);
+  VAR n: INTEGER;
   BEGIN
-    Idt.Lookups[i]    := FieldRVA(Idt.Hints[i]);
-    Idt.Hints[i].Name := name
-  END IDTprocentry;
+    n := 0; REPEAT hints[i] := ORD(name[n]);  INC(i);  INC(n) UNTIL name[n-1] = 0X;
+  END AddProc;
+
 BEGIN
   ZeroFill(Idt);
-  Idt.LookupTable   := FieldRVA(Idt.Lookups);
-  Idt.Dllnameadr    := FieldRVA(Idt.Dllname);
-  Idt.Dllname       := "KERNEL32.DLL";
-  Idt.Target        := RvaModules + Bootstrap.Header.imports + 8;  (* 8 for HeaderAdr var *)
-  IDTprocentry(0, "LoadLibraryA");
-  IDTprocentry(1, "GetProcAddress");
-  IDTprocentry(2, "VirtualAlloc");
-  IDTprocentry(3, "ExitProcess");
-  IDTprocentry(4, "GetStdHandle");
-  IDTprocentry(5, "SetConsoleOutputCP");
-  IDTprocentry(6, "WriteFile");
+  i := 0;
 
-  (*
-  IDTprocEntry(7, "AddVectoredExceptionHandler");
-  IDTprocEntry(8, "GetCommandLineW");
-  IDTprocEntry(9, "GetSystemTimePreciseAsFileTime");
-  IDTprocEntry(10, "GetModuleFileNameW");
-  IDTprocEntry(11, "GetCurrentDirectoryW");
-  *)
+  Idt.Kernel32LookupTable := FieldRVA(Idt.Kernel32Lookups);
+  Idt.Kernel32Dllnameadr  := FieldRVA(Idt.Kernel32Dllname);
+  Idt.Kernel32Dllname     := "KERNEL32.DLL";
+  Idt.Kernel32Target      := RvaModules + Bootstrap.Header.imports + 8;  (* 8 for HeaderAdr var *)
+  Idt.Kernel32Lookups[0] := RvaImport + SYSTEM.SIZE(ImportDirectoryTable) + i;
+  ImportHints[i] := 0;  INC(i, 2);  AddProc(ImportHints, i, "LoadLibraryA");
+  Idt.Kernel32Lookups[1] := RvaImport + SYSTEM.SIZE(ImportDirectoryTable) + i;
+  ImportHints[i] := 0;  INC(i, 2);  AddProc(ImportHints, i, "GetProcAddress");
+  Idt.Kernel32Lookups[2] := RvaImport + SYSTEM.SIZE(ImportDirectoryTable) + i;
+  ImportHints[i] := 0;  INC(i, 2);  AddProc(ImportHints, i, "VirtualAlloc");
+  Idt.Kernel32Lookups[3] := RvaImport + SYSTEM.SIZE(ImportDirectoryTable) + i;
+  ImportHints[i] := 0;  INC(i, 2);  AddProc(ImportHints, i, "ExitProcess");
+  Idt.Kernel32Lookups[4] := RvaImport + SYSTEM.SIZE(ImportDirectoryTable) + i;
+  ImportHints[i] := 0;  INC(i, 2);  AddProc(ImportHints, i, "GetStdHandle");
+  Idt.Kernel32Lookups[5] := RvaImport + SYSTEM.SIZE(ImportDirectoryTable) + i;
+  ImportHints[i] := 0;  INC(i, 2);  AddProc(ImportHints, i, "SetConsoleOutputCP");
+  Idt.Kernel32Lookups[6] := RvaImport + SYSTEM.SIZE(ImportDirectoryTable) + i;
+  ImportHints[i] := 0;  INC(i, 2);  AddProc(ImportHints, i, "WriteFile");
+  Idt.Kernel32Lookups[7] := RvaImport + SYSTEM.SIZE(ImportDirectoryTable) + i;
+  ImportHints[i] := 0;  INC(i, 2);  AddProc(ImportHints, i, "AddVectoredExceptionHandler");
+  Idt.Kernel32Lookups[8] := RvaImport + SYSTEM.SIZE(ImportDirectoryTable) + i;
+  ImportHints[i] := 0;  INC(i, 2);  AddProc(ImportHints, i, "GetCommandLineW");
+  Idt.Kernel32Lookups[9] := RvaImport + SYSTEM.SIZE(ImportDirectoryTable) + i;
+  ImportHints[i] := 0;  INC(i, 2);  AddProc(ImportHints, i, "GetSystemTimePreciseAsFileTime");
+  Idt.Kernel32Lookups[10] := RvaImport + SYSTEM.SIZE(ImportDirectoryTable) + i;
+  ImportHints[i] := 0;  INC(i, 2);  AddProc(ImportHints, i, "GetModuleFileNameW");
+  Idt.Kernel32Lookups[11] := RvaImport + SYSTEM.SIZE(ImportDirectoryTable) + i;
+  ImportHints[i] := 0;  INC(i, 2);  AddProc(ImportHints, i, "GetCurrentDirectoryW");
+
+  Idt.User32LookupTable   := FieldRVA(Idt.User32Lookups);
+  Idt.User32Dllnameadr    := FieldRVA(Idt.User32Dllname);
+  Idt.User32Dllname       := "USER32.DLL";
+  Idt.User32Target        := Idt.Kernel32Target + 8 * Kernel32ImportCount;
+  Idt.User32Lookups[0] := RvaImport + SYSTEM.SIZE(ImportDirectoryTable) + i;
+  ImportHints[i] := 1;  INC(i, 2);  AddProc(ImportHints, i, "MessageBoxA");
+  Idt.User32Lookups[1] := RvaImport + SYSTEM.SIZE(ImportDirectoryTable) + i;
+  ImportHints[i] := 1;  INC(i, 2);  AddProc(ImportHints, i, "MessageBoxW");
+
+  Idt.Shell32LookupTable  := FieldRVA(Idt.Shell32Lookups);
+  Idt.Shell32Dllnameadr   := FieldRVA(Idt.Shell32Dllname);
+  Idt.Shell32Dllname      := "SHELL32.DLL";
+  Idt.Shell32Target       := Idt.User32Target + 8 * User32ImportCount;
+  Idt.Shell32Lookups[0] := RvaImport + SYSTEM.SIZE(ImportDirectoryTable) + i;
+  ImportHints[i] := 2;  INC(i, 2);  AddProc(ImportHints, i, "CommandLineToArgvW");
+
+  HintSize := i;
+
 
   spos(FadrImport);
+
   Files.WriteBytes(Exe, Idt, SYSTEM.SIZE(ImportDirectoryTable));
+  Files.WriteBytes(Exe, ImportHints, HintSize);
+
   ImportSize := Align(Files.Pos(Exe), 16) - FadrImport;
   w.s("IDT size "); w.h(ImportSize); w.sl("H.");
   ASSERT(FadrImport + ImportSize < FadrModules);
@@ -389,8 +445,12 @@ BEGIN
   spos(FadrModules);
   Files.WriteBytes(Exe, Bootstrap, Bootstrap.Header.imports);  (* Code and tables   *)
   Files.WriteInt(Exe, ImageBase + RvaModules);                 (* Header address    *)
-  Files.WriteBytes(Exe, Idt.Lookups, ImportCount*8);           (* Import references *)
-  WriteZeroes(Bootstrap.Header.varsize - (ImportCount*8 + 8));
+  Files.WriteBytes(Exe, Idt.Kernel32Lookups, Kernel32ImportCount * 8);
+  Files.WriteBytes(Exe, Idt.User32Lookups,   User32ImportCount   * 8);
+  Files.WriteBytes(Exe, Idt.Shell32Lookups,  Shell32ImportCount  * 8);
+
+  WriteZeroes(Bootstrap.Header.varsize
+            - ((Kernel32ImportCount + User32ImportCount + Shell32ImportCount) * 8 + 8));
   FileAlign(Exe, 16)
 END WriteBootstrap;
 

@@ -17,15 +17,30 @@ TYPE
 VAR
   (* WinPE.mod builds the executable with the following Winboot variables pre-loaded *)
   Header:             CodeHeaderPtr;
-  LoadLibraryA:       PROCEDURE#(libname: INTEGER): INTEGER;
-  GetProcAddress:     PROCEDURE#(hmodule, procname: INTEGER): INTEGER;
-  VirtualAlloc:       PROCEDURE#(address, size, type, protection: INTEGER): INTEGER;
-  ExitProcess:        PROCEDURE#(exitcode: INTEGER);
-  GetStdHandle:       PROCEDURE#(nStdHandle: SYSTEM.INT32): INTEGER;
-  SetConsoleOutputCP: PROCEDURE#(codepage: INTEGER) (* : INTEGER *);
-  WriteFile:          PROCEDURE#(hFile, lpBuffer, nNumberOfBytesToWrite,
-                                 lpNumberOfBytesWritten, lpOverlapped: INTEGER
-                                ): SYSTEM.CARD32;
+
+  (* Pre-loaded Kernel32 imports *)
+  LoadLibraryA:                   PROCEDURE#(libname: INTEGER): INTEGER;
+  GetProcAddress:                 PROCEDURE#(hmodule, procname: INTEGER): INTEGER;
+  VirtualAlloc:                   PROCEDURE#(address, size, type, protection: INTEGER): INTEGER;
+  ExitProcess:                    PROCEDURE#(exitcode: INTEGER);
+  GetStdHandle:                   PROCEDURE#(nStdHandle: SYSTEM.INT32): INTEGER;
+  SetConsoleOutputCP:             PROCEDURE#(codepage: INTEGER) (* : INTEGER *);
+  WriteFile:                      PROCEDURE#(hFile, lpBuffer, nNumberOfBytesToWrite,
+                                             lpNumberOfBytesWritten, lpOverlapped: INTEGER
+                                            ): SYSTEM.CARD32;
+  AddVectoredExceptionHandler:    PROCEDURE#(first, filter: INTEGER);
+  GetCommandLineW:                PROCEDURE#(): INTEGER;
+  GetSystemTimePreciseAsFileTime: PROCEDURE#(tickAdr: INTEGER): INTEGER;
+  GetModuleFileNameW:             PROCEDURE#(hModule, lpFilename, nSize: INTEGER): INTEGER;
+  GetCurrentDirectoryW:           PROCEDURE#(nsize, pbuffer: INTEGER): INTEGER;
+
+  (* Pre-loaded User32 imports *)
+  MessageBoxA:        PROCEDURE#(hWnd, lpText, lpCaption, uType: INTEGER)(*: INTEGER*);
+  MessageBoxW:        PROCEDURE#(hWnd, lpText, lpCaption, uType: INTEGER)(*: INTEGER*);
+
+  (* Pre-loaded Shell32 imports *)
+  CommandLineToArgvW: PROCEDURE#(lpCmdLine, pNumArgs: INTEGER): INTEGER;
+
   (* End of pre-loaded variables *)
 
   Stdout:    INTEGER;
@@ -342,6 +357,8 @@ BEGIN
   ws("crlf at "); wh(SYSTEM.ADR(crlf)); wsl("H.");
 
   LoadRemainingModules;
+
+  MessageBoxA(0, SYSTEM.ADR("Complete."), SYSTEM.ADR("Winboot"), 0);
 
   wsl("Winboot complete.");  ExitProcess(0);
 END Winboot.
