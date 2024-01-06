@@ -623,7 +623,7 @@ BEGIN
 END PushAdr;
 
 PROCEDURE Push*(VAR x: Item);
-VAR reg: INTEGER;
+VAR reg, offset: INTEGER;
 BEGIN
   IF    (x.mode = Code) & (x.type.form = ORB.Proc) THEN PushAdr(x)
   ELSIF x.mode = Const THEN PushImmediate(x.n)
@@ -632,7 +632,9 @@ BEGIN
     IF x.n < 2 THEN PushImmediate(x.n) ELSE Load(x);  PushReg(x.n) END
   ELSIF x.mode IN {Stkind, Eadr, Code, String, Global, Import} THEN
     Depar(x);
-    PushMem(x.mode, X64.IsSigned(x.type), x.type.size, x.n, x.index, x.scale, x.offset)
+    offset := x.offset;
+    IF (x.mode = Eadr) & (x.n = RSP) THEN INC(offset, X64.SPO * 8) END;
+    PushMem(x.mode, X64.IsSigned(x.type), x.type.size, x.n, x.index, x.scale, offset)
   ELSE
     ASSERT(FALSE)
   END;

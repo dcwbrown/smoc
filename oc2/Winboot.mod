@@ -16,7 +16,7 @@ TYPE
 
 VAR
   (* WinPE.mod builds the executable with the following Winboot variables pre-loaded *)
-  Header:             CodeHeaderPtr;
+  Header: CodeHeaderPtr;
 
   (* Pre-loaded Kernel32 imports *)
   LoadLibraryA:                   PROCEDURE#(libname: INTEGER): INTEGER;
@@ -71,6 +71,7 @@ BEGIN
   s[j] := 0X;  DEC(j);
   WHILE i < j DO ch:=s[i]; s[i]:=s[j]; s[j]:=ch; INC(i); DEC(j) END;
 END IntToHex;
+
 
 PROCEDURE Strlen(s: ARRAY OF BYTE): INTEGER;
 VAR i: INTEGER;

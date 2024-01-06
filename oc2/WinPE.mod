@@ -136,8 +136,6 @@ VAR
   Bootstrap:  BootstrapBuffer;
 
   Idt:         ImportDirectoryTable;
-  ImportHints: ARRAY 512 OF BYTE;
-  HintSize:    INTEGER;
 
 
   (* Section layout - generates 2 sections:
@@ -174,7 +172,10 @@ END FileAlign;
 (* -------------------------------------------------------------------------- *)
 
 PROCEDURE WriteImports;
-VAR i: INTEGER;
+VAR
+  i:           INTEGER;
+  importhints: ARRAY 512 OF BYTE;
+  hintsize:    INTEGER;
 
   PROCEDURE FieldRVA(VAR field: ARRAY OF BYTE): U32;
   BEGIN RETURN RvaImport + SYSTEM.ADR(field) - SYSTEM.ADR(Idt) END FieldRVA;
@@ -194,53 +195,53 @@ BEGIN
   Idt.Kernel32Dllname     := "KERNEL32.DLL";
   Idt.Kernel32Target      := RvaModules + Bootstrap.Header.imports + 8;  (* 8 for HeaderAdr var *)
   Idt.Kernel32Lookups[0] := RvaImport + SYSTEM.SIZE(ImportDirectoryTable) + i;
-  ImportHints[i] := 0;  INC(i, 2);  AddProc(ImportHints, i, "LoadLibraryA");
+  importhints[i] := 0;  INC(i, 2);  AddProc(importhints, i, "LoadLibraryA");
   Idt.Kernel32Lookups[1] := RvaImport + SYSTEM.SIZE(ImportDirectoryTable) + i;
-  ImportHints[i] := 0;  INC(i, 2);  AddProc(ImportHints, i, "GetProcAddress");
+  importhints[i] := 0;  INC(i, 2);  AddProc(importhints, i, "GetProcAddress");
   Idt.Kernel32Lookups[2] := RvaImport + SYSTEM.SIZE(ImportDirectoryTable) + i;
-  ImportHints[i] := 0;  INC(i, 2);  AddProc(ImportHints, i, "VirtualAlloc");
+  importhints[i] := 0;  INC(i, 2);  AddProc(importhints, i, "VirtualAlloc");
   Idt.Kernel32Lookups[3] := RvaImport + SYSTEM.SIZE(ImportDirectoryTable) + i;
-  ImportHints[i] := 0;  INC(i, 2);  AddProc(ImportHints, i, "ExitProcess");
+  importhints[i] := 0;  INC(i, 2);  AddProc(importhints, i, "ExitProcess");
   Idt.Kernel32Lookups[4] := RvaImport + SYSTEM.SIZE(ImportDirectoryTable) + i;
-  ImportHints[i] := 0;  INC(i, 2);  AddProc(ImportHints, i, "GetStdHandle");
+  importhints[i] := 0;  INC(i, 2);  AddProc(importhints, i, "GetStdHandle");
   Idt.Kernel32Lookups[5] := RvaImport + SYSTEM.SIZE(ImportDirectoryTable) + i;
-  ImportHints[i] := 0;  INC(i, 2);  AddProc(ImportHints, i, "SetConsoleOutputCP");
+  importhints[i] := 0;  INC(i, 2);  AddProc(importhints, i, "SetConsoleOutputCP");
   Idt.Kernel32Lookups[6] := RvaImport + SYSTEM.SIZE(ImportDirectoryTable) + i;
-  ImportHints[i] := 0;  INC(i, 2);  AddProc(ImportHints, i, "WriteFile");
+  importhints[i] := 0;  INC(i, 2);  AddProc(importhints, i, "WriteFile");
   Idt.Kernel32Lookups[7] := RvaImport + SYSTEM.SIZE(ImportDirectoryTable) + i;
-  ImportHints[i] := 0;  INC(i, 2);  AddProc(ImportHints, i, "AddVectoredExceptionHandler");
+  importhints[i] := 0;  INC(i, 2);  AddProc(importhints, i, "AddVectoredExceptionHandler");
   Idt.Kernel32Lookups[8] := RvaImport + SYSTEM.SIZE(ImportDirectoryTable) + i;
-  ImportHints[i] := 0;  INC(i, 2);  AddProc(ImportHints, i, "GetCommandLineW");
+  importhints[i] := 0;  INC(i, 2);  AddProc(importhints, i, "GetCommandLineW");
   Idt.Kernel32Lookups[9] := RvaImport + SYSTEM.SIZE(ImportDirectoryTable) + i;
-  ImportHints[i] := 0;  INC(i, 2);  AddProc(ImportHints, i, "GetSystemTimePreciseAsFileTime");
+  importhints[i] := 0;  INC(i, 2);  AddProc(importhints, i, "GetSystemTimePreciseAsFileTime");
   Idt.Kernel32Lookups[10] := RvaImport + SYSTEM.SIZE(ImportDirectoryTable) + i;
-  ImportHints[i] := 0;  INC(i, 2);  AddProc(ImportHints, i, "GetModuleFileNameW");
+  importhints[i] := 0;  INC(i, 2);  AddProc(importhints, i, "GetModuleFileNameW");
   Idt.Kernel32Lookups[11] := RvaImport + SYSTEM.SIZE(ImportDirectoryTable) + i;
-  ImportHints[i] := 0;  INC(i, 2);  AddProc(ImportHints, i, "GetCurrentDirectoryW");
+  importhints[i] := 0;  INC(i, 2);  AddProc(importhints, i, "GetCurrentDirectoryW");
 
   Idt.User32LookupTable   := FieldRVA(Idt.User32Lookups);
   Idt.User32Dllnameadr    := FieldRVA(Idt.User32Dllname);
   Idt.User32Dllname       := "USER32.DLL";
   Idt.User32Target        := Idt.Kernel32Target + 8 * Kernel32ImportCount;
   Idt.User32Lookups[0] := RvaImport + SYSTEM.SIZE(ImportDirectoryTable) + i;
-  ImportHints[i] := 1;  INC(i, 2);  AddProc(ImportHints, i, "MessageBoxA");
+  importhints[i] := 1;  INC(i, 2);  AddProc(importhints, i, "MessageBoxA");
   Idt.User32Lookups[1] := RvaImport + SYSTEM.SIZE(ImportDirectoryTable) + i;
-  ImportHints[i] := 1;  INC(i, 2);  AddProc(ImportHints, i, "MessageBoxW");
+  importhints[i] := 1;  INC(i, 2);  AddProc(importhints, i, "MessageBoxW");
 
   Idt.Shell32LookupTable  := FieldRVA(Idt.Shell32Lookups);
   Idt.Shell32Dllnameadr   := FieldRVA(Idt.Shell32Dllname);
   Idt.Shell32Dllname      := "SHELL32.DLL";
   Idt.Shell32Target       := Idt.User32Target + 8 * User32ImportCount;
   Idt.Shell32Lookups[0] := RvaImport + SYSTEM.SIZE(ImportDirectoryTable) + i;
-  ImportHints[i] := 2;  INC(i, 2);  AddProc(ImportHints, i, "CommandLineToArgvW");
+  importhints[i] := 2;  INC(i, 2);  AddProc(importhints, i, "CommandLineToArgvW");
 
-  HintSize := i;
+  hintsize := i;
 
 
   spos(FadrImport);
 
   Files.WriteBytes(Exe, Idt, SYSTEM.SIZE(ImportDirectoryTable));
-  Files.WriteBytes(Exe, ImportHints, HintSize);
+  Files.WriteBytes(Exe, importhints, hintsize);
 
   ImportSize := Align(Files.Pos(Exe), 16) - FadrImport;
   w.s("IDT size "); w.h(ImportSize); w.sl("H.");
