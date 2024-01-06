@@ -2,6 +2,17 @@ MODULE ORG;  (* DCWB June 2023; Code generator for X64 *)
 
 (* Originally: N.Wirth, 16.4.2016 / 4.4.2017 / 17.9.2018  Oberon compiler; code generator for RISC*)
 
+(*
+    It may make sense to have a separate 'local' mode, independent of Eadr:
+    Currently there are a lot of places which do:
+        IF (mode = Eadr) & (n = RSP) THEN INC(offset, X64.SPO * 8) END;
+    This allows mode Eadr to be used both for local variable access, and for
+    direct access to the stack when manipulating it at a lower level.
+    With a local mode x.n would be a stack offset, the same as Stkind, and
+    would always have SPO applied, while Eadr, n = RSP would never have SPO
+    applied.
+*)
+
 IMPORT SYSTEM, Files, ORS, ORB, X64, l := Listing, K := Kernel;
 
 CONST
@@ -245,8 +256,11 @@ BEGIN
 END OpModRegRm;
 
 PROCEDURE OpItem*(op, reg, size, immsize: INTEGER; x: Item);
+VAR offset: INTEGER;
 BEGIN
-  OpModRegRm(op, x.mode, reg, size, x.n, x.index, x.scale, x.offset, immsize)
+  offset := x.offset;
+  IF (x.mode = Eadr) & (x. n = RSP) THEN INC(offset, X64.SPO * 8) END;
+  OpModRegRm(op, x.mode, reg, size, x.n, x.index, x.scale, offset, immsize)
 END OpItem;
 
 
@@ -510,6 +524,7 @@ BEGIN
     IF x.type.base.size > 1 THEN  (* multiply length by type size to get byte count *)
       ASSERT(x.type.base.size < 80000000H);
       (* TODO - optimise powers of 2 with a shift *)
+      ASSERT(FALSE);  (* Why does this code involve the value of x? Should just be rlen *= size *)
       IF x.type.base.size >= 80H THEN
         OpItem(69H, rlength, 8, 4, x);  X64.EmitBytes(4, x.type.base.size)
       ELSE
@@ -567,8 +582,11 @@ BEGIN
 END StoreImmediateToMem;
 
 PROCEDURE StoreImmediate(imm: INTEGER; VAR x: Item);
+VAR offset: INTEGER;
 BEGIN
-  StoreImmediateToMem(imm, x.mode, x.type.size, x.n, x.index, x.scale, x.offset);
+  offset := x.offset;
+  IF (x.mode = Eadr) & (x.n = RSP) THEN INC(offset, X64.SPO * 8) END;
+  StoreImmediateToMem(imm, x.mode, x.type.size, x.n, x.index, x.scale,  offset);
 END StoreImmediate;
 
 (*----*)
@@ -669,7 +687,7 @@ BEGIN
   END
 END AluOpFromImmediate;
 
-PROCEDURE AluOpToReg(            (* reg := reg op src *)
+PROCEDURE AluOpToReg(  (* reg := reg op src *)
   op, mode, reg:                 INTEGER;
   signed:                        BOOLEAN;
   size, n, index, scale, offset: INTEGER);
@@ -698,7 +716,7 @@ RETURN result END IsDyadicNoOp;
 
 PROCEDURE Dyadic(op: INTEGER;  VAR dest, src: Item);  (* dest := dest op src *)
 (* Note: If result value needs to be a register, Load(dest) before calling Dyadic *)
-VAR opname: ARRAY 6 OF CHAR;
+VAR opname: ARRAY 6 OF CHAR;  offset: INTEGER;
 BEGIN
   IF    op = Plus  THEN opname := "Plus"  ELSIF op = Minus THEN opname := "Minus"
   ELSIF op = Cmp   THEN opname := "Cmp"   ELSIF op = And   THEN opname := "And"
@@ -732,13 +750,17 @@ BEGIN
 
     IF src.mode = Const THEN
       Depar(dest);
-      AluOpFromImmediate(op, dest.mode, src.n, dest.type.size, dest.n, dest.index, dest.scale, dest.offset);
+      offset := dest.offset;
+      IF (dest.mode = Eadr) & (dest.n = RSP) THEN INC(offset, X64.SPO * 8) END;
+      AluOpFromImmediate(op, dest.mode, src.n, dest.type.size, dest.n, dest.index, dest.scale, offset);
       Disassemble(dest.mode, opname)
     ELSE
       Depar(src);
       ASSERT(src.mode IN {Reg, Eadr, Code, String, Global, Import});
+      offset := src.offset;
+      IF (src.mode = Eadr) & (src.n = RSP) THEN INC(offset, X64.SPO * 8) END;
       IF dest.mode # Reg THEN Load(dest) END;
-      AluOpToReg(op, src.mode, dest.n, X64.IsSigned(src.type), src.type.size, src.n, src.index, src.scale, src.offset);
+      AluOpToReg(op, src.mode, dest.n, X64.IsSigned(src.type), src.type.size, src.n, src.index, src.scale, offset);
       Disassemble(src.mode, opname)
     END;
     FreeRegs(src);

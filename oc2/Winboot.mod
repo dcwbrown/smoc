@@ -336,9 +336,9 @@ BEGIN
   Log := WriteStdout;
 
   wsl("Hello");
-  ws("Stdout handle "); wh(Stdout);     wsl("H.");
-  ws("NoLog at ");          wh(SYSTEM.ADR(NoLog));          wsl("H.");
-  ws("Log at ");            wh(SYSTEM.ADR(Log));            wsl("H.");
+  ws("Stdout handle "); wh(Stdout);            wsl("H.");
+  ws("NoLog at ");      wh(SYSTEM.ADR(NoLog)); wsl("H.");
+  ws("Log at ");        wh(SYSTEM.ADR(Log));   wsl("H.");
   WriteModuleHeader(SYSTEM.VAL(INTEGER, Header));
 
   PrepareOberonMachine;
@@ -359,7 +359,8 @@ BEGIN
 
   LoadRemainingModules;
 
-  MessageBoxA(0, SYSTEM.ADR("Complete."), SYSTEM.ADR("Winboot"), 0);
+  (*MessageBoxA(0, SYSTEM.ADR("Complete."), SYSTEM.ADR("Winboot"), 0);*)
 
-  wsl("Winboot complete.");  ExitProcess(0);
+  wsl("Winboot complete.");
+  ExitProcess(0);
 END Winboot.
