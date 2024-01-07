@@ -137,10 +137,10 @@ END WriteExports;
 PROCEDURE GetString(adr: INTEGER; VAR s: ARRAY OF CHAR; VAR len: INTEGER);
 VAR i: INTEGER;
 BEGIN i := 0;
-  ws("GetString -> '");
+  (*ws("GetString -> '");*)
   REPEAT SYSTEM.GET(adr, s[i]); INC(adr); INC(i) UNTIL s[i-1] = 0X;
   len := i;
-  ws(s); wsl("'.")
+  (*ws(s); wsl("'.")*)
 END GetString;
 
 (* ---------------------------------------------------------------------------- *)
@@ -158,7 +158,7 @@ VAR
   modname: ARRAY 32 OF CHAR;
   len:     INTEGER;
 BEGIN
-  ws("Findmodule "); ws(name); wsl(".");
+  (*ws("Findmodule "); ws(name); wsl(".");*)
   modadr := OberonAdr;
   hdr := SYSTEM.VAL(CodeHeaderPtr, modadr);
   GetString(modadr + SYSTEM.SIZE(CodeHeader), modname, len);
@@ -170,7 +170,7 @@ BEGIN
     END
   END;
   assert(hdr.length # 0);
-  ws("Requested key "); wh(hdr.key); ws("H, found key "); wh(hdr.key); wsl("H.");
+  (*ws("Requested key "); wh(hdr.key); ws("H, found key "); wh(hdr.key); wsl("H.");*)
 RETURN modadr END FindModule;
 
 
@@ -192,16 +192,17 @@ VAR
   expadr:      INTEGER;  (* Address relative to imported module of an export *)
   modulebody:  PROCEDURE;
 BEGIN
+  (*
   ws("Loading module image from address "); wh(modadr); wsl("H.");
   WriteModuleHeader(modadr);
-
   ws("Loading to "); wh(LoadAdr); wsl("H.");
+  *)
 
   hdr := SYSTEM.VAL(CodeHeaderPtr, modadr);
   SYSTEM.COPY(modadr, LoadAdr, hdr.imports);  (* Copy up to but excluding import table *)
   loadedsize := hdr.imports + hdr.varsize;
 
-  ws("Loaded size "); wh(loadedsize); wsl("H.");
+  (*ws("Loaded size "); wh(loadedsize); wsl("H.");*)
 
   (* Build list of imported module header addresses *)
   adr := modadr + hdr.imports;
@@ -223,19 +224,23 @@ BEGIN
     SYSTEM.GET(adr, offset); INC(adr, 4);
     SYSTEM.GET(adr, impno);  INC(adr, 2);
     SYSTEM.GET(adr, modno);  INC(adr, 2);
+    (*
     ws("Import from module "); wh(modno);
     ws("H, impno "); wh(impno);
     ws("H, to offset "); wh(offset); wsl("H.");
+    *)
     assert(modno > 0);  (* TODO modno 0 is boot fn *)
     impmodadr := modules[modno-1];
     expadr := ExportedAddress(SYSTEM.VAL(CodeHeaderPtr, impmodadr), impno-1);
+    (*
     ws("expadr  "); wh(expadr); wsl("H.");
     ws("LoadAdr "); wh(LoadAdr); wsl("H.");
     ws("offset  "); wh(offset); wsl("H.");
+    *)
     SYSTEM.GET(LoadAdr + offset, disp);
-    ws("disp    -"); wh(-disp); wsl("H.");
+    (*ws("disp    -"); wh(-disp); wsl("H.");*)
     disp := expadr + disp - LoadAdr;
-    ws("disp'   -"); wh(-disp); wsl("H.");
+    (*ws("disp'   -"); wh(-disp); wsl("H.");*)
     SYSTEM.PUT(LoadAdr + offset, disp);
     INC(i)
   END;
@@ -246,7 +251,7 @@ BEGIN
 
   INC(LoadAdr, loadedsize);
 
-  wsl("LoadModule complete.")
+  (*wsl("LoadModule complete.")*)
 END LoadModule;
 
 (* ---------------------------------------------------------------------------- *)
@@ -279,21 +284,25 @@ VAR
 BEGIN
   (* Reserve 2GB memory for the Oberon machine *)
   reserveadr := VirtualAlloc(0, 80000000H, MEMRESERVE, PAGEEXECUTEREADWRITE);
-  ws("Reserved 2GB mem at ");  wh(reserveadr);  wsl("H.");
+  (*ws("Reserved 2GB mem at ");  wh(reserveadr);  wsl("H.");*)
 
   (* Determine loaded size of all modules *)
   bootsize   := Header.imports + Header.varsize;
-  ws("bootsize "); wh(bootsize); wsl("H.");
+  (*ws("bootsize "); wh(bootsize); wsl("H.");*)
   modulesize := bootsize;
-  ws("modulesize "); wh(modulesize); wsl("H.");
+  (*ws("modulesize "); wh(modulesize); wsl("H.");*)
   moduleadr  := (SYSTEM.VAL(INTEGER, Header) + bootsize + 15) DIV 16 * 16;  (* Address of first module for Oberon machine *)
+  (*
   ws("Looking for modules to load starting at "); wh(moduleadr); wsl("H.");
   WriteModuleHeader(moduleadr);
+  *)
   hdr        := SYSTEM.VAL(CodeHeaderPtr, moduleadr);
-  ws("Potential first module length "); wh(hdr.length); wsl("H.");
+  (*ws("Potential first module length "); wh(hdr.length); wsl("H.");*)
   WHILE hdr.length > 0 DO
+    (*
     ws("Module at "); wh(moduleadr); ws("H, length "); wh(hdr.length); wsl("H.");
     WriteModuleHeader(moduleadr);
+    *)
     INC(modulesize, hdr.imports + hdr.varsize);
     INC(moduleadr, hdr.length);
     hdr := SYSTEM.VAL(CodeHeaderPtr, moduleadr);
@@ -301,7 +310,7 @@ BEGIN
 
   (* Commit enough for the modules being loaded. *)
   OberonAdr := VirtualAlloc(reserveadr, modulesize, MEMCOMMIT, PAGEEXECUTEREADWRITE);
-  ws("Committed ");  wh(modulesize);  ws("H bytes at ");  wh(OberonAdr);  wsl("H.");
+  (*ws("Committed ");  wh(modulesize);  ws("H bytes at ");  wh(OberonAdr);  wsl("H.");*)
 END PrepareOberonMachine;
 
 PROCEDURE LoadRemainingModules;
@@ -310,17 +319,19 @@ BEGIN
   (* Load and link remaining code modules from EXE file image *)
   moduleadr := SYSTEM.VAL(INTEGER, Header) + Header.imports + Header.varsize;  (* Address of first module for Oberon machine *)
   moduleadr := (moduleadr + 15) DIV 16 * 16;
+  (*
   ws("Load remaining modules starting from "); wh(moduleadr); wsl("H.");
   wsl("First remaining module header:");
   WriteModuleHeader(moduleadr);
+  *)
   SYSTEM.GET(moduleadr, modulelength);
   WHILE modulelength # 0 DO
     LoadModule(moduleadr);
-    ws("  module length "); wh(modulelength); wsl("H.");
+    (*ws("  module length "); wh(modulelength); wsl("H.");*)
     moduleadr := (moduleadr + modulelength + 15) DIV 16 * 16;
     SYSTEM.GET(moduleadr, modulelength);
   END;
-  wsl("LoadRemainingModules complete.")
+  (*wsl("LoadRemainingModules complete.")*)
 END LoadRemainingModules;
 
 (* ---------------------------------------------------------------------------- *)
@@ -335,27 +346,31 @@ BEGIN
 
   Log := WriteStdout;
 
-  wsl("Hello");
+  wsl("Winboot starting.");
+  (*
   ws("Stdout handle "); wh(Stdout);            wsl("H.");
   ws("NoLog at ");      wh(SYSTEM.ADR(NoLog)); wsl("H.");
   ws("Log at ");        wh(SYSTEM.ADR(Log));   wsl("H.");
   WriteModuleHeader(SYSTEM.VAL(INTEGER, Header));
+  *)
 
   PrepareOberonMachine;
 
   (* Copy boot module into newly committed memory and switch PC to the new code. *)
   SYSTEM.COPY(SYSTEM.VAL(INTEGER, Header), OberonAdr, Header.imports + Header.varsize);
-  ws("Transferring PC from original load at ");  wh(GetPC());  wsl("H.");
+  (*ws("Transferring PC from original load at ");  wh(GetPC());  wsl("H.");*)
   IncPC(OberonAdr - SYSTEM.VAL(INTEGER, Header));  (* Transfer to copied code *)
-  ws("Transferred PC to code copied to Oberon memory at ");  wh(GetPC());  wsl("H.");
+  (*ws("Transferred PC to code copied to Oberon memory at ");  wh(GetPC());  wsl("H.");*)
 
+  (*
   WriteExports(OberonAdr + Header.exports);
-
   ws("First code module at "); wh(SYSTEM.VAL(INTEGER, Header) + Header.imports + Header.varsize); wsl("H.");
   ws("Oberon loaded boot module ends at "); wh(OberonAdr + Header.imports + Header.varsize); wsl("H.");
+  *)
+
   LoadAdr := (OberonAdr + Header.imports + Header.varsize + 15) DIV 16 * 16;
 
-  ws("crlf at "); wh(SYSTEM.ADR(crlf)); wsl("H.");
+  (* ws("crlf at "); wh(SYSTEM.ADR(crlf)); wsl("H.");*)
 
   LoadRemainingModules;
 

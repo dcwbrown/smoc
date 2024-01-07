@@ -259,7 +259,7 @@ PROCEDURE OpItem*(op, reg, size, immsize: INTEGER; x: Item);
 VAR offset: INTEGER;
 BEGIN
   offset := x.offset;
-  IF (x.mode = Eadr) & (x. n = RSP) THEN INC(offset, X64.SPO * 8) END;
+  IF (x.mode = Eadr) & (x.n = RSP) THEN INC(offset, X64.SPO * 8) END;
   OpModRegRm(op, x.mode, reg, size, x.n, x.index, x.scale, offset, immsize)
 END OpItem;
 
@@ -363,7 +363,7 @@ END DeparToReg;
 
 PROCEDURE Depar(VAR x: Item);
 BEGIN
-  IF x.mode = Stkind THEN DeparToReg(FirstFreeReg(), x);  ReserveReg(x.n) END
+  IF x.mode = Stkind THEN DeparToReg(ReserveNextFree(), x) END
 END Depar;
 
 
