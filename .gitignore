@@ -4,6 +4,7 @@
 *.dll
 *.x64
 *.exe
+*.code
 t[0-9]
 build/*/*
 !build/boot0/*.dll
