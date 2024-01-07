@@ -1,4 +1,4 @@
-MODULE OC2;  (* Command line driver for ORP *)  (*$CONSOLE*)
+MODULE obuild;  (* Command line driver for ORP *)  (*$CONSOLE*)
 
 IMPORT ORP, ORS, WinPE;
 
@@ -23,11 +23,11 @@ BEGIN
     IF ORS.errcnt = 0 THEN ORP.CompileFile("Listing.mod") END;
     IF ORS.errcnt = 0 THEN ORP.CompileFile("ORG.mod")     END;
     IF ORS.errcnt = 0 THEN ORP.CompileFile("ORP.mod")     END;
-    IF ORS.errcnt = 0 THEN ORP.CompileFile("OC2.mod")     END
+    IF ORS.errcnt = 0 THEN ORP.CompileFile("obuild.mod")     END
   END;
   IF ORS.errcnt = 0 THEN
     WinPE.AddModule("Linktest.code");
     WinPE.AddModule("Linktest2.code");
-    WinPE.Generate("start.exe")
+    WinPE.Generate("Linktest2.exe")
   END
-END OC2.
+END obuild.
