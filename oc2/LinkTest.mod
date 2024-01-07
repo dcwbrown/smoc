@@ -1,17 +1,17 @@
 MODULE Linktest;
 
-IMPORT SYSTEM, Winboot;
+IMPORT SYSTEM, Winshim;
 
 PROCEDURE ltw*(s: ARRAY OF CHAR);
 BEGIN
-  Winboot.wsl(s);
+  Winshim.wsl(s);
 END ltw;
 
 BEGIN
-  Winboot.wsl("Linktest starting.");
-  Winboot.ws("crlf at "); Winboot.wh(SYSTEM.ADR(Winboot.crlf)); Winboot.wsl("H.");
-  Winboot.ws("crlf ...");
-  Winboot.ws(Winboot.crlf);
+  Winshim.wsl("Linktest starting.");
+  Winshim.ws("crlf at "); Winshim.wh(SYSTEM.ADR(Winshim.crlf)); Winshim.wsl("H.");
+  Winshim.ws("crlf ...");
+  Winshim.ws(Winshim.crlf);
   ltw("ltw called from LinkTest");
-  Winboot.wsl("Linktest complete.")
+  Winshim.wsl("Linktest complete.")
 END Linktest.

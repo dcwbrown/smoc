@@ -1,8 +1,8 @@
 MODULE Linktest2;
 
-IMPORT SYSTEM, Linktest, Winboot;
+IMPORT SYSTEM, Linktest, Winshim;
 
 BEGIN
   Linktest.ltw("Linktest2 running via Linktest.");
-  Winboot.wsl("LinkTest2 running to Winboot");
+  Winshim.wsl("LinkTest2 running to Winshim");
 END Linktest2.

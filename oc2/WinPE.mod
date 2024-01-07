@@ -428,8 +428,8 @@ VAR
   f: Files.File;
   r: Files.Rider;
 BEGIN
-  f := Files.Old("winboot.code");
-  IF f = NIL THEN w.sl("Couldn't open winboot.code."); K.Halt(99) END;
+  f := Files.Old("Winshim.code");
+  IF f = NIL THEN w.sl("Couldn't open Winshim.code."); K.Halt(99) END;
   Files.Set(r, f, 0);
   Files.ReadBytes(r, Bootstrap,  SYSTEM.SIZE(BootstrapBuffer));
   w.s("Bootstap bytes read: "); w.i(Files.Pos(r)); w.sl(".");

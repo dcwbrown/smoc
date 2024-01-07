@@ -5,7 +5,7 @@ IMPORT ORP, ORS, WinPE;
 CONST BuildCompiler = FALSE;
 
 BEGIN
-  ORP.CompileFile("Winboot.mod");
+  ORP.CompileFile("Winshim.mod");
   ORP.CompileFile("Linktest.mod");
   ORP.CompileFile("Linktest2.mod");
   IF BuildCompiler THEN
