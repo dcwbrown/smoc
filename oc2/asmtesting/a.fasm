@@ -1,0 +1,703 @@
+          format PE64 Console
+          section '.text' code readable executable
+
+
+          push   qword[rax]
+          push   word[rax]
+
+          mov    r8d,2
+          mov    r9,rax
+
+          org 110H
+
+          mov    rax,[8H+rsp]
+          cmp    rax,[10H+rsp]
+          jge    172H
+
+          mov    rax,[28H+rsp]
+          mov    rcx,[8H+rsp]
+          movzx  rdx,byte[0H+rax+rcx]
+          mov    [18H+rsp],dl
+
+          mov    rax,[28H+rsp]
+          mov    rcx,[8H+rsp]
+          mov    rdx,[28H+rsp]
+          mov    rbx,[10H+rsp]
+          movzx  rbp,byte[0H+rdx+rbx]
+          mov    [0H+rax+rcx],bpl
+
+          mov    rax,[28H+rsp]
+          mov    rcx,[10H+rsp]
+           movzx  rdx,byte[18H+rsp]
+          mov    [0H+rax+rcx],dl
+
+          inc    qword[8H+rsp]
+          dec    qword[10H+rsp]
+          jmp    110H
+
+          add    rsp,20H
+          ret    18H
+
+
+; 000110:  48 8B 44 24 08              mov    rax,[8H+rsp]
+; 000115:  48 3B 44 24 10              cmp    rax,[10H+rsp]
+; 00011A:  0F 8D 00000052              jge    172 (disp +82)
+;
+; 000120:  48 8B 44 24 28              mov    rax,[28H+rsp]
+; 000125:  48 8B 4C 24 08              mov    rcx,[8H+rsp]
+; 00012A:  48 0F B6 14 08              movzx  rdx,byte[0H+rax+rcx]
+; 00012F:  88 54 24 18                 mov    [18H+rsp],dl
+;
+; 000133:  48 8B 44 24 28              mov    rax,[28H+rsp]
+; 000138:  48 8B 4C 24 08              mov    rcx,[8H+rsp]
+; 00013D:  48 8B 54 24 28              mov    rdx,[28H+rsp]
+; 000142:  48 8B 5C 24 10              mov    rbx,[10H+rsp]
+; 000147:  48 0F B6 2C 1A              movzx  rbp,byte[0H+rdx+rbx]
+; 00014C:  40 88 2C 08                 mov    [0H+rax+rcx],bpl
+;
+; 000150:  48 8B 44 24 28              mov    rax,[28H+rsp]
+; 000155:  48 8B 4C 24 10              mov    rcx,[10H+rsp]
+; 00015A:  48 0F B6 54 24 18           movzx  rdx,byte[18H+rsp]
+; 000160:  88 14 08                    mov    [0H+rax+rcx],dl
+;
+; 000163:  48 FF 44 24 08              inc    qword[8H+rsp]
+; 000168:  48 FF 4C 24 10              dec    qword[10H+rsp]
+; 00016D:  E9 FFFFFF9E                 jmp    110 (disp -98)
+;
+; 000172:  48 83 C4 20                 add    rsp,20H
+; 000176:  C2 0018                     ret    18H
+
+
+; ---
+
+; 6A 00           push   0H                        ; Reserve and clear local variables
+; 48 8B EC        mov    rbp,rsp                   ; Reserve Windows ABI stack space
+; 48 83 ED 10     sub    rbp,10H
+; 48 83 E5 F0     and    rbp,FFFFFFFFFFFFFFF0H
+; 48 83 EC 18     sub    rsp,18H
+; 48 8B 4C 24 48  mov    rcx,[48H+rsp]             ; Load
+; 48 8B 44 24 38  mov    rax,[38H+rsp]             ; Depar
+; 48 8B D0        mov    rdx,rax                   ; Load
+; 48 87 E5        xchg   rbp,rsp                   ; Call
+; FF 15 FFFFFE67  call   qword[VAR+8H]
+; 48 8D 65 18     lea    rsp,[18H+rbp]             ; Drop Windows ABI parameter area from stack
+; 48 89 04 24     mov    [0H+rsp],rax              ; StoreRegToMem
+; 48 8B 44 24 10  mov    rax,[10H+rsp]             ; Depar
+; 48 8B 0C 24     mov    rcx,[0H+rsp]              ; Load
+; 48 89 08        mov    [0H+rax],rcx              ; StoreRegToMem
+; 48 83 C4 08     add    rsp,8H                    ; release local variable space
+; C2 0028         ret    28H                       ; Return
+
+          push   0H                        ; Reserve and clear local variables
+          mov    rbp,rsp                   ; Reserve Windows ABI stack space
+          sub    rbp,10H
+          and    rbp,0FFFFFFFFFFFFFFF0H
+          sub    rsp,18H
+          mov    rcx,[48H+rsp]             ; Load
+          mov    rax,[38H+rsp]             ; Depar
+          mov    rdx,rax                   ; Load
+          xchg   rbp,rsp                   ; Call
+          call   qword[8H]
+          lea    rsp,[18H+rbp]             ; Drop Windows ABI parameter area from stack
+          mov    [0H+rsp],rax              ; StoreRegToMem
+          mov    rax,[10H+rsp]             ; Depar
+          mov    rcx,[0H+rsp]              ; Load
+          mov    [0H+rax],rcx              ; StoreRegToMem
+          add    rsp,8H                    ; release local variable space
+          ret    28H                       ; Return
+
+          mov    rax,[20H+rsp]             ; Depar
+          mov    rcx,[0H+rsp]              ; Load
+          mov    rdx,[20H+rsp]             ; Depar
+          mov    rbx,[8H+rsp]              ; Load
+          movzx  rbp,byte[0H+rdx+rbx]      ; Load
+          mov    [0H+rax+rcx],bpl          ; StoreRegToMem
+          mov    [0H+rax+rcx],ch           ; StoreRegToMem
+          mov    [0H+rax+rcx],r8l          ; StoreRegToMem
+
+
+          movzx  rdx,byte[0H+rdx+rbx]      ; Load
+          mov    [0H+rax+rcx],dl           ; StoreRegToMem
+
+
+
+          mov    rax,[28H+rsp]             ; Depar
+          mov    rcx,[8H+rsp]              ; Load
+          movzx  rdx,byte[rax+rcx]         ; Load
+          mov    [18H+rsp],dl              ; StoreRegToMem
+
+
+
+          mov    rax,[rsp+24]
+
+
+wincall:  pop    rsi         ; return address
+          pop    rdi         ; windows fn address to be called
+          pop    rbx         ; parameter count (in qwords)
+          mov    rbp,[rsp+8*rbx]; rsp before parameters pushed
+
+;         Load up to 4 params (easier to load whether used or not)
+
+          mov    rcx,[rbp]
+          mov    rdx,[rbp+8]
+          mov    r8,[rbp+16]
+          mov    r9,[rbp+24]
+
+          cmp    rbx,4
+          ja     wic2        ; If stack will need rearranging
+
+          mov    rsp,[rbp-32]; Provide 4 qwords stack space to callee
+          and    rsp,0FFFFFFFFFFFFFFF0H; 16 byte align
+          call   rdi         ; Call windows. Assume rbp and rsi retained.
+          mov    rsp,rbp
+          jmp    rsi
+
+
+;         5 parameters or more
+
+;         rsi - return address
+;         rdi - windows function address to be called
+;         rbp - first param - rsp restored here on exit
+;         rbx - parameter count (>= 5)
+;         rcx,rdx,r8,r9 - first 4 parameters
+
+wic2:     lea    rax,[rsp+8*rbx] ; Consider alignment at end of parms
+          and    rax,8
+          add    rsp,rax     ; Position parameter block to end on 16 byte aligment
+
+;         Push parameters from last to p5 (i.e. in reverse order)
+
+wic4:     dec    rbx
+          cmp    rbx,4
+          jbe    wic6        ; If all stacked parameters pushed, call win fn
+
+          push   qword[rbp + 8*rbx]
+          jmp    wic4
+
+wic6:     sub    rsp,32      ; Provide guaranteed 4 qwords of stack space
+          call   rdi         ; Call windows. Assume rbp and rsi retained.
+          mov    rsp,rbp
+          jmp    rsi
+
+
+
+
+; ----
+          org    30H
+a:        ret
+
+          org    32H
+b:        push   qword[8H+rsp]             ; proc address to be called
+          call   qword[0FFFFFFFFFFFFFFF8H+rsp]; Call
+          add    rsp,8H                    ; Drop called proc address
+          ret    8H                        ; Return
+
+          org    50H
+          lea    rax,[a]                   ; LoadAddress
+          push   rax                       ; ValueParam
+          call   b                         ; Call
+          ret                              ; Return
+
+          push   word[rsp]
+
+
+          add    rax,rcx
+          add    [rax],rcx
+
+          lea    rdi,[rax]
+          mov    rdi,rax
+
+
+;         String comparison
+;         Scan allowing for zero bytes
+
+          mov    rcx,12      ; len(s1)
+          mov    rsi,15      ; len(s2)
+          cmp    rcx,rsi
+          cmova  rcx,rsi
+
+sl2:      mov    rsi,1000    ; adr(s1)
+          mov    r8,1100     ; adr(s2)
+          sub    r8,rsi
+          dec    r8
+
+
+sl10:     lodsb
+          cmp    al,[rsi+r8]
+          jne    sl12        ; if strings differ
+
+          or     al,al
+          loopne sl12        ; if there's more
+sl12:
+
+
+
+
+; Risc 5 - Wirths generated code
+;
+;     Put2(Ldr+1, RH, x.r, 0);
+;     Put1(Add, x.r, x.r, 1);
+;
+;     Put2(Ldr+1, RH+1, y.r, 0);
+;     Put1(Add, y.r, y.r, 1);
+;
+;     Put0(Cmp, RH+2, RH, RH+1);
+;     Put3(BC, NE, 2);
+;
+;     Put1(Cmp, RH+2, RH, 0);
+;     Put3(BC, NE, -8);
+;
+;     DEC(RH, 2);
+;     SetCC(x, relmap[op - ORS.eql])
+;
+; rl2:   sr0   [x.r]
+;        inc   x.r
+;
+;        sr1   [y.r]
+;        inc   y.r
+;
+;        cmp   r0,r1
+;        jne   rl4
+;
+;        cmp   r0,0
+;        jne   rl2
+;
+; rl4:
+
+
+
+; -------
+
+          lea    rdi,[rsp-8]
+          xor    eax,eax
+          mov    rcx,5       ; stack size in 64 bit cells
+          std
+          rep    stosq
+          cld
+          mov    rsp,rdi
+
+
+
+
+          imul   rdx,rdx,27
+          imul   rbx,rcx
+          imul   rdx,[rsi+24]
+
+          imul   rdx,[rsp],6
+
+          call   100
+
+          idiv   rcx
+
+          shl    rax,cl
+          sar    rax,cl
+          ror    rax,cl
+
+          shl    rax,5
+          sar    rax,5
+          ror    rax,5
+
+
+l0:       nop
+
+          jz     l0
+
+          jz     l0-200
+
+          rep movsb
+
+          mov    ebx,eax         ; store eax in ebx
+          neg    eax
+          cmovl  eax,ebx         ; if eax is now negative, restore its saved value
+
+          mov    ecx,5
+
+          mov    cl,5
+          movzx  ecx,cl
+
+          push   5
+          pop    rcx
+
+          mov    ecx,123
+ll1:      push   0
+          loop   ll1
+
+
+          mov    ecx,123
+          xor    eax,eax
+ll2:      push   rax
+          loop   ll2
+
+          push   12
+          push   1234
+
+          cmp    al,[rsp+39H]
+
+          movdqu xmm0,[rsp+16]
+          movdqu [rsp],xmm0
+
+          mov    r8,[rsp+16]
+          mov    r9,[rsp+24]
+          mov    [rsp],r8
+          mov    [rsp+8],r9
+
+          lea    rcx,[rax]
+          lea    rcx,[100]
+
+          setnz  al
+          setnz  byte[rax]
+
+          add    qword[rax],5
+          inc    qword[rax]
+
+          inc    rax
+          inc    r8
+
+          push   12H
+          push   1234H
+          push   rax
+          push   qword [rax]
+          push   word [rax]
+
+
+          call   r15
+
+          mov    byte[rsp+20H],0H
+          mov    qword[rsp+20H],0H
+
+          xor    r8,r8
+          mov    [rsp+20H],r8
+
+          mov    rcx,8000000000000000H
+
+          mov    cl,1
+          shl    rcx,63
+
+          mov    ecx,12345678H
+          shl    rcx,32
+
+          ; Singleton
+
+          mov    rcx,rax    ; rcx - 1, rax - 0
+          xor    eax,eax
+          bts    rax,rcx
+
+
+          call   qword[101]
+          call   101
+
+          cmp    rbx,0
+          test   rbx,rbx
+
+          setnz  bl
+          movzx  ebx,bl
+
+          and    ebx,0FFFFFFFEH
+
+          lahf
+
+          ;mov    rbx,0
+          ;cmovnz rbx,1
+
+          pushfq
+          pop    rbx
+          shl    rbx,57
+          shr    rbx,63
+
+
+
+          mov    rax,[rsp  +  rbx]
+         ;mov    rax,[rsp  +  rsp]
+          mov    rax,[rsp]
+          mov    rax,[rsp  +  rbp]
+          mov    rax,[rsp  +  r11]
+          mov    rax,[rsp  +  r12]
+          mov    rax,[rsp  +  r13]
+
+
+locsize  = 24
+parmsize = 16
+
+start:    sub    rsp,locsize
+          push   rcx          ; parm 2
+          push   rax          ; parm 1
+
+;         ...
+
+          add    rsp,locsize+parmsize
+          ret
+
+
+;         ----
+
+start0:   push   rbp
+          sub    rsp,locsize
+          push   rcx          ; parm 2
+          push   rax          ; parm 1
+          mov    rbp,rsp
+
+;         ...
+
+exit0:    add    rsp,locsize+parmsize
+          pop    rbp
+          ret
+
+;   ---
+
+    mov    r15,l1
+    jmp    l2
+
+l1: inc    rax
+
+l2: sub    rsp,16
+    push   rax
+    push   rcx
+
+;   ...
+
+    add    rsp,16
+    ret
+
+;   ---
+
+    push   rbp
+    mov    rbp,rsp
+    sub    rsp,16
+
+    lea    rsp,[rsp-16]
+
+;   ...
+
+    mov    rsp,rbp
+    pop    rbp
+    ret
+
+;   ---
+
+    mov    rax,[rsp]
+    mov    rax,[rsp+1]
+    mov    rax,[rsp+200]
+
+    mov    rbx,[rsp]
+    mov    rbx,[rsp+1]
+    mov    rbx,[rsp+200]
+
+    mov    rax,[rbp]
+    mov    rax,[rbp+1]
+    mov    rax,[rbp+200]
+
+    mov    rbx,[rbp]
+    mov    rbx,[rbp+1]
+    mov    rbx,[rbp+200]
+
+
+    sub    rsp,8
+    sub    rsp,608
+
+    push   ax
+    push   rax
+
+    push   r8
+    push   r8w
+
+    mov    [rbp],rax
+    mov    [rbp-8],rcx
+    mov    [rbp-16],rdx
+    mov    [rbp-24],rbx
+
+    push   rax
+    push   rcx
+    push   rdx
+    push   rbx
+    push   rsi
+    push   rdi
+    push   r8
+    push   r9
+    push   r14
+    push   r15
+
+    mov    rbp,rsp
+    mov    rsp,rbp
+    ret
+
+    movzx  rax, byte [rsp+10H]
+    movzx  rax, word [rsp+10H]
+
+    movzx  rax, al
+    movzx  rax, ax
+
+
+    mov    [r15],r8
+    mov    [r15],r8d
+    mov    [r15],r8w
+    mov    [r15],r8b
+
+    mov    [$+11H],r8
+    mov    [$+11H],r8d
+    mov    [$+11H],r8w
+    mov    [$+11H],r8b
+
+    mov    qword[r15],1
+    mov    dword[r15],1
+    mov    word[r15],1
+    mov    byte[r15],1
+
+    mov    qword[$+11H],1
+    mov    dword[$+11H],1
+    mov    word[$+11H],1
+    mov    byte[$+11H],1
+
+    mov    qword[$+11H],1234H
+    mov    qword[r8],1234H
+
+    lea    rax,[$+10H]
+    lea    rcx,[$+10H]
+    mov    rcx,10H
+
+    mov    byte[0],0
+    mov    word[0],0
+    mov    dword[0],0
+    mov    qword[0],0
+
+    mov    byte[0],al
+    mov    word[0],ax
+    mov    dword[0],eax
+    mov    qword[0],rax
+
+    mov    byte[rsi],0
+    mov    word[rsi],0
+    mov    dword[rsi],0
+    mov    qword[rsi],0
+
+    mov    byte[rsi],al
+    mov    word[rsi],ax
+    mov    dword[rsi],eax
+    mov    qword[rsi],rax
+
+    inc    rax
+    inc    rbx
+    inc    r8
+    inc    r9
+
+    dec    rax
+    dec    rbx
+    dec    r8
+    dec    r9
+
+    add    rdx,[rbx]
+    add    rdx,[rsp]
+    add    rdx,[rbp]
+    add    rdx,[r11]
+    add    rdx,[r12]
+    add    rdx,[r13]
+
+    add    rdx,[rbx+1]
+    add    rdx,[rsp+1]
+    add    rdx,[rbp+1]
+    add    rdx,[r11+1]
+    add    rdx,[r12+1]
+    add    rdx,[r13+1]
+
+    add    rdx,[rbx+100000]
+    add    rdx,[rsp+100000]
+    add    rdx,[rbp+100000]
+    add    rdx,[r11+100000]
+    add    rdx,[r12+100000]
+    add    rdx,[r13+100000]
+
+    add    rdx,[$+7+1234H]
+    sub    rdx,[$+7+1234H]
+    and    rdx,[$+7+1234H]
+    or     rdx,[$+7+1234H]
+    xor    rdx,[$+7+1234H]
+
+    add    rdx,[rsi+1234H]
+    sub    rdx,[rsi+1234H]
+    and    rdx,[rsi+1234H]
+    or     rdx,[rsi+1234H]
+    xor    rdx,[rsi+1234H]
+
+    add    rdx,[rsi+12H]
+    sub    rdx,[rsi+12H]
+    and    rdx,[rsi+12H]
+    or     rdx,[rsi+12H]
+    xor    rdx,[rsi+12H]
+
+    add    rdx,[rsi]
+    sub    rdx,[rsi]
+    and    rdx,[rsi]
+    or     rdx,[rsi]
+    xor    rdx,[rsi]
+
+    add    rcx,[rsi]
+    sub    rcx,[rsi]
+    and    rcx,[rsi]
+    or     rcx,[rsi]
+    xor    rcx,[rsi]
+
+    add    rdx,1234H
+    sub    rdx,1234H
+    and    rdx,1234H
+    or     rdx,1234H
+    xor    rdx,1234H
+
+    add    rdx,12H
+    sub    rdx,12H
+    and    rdx,12H
+    or     rdx,12H
+    xor    rdx,12H
+
+    add    rdx,-12H
+    sub    rdx,-12H
+    and    rdx,-12H
+    or     rdx,-12H
+    xor    rdx,-12H
+
+    mov    rax,1234H
+    mov    rbx,1234H
+    mov    r8,1234H
+    mov    r9,1234H
+    mov    ebx,1234H
+    mov    rcx,-10
+
+    mov    rax,1234567887654321H
+    mov    rbx,1234567887654321H
+    mov    r8,1234567887654321H
+    mov    r9,1234567887654321H
+
+    xor    eax,eax
+    xor    ebx,ebx
+    xor    r10d,r10d
+
+;   ----
+
+    movsx  rax,BYTE[$+8+1234H]
+    movsx  rax,WORD[$+8+1234H]
+    movsxd rax,DWORD[$+7+1234H]
+    mov    rax,QWORD[$+7+1234H]
+
+    movzx  rax,BYTE[$+8+1234H]
+    movzx  rax,WORD[$+8+1234H]
+    mov    eax,DWORD[$+6+1234H]
+    mov    rax,QWORD[$+7+1234H]
+
+;   ----
+
+    movsx  rax,BYTE[RSP+12H]
+    movsx  rax,WORD[RSP+12H]
+    movsxd rax,DWORD[RSP+12H]
+    mov    rax,QWORD[RSP+12H]
+
+    movzx  rax,BYTE[RSP+12H]
+    movzx  rax,WORD[RSP+12H]
+    mov    eax,DWORD[RSP+12H]
+    mov    rax,QWORD[RSP+12H]
+
+;   ----
+
+    ;add    rax,BYTE[$+8+1234H]
+    ;add    rax,WORD[$+8+1234H]
+    ;add    rax,DWORD[$+7+1234H]
+    add    rax,QWORD[$+7+1234H]
+
+    ret
