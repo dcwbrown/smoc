@@ -1,0 +1,227 @@
+
+
+
+  User:        INTEGER;
+  MessageBoxA: PROCEDURE#(hwnd, text, caption, type: INTEGER);
+
+  Kernel:                INTEGER;
+  VirtualFree:           PROCEDURE#(address, size, type: INTEGER): INTEGER;
+  AttachConsole:         PROCEDURE#(processid: INTEGER): INTEGER;
+  AllocConsole:          PROCEDURE#(): INTEGER;
+  FreeConsole:           PROCEDURE#(): INTEGER;
+  GetConsoleWindow:      PROCEDURE#(): INTEGER;
+  GetConsoleProcessList: PROCEDURE#(list, count: INTEGER): INTEGER;
+  ShowWindowAsync:       PROCEDURE#(window, cmd: INTEGER): INTEGER;
+
+  ConsoleHandle:      INTEGER;  (* Only if it's private to us. *)
+
+  Stdout:  INTEGER;
+  crlf:    ARRAY 3 OF CHAR;
+
+
+PROCEDURE msg*(message: ARRAY OF CHAR);
+BEGIN MessageBoxA(0, SYSTEM.ADR(message), SYSTEM.ADR("Winboot"), 0)
+END msg;
+
+PROCEDURE assert(expectation: BOOLEAN);
+BEGIN IF ~expectation THEN msg("Assertion failure.") END
+END assert;
+
+PROCEDURE IntToHex*(n: INTEGER; VAR s: ARRAY OF CHAR);
+VAR d, i, j: INTEGER;  ch: CHAR;
+BEGIN
+  i := 0;  j := 0;
+  REPEAT
+    d := n MOD 16;  n := n DIV 16 MOD 1000000000000000H;
+    IF d <= 9 THEN s[j] := CHR(d + 48) ELSE s[j] := CHR(d + 55) END;
+    INC(j)
+  UNTIL n = 0;
+  s[j] := 0X;  DEC(j);
+  WHILE i < j DO ch:=s[i]; s[i]:=s[j]; s[j]:=ch; INC(i); DEC(j) END;
+END IntToHex;
+
+PROCEDURE msghex(n: INTEGER);
+VAR s: ARRAY 32 OF CHAR;
+BEGIN IntToHex(n, s);  msg(s) END msghex;
+
+PROCEDURE msgsp;
+VAR i: INTEGER;
+BEGIN msghex(SYSTEM.ADR(i)+16) END msgsp;
+
+PROCEDURE Strlen(s: ARRAY OF CHAR): INTEGER;
+VAR i: INTEGER;
+BEGIN i := 0;  WHILE s[i] # 0X DO INC(i) END
+RETURN i END Strlen;
+
+PROCEDURE ws(s: ARRAY OF CHAR);
+VAR written, result: INTEGER;
+BEGIN
+  result := WriteFile(Stdout, SYSTEM.ADR(s), Strlen(s), SYSTEM.ADR(written), 0);
+END ws;
+
+PROCEDURE wl;
+VAR written, result: INTEGER;
+BEGIN
+  result := WriteFile(Stdout, SYSTEM.ADR(crlf), 2, SYSTEM.ADR(written), 0);
+END wl;
+
+PROCEDURE wsl(s: ARRAY OF CHAR); BEGIN ws(s);  wl END wsl;
+
+PROCEDURE wh(n: INTEGER);
+VAR hex: ARRAY 32 OF CHAR;
+BEGIN IntToHex(n, hex);  ws(hex) END wh;
+
+PROCEDURE GetProc*(dll: INTEGER; name: ARRAY OF CHAR; VAR proc: ARRAY OF BYTE);
+VAR adr: INTEGER;
+BEGIN
+  adr := GetProcAddress(dll, SYSTEM.ADR(name));
+  SYSTEM.PUT(SYSTEM.ADR(proc), adr)
+END GetProc;
+
+PROCEDURE InitialiseConsoleOutput;
+VAR res: INTEGER;
+BEGIN
+  Kernel := LoadLibraryA(SYSTEM.ADR("kernel32"));                  assert(Kernel                # 0);
+  User   := LoadLibraryA(SYSTEM.ADR("user32"));                    assert(User                  # 0);
+  GetProc(Kernel, "VirtualFree",           VirtualFree);           assert(VirtualFree           # NIL);
+(*GetProc(Kernel, "WriteFile",             WriteFile);             assert(WriteFile             # NIL);*)
+  GetProc(Kernel, "AttachConsole",         AttachConsole);         assert(AttachConsole         # NIL);
+  GetProc(Kernel, "AllocConsole",          AllocConsole);          assert(AllocConsole          # NIL);
+  GetProc(Kernel, "FreeConsole",           FreeConsole);           assert(FreeConsole           # NIL);
+  GetProc(Kernel, "GetConsoleWindow",      GetConsoleWindow);      assert(GetConsoleWindow      # NIL);
+  GetProc(User,   "ShowWindowAsync",       ShowWindowAsync);       assert(ShowWindowAsync       # NIL);
+(*GetProc(Kernel, "SetConsoleOutputCP",    SetConsoleOutputCP);    assert(SetConsoleOutputCP    # NIL);*)
+  GetProc(Kernel, "GetConsoleProcessList", GetConsoleProcessList); assert(GetConsoleProcessList # NIL);
+
+  ConsoleHandle := 0;
+
+
+  Stdout := GetStdHandle(-11);  (* -11:   StdOutputHandle *)
+  IF Stdout <= 0 THEN  (* handle 0 associated with windows app from command line *)
+    res := AttachConsole(-1);  (* If we don't already have a console connected, use our  *)
+                               (* caller's. If our caller has none then neither will we. *)
+    IF res = 0 THEN (* Caller did not have a console. *)
+      res := AllocConsole()
+    END;
+    Stdout := GetStdHandle(-11);  (* -11:   StdOutputHandle *)
+  END;
+
+  SetConsoleOutputCP(65001);    (* 65001: UTF8            *)
+  crlf := $0D 0A 00$;
+
+  wsl("Hello");
+  ws("Header at ");     wh(HeaderAdr);  wsl("H.");
+  ws("Stdout handle "); wh(Stdout);     wsl("H.");
+
+  (* Determine whether our console is inherited or private *)
+  res := GetConsoleProcessList(SYSTEM.ADR(res), 1);
+  ws("GetConsoleProcessList returned "); wh(res); wsl("H.");
+
+  (*
+  IF res = 1 THEN  (* Hide private console, at least until output arrives. *)
+    res := GetConsoleWindow();
+    ws("GetConsoleWindow returned ");  wh(res);  wsl("H.");
+    res := ShowWindowAsync(res, 0);  (* 0: SW_HIDE,  5: SW_SHOW *)
+    ws("ShowWindowAsync returned ");  wh(res);  wsl("H.");
+  END;
+  *)
+
+  (*
+  IF res = 1 THEN  (* Close private console, at least until output arrives. *)
+    res := FreeConsole();
+    (*ws("FreeConsole returned ");  wh(res);  wsl("H.");*)
+
+    res := AllocConsole();
+    Stdout := GetStdHandle(-11);  (* -11:   StdOutputHandle *)
+    ws("AllocConsole returned ");  wh(res);  wsl("H.");
+  END;
+  *)
+
+END InitialiseConsoleOutput;
+
+
+PROCEDURE JMP(adr: INTEGER);
+BEGIN SYSTEM.PUT(SYSTEM.ADR(adr) - 8, adr) END JMP;  (* Overwrite return address *)
+
+PROCEDURE JmpTest;
+BEGIN
+  wsl("Jmp test successful.");
+  (*msg("Jmp test successful.");*)
+  ExitProcess(0);
+END JmpTest;
+
+
+PROCEDURE PrepareOberonMachine;
+CONST
+  MEMRESERVE           = 2000H;
+  MEMCOMMIT            = 1000H;
+  PAGEEXECUTEREADWRITE = 40H;
+VAR
+  reserveadr: INTEGER;
+  commitadr:  INTEGER;
+  oberonsize: INTEGER;
+  moduleadr:  INTEGER;
+  modulesize: INTEGER;
+  hdr:        CodeHeaderPtr;
+  res:        INTEGER;
+BEGIN
+  wsl("PrepareOberonMachine starting.");
+
+  (* Allocate 2GB memory for the Oberon machine and commit enough for the     *)
+  (* modules being loaded.                                                    *)
+  reserveadr := VirtualAlloc(0, 80000000H, MEMRESERVE, PAGEEXECUTEREADWRITE);
+  oberonsize := 0;
+  ws("Reserved 2GB mem at ");  wh(reserveadr);  wsl("H.");
+
+  (* Commit some of it *)
+  commitadr := VirtualAlloc(reserveadr, 4096, MEMCOMMIT, PAGEEXECUTEREADWRITE);
+  ws("Committed 4096 bytes at ");  wh(commitadr);  wsl("H.");
+
+  hdr := SYSTEM.VAL(CodeHeaderPtr, HeaderAdr);  (* Address Winboot header *)
+  ws("Winboot at "); wh(HeaderAdr); ws("H, length "); wh(hdr.length); wsl("H.");
+
+  wsl("Header: ");
+  ws("  length:   ");  wh(hdr.length);    wsl("H.");
+  ws("  initcode: ");  wh(hdr.initcode);  wsl("H.");
+  ws("  pointers: ");  wh(hdr.pointers);  wsl("H.");
+  ws("  commands: ");  wh(hdr.commands);  wsl("H.");
+  ws("  exports:  ");  wh(hdr.exports);   wsl("H.");
+  ws("  imports:  ");  wh(hdr.imports);   wsl("H.");
+  ws("  varsize:  ");  wh(hdr.varsize);   wsl("H.");
+
+
+  (* Copy boot module into reserved memory *)
+  SYSTEM.COPY(HeaderAdr, commitadr, hdr.imports + hdr.varsize);
+
+  (* Continue in reserved memory *)
+  (*JMP(SYSTEM.ADR(JmpTest) + commitadr - HeaderAdr);*)
+
+
+  moduleadr := HeaderAdr + hdr.imports + hdr.varsize;  (* Address of first module for Oberon machine *)
+  hdr := SYSTEM.VAL(CodeHeaderPtr, moduleadr);
+  WHILE hdr.length > 0 DO
+    ws("Module at "); wh(moduleadr); ws("H, length "); wh(hdr.length); wsl("H.");
+    INC(oberonsize, hdr.imports + hdr.varsize);
+    INC(moduleadr, hdr.length);
+    hdr := SYSTEM.VAL(CodeHeaderPtr, moduleadr);
+  END;
+  ws("Oberon size: "); wh(oberonsize); wsl("H.");
+
+  msg("Close?")
+
+END PrepareOberonMachine;
+
+BEGIN
+  User := LoadLibraryA(SYSTEM.ADR("user32"));
+  GetProc(User, "MessageBoxA", MessageBoxA);
+  InitialiseConsoleOutput;
+
+  (* Allocate 2GB memory for the Oberon machine and commit enough for the     *)
+  (* modules being loaded.                                                    *)
+
+  PrepareOberonMachine;
+
+  JMP(SYSTEM.ADR(JmpTest));
+
+  ExitProcess(0);
+END WinBoot.

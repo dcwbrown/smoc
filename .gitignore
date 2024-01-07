@@ -12,11 +12,6 @@ build/*/*
 backup/*
 test/*
 ref
-oc2/misc
-oc2/AP
-oc2/Wirth
-oc2/asmtesting/*.fas
-oc2/asmtesting/*.lst
 dualcharhardlystarted/*
 utf8protonotworking/*
 *.sublime-*
