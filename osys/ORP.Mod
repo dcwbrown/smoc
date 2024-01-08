@@ -20,7 +20,7 @@ VAR
   sym:         INTEGER;                     (* last symbol read *)
   dc:          INTEGER;                     (* data counter *)
   level, exno: INTEGER;
-  newSF:       BOOLEAN;                     (* option flag *)
+  newSF:       BOOLEAN;                     (* new symbol file option flag *)
   modid:       ORS.Ident;
   pbsList:     PtrBase;                     (* list of names of pointer base types *)
   dummy:       ORB.Object;
@@ -869,8 +869,14 @@ BEGIN type := ORB.intType;  (*sync*)
     END
   ELSIF sym = ORS.procedure THEN
     ORS.Get(sym);  ORB.OpenScope;
-    NEW(type);  type.form := ORB.Proc;  type.size := ORG.WordSize;
-    type.native := sym = ORS.neq;  IF type.native THEN ORS.Get(sym) END;
+    NEW(type);  type.form := ORB.Proc;  type.size := ORG.WordSize;  type.native := FALSE;
+    IF sym = ORS.minus THEN  (* Native (win32/linux/bsd) procedure *)
+      IF ORB.SystemImported() THEN
+        type.native := TRUE;  ORS.Get(sym)
+      ELSE
+        ORS.Mark("Native procedures recognised only when SYSTEM imported.")
+      END
+    END;
     ProcedureType(type);  type.dsc := ORB.topScope.next;  ORB.CloseScope
   ELSE ORS.Mark("illegal type")
   END
@@ -885,15 +891,6 @@ BEGIN
   ELSIF size > 1 THEN adr := (adr + 1) DIV 2 * 2
   END
 END AlignUp;
-
-PROCEDURE AlignDown(VAR adr: INTEGER; size: INTEGER);
-(* Reduce adr to be aligned suitably for a variable of given size *)
-BEGIN
-  IF    size > 4 THEN adr := adr DIV 8 * 8
-  ELSIF size > 2 THEN adr := adr DIV 4 * 4
-  ELSIF size > 1 THEN adr := adr DIV 2 * 2
-  END
-END AlignDown;
 
 
 PROCEDURE Declarations(VAR varsize: INTEGER);
@@ -1048,6 +1045,7 @@ BEGIN ORS.Get(sym);
     l.s("parmsize: $",    Tr); l.h(parmsize, Tr);
     l.s(", locsize: $",   Tr); l.h(locsize, Tr);
     l.s(", framesize: $", Tr); l.h(framesize, Tr); l.l(Tr);
+
     longestname := 0;  obj := type.dsc;  WHILE obj # NIL DO
       IF slen(obj.name) > longestname THEN longestname := slen(obj.name) END;
       obj := obj.next

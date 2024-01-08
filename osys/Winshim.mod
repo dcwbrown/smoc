@@ -19,27 +19,27 @@ VAR
   Header: CodeHeaderPtr;
 
   (* Pre-loaded Kernel32 imports *)
-  LoadLibraryA:                   PROCEDURE#(libname: INTEGER): INTEGER;
-  GetProcAddress:                 PROCEDURE#(hmodule, procname: INTEGER): INTEGER;
-  VirtualAlloc:                   PROCEDURE#(address, size, type, protection: INTEGER): INTEGER;
-  ExitProcess:                    PROCEDURE#(exitcode: INTEGER);
-  GetStdHandle:                   PROCEDURE#(nStdHandle: SYSTEM.INT32): INTEGER;
-  SetConsoleOutputCP:             PROCEDURE#(codepage: INTEGER) (* : INTEGER *);
-  WriteFile:                      PROCEDURE#(hFile, lpBuffer, nNumberOfBytesToWrite,
+  LoadLibraryA:                   PROCEDURE-(libname: INTEGER): INTEGER;
+  GetProcAddress:                 PROCEDURE-(hmodule, procname: INTEGER): INTEGER;
+  VirtualAlloc:                   PROCEDURE-(address, size, type, protection: INTEGER): INTEGER;
+  ExitProcess:                    PROCEDURE-(exitcode: INTEGER);
+  GetStdHandle:                   PROCEDURE-(nStdHandle: SYSTEM.INT32): INTEGER;
+  SetConsoleOutputCP:             PROCEDURE-(codepage: INTEGER) (* : INTEGER *);
+  WriteFile:                      PROCEDURE-(hFile, lpBuffer, nNumberOfBytesToWrite,
                                              lpNumberOfBytesWritten, lpOverlapped: INTEGER
                                             ): SYSTEM.CARD32;
-  AddVectoredExceptionHandler:    PROCEDURE#(first, filter: INTEGER);
-  GetCommandLineW:                PROCEDURE#(): INTEGER;
-  GetSystemTimePreciseAsFileTime: PROCEDURE#(tickAdr: INTEGER): INTEGER;
-  GetModuleFileNameW:             PROCEDURE#(hModule, lpFilename, nSize: INTEGER): INTEGER;
-  GetCurrentDirectoryW:           PROCEDURE#(nsize, pbuffer: INTEGER): INTEGER;
+  AddVectoredExceptionHandler:    PROCEDURE-(first, filter: INTEGER);
+  GetCommandLineW:                PROCEDURE-(): INTEGER;
+  GetSystemTimePreciseAsFileTime: PROCEDURE-(tickAdr: INTEGER): INTEGER;
+  GetModuleFileNameW:             PROCEDURE-(hModule, lpFilename, nSize: INTEGER): INTEGER;
+  GetCurrentDirectoryW:           PROCEDURE-(nsize, pbuffer: INTEGER): INTEGER;
 
   (* Pre-loaded User32 imports *)
-  MessageBoxA:        PROCEDURE#(hWnd, lpText, lpCaption, uType: INTEGER)(*: INTEGER*);
-  MessageBoxW:        PROCEDURE#(hWnd, lpText, lpCaption, uType: INTEGER)(*: INTEGER*);
+  MessageBoxA:        PROCEDURE-(hWnd, lpText, lpCaption, uType: INTEGER)(*: INTEGER*);
+  MessageBoxW:        PROCEDURE-(hWnd, lpText, lpCaption, uType: INTEGER)(*: INTEGER*);
 
   (* Pre-loaded Shell32 imports *)
-  CommandLineToArgvW: PROCEDURE#(lpCmdLine, pNumArgs: INTEGER): INTEGER;
+  CommandLineToArgvW: PROCEDURE-(lpCmdLine, pNumArgs: INTEGER): INTEGER;
 
   (* End of pre-loaded variables *)
 

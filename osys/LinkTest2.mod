@@ -1,6 +1,6 @@
 MODULE Linktest2;
 
-IMPORT SYSTEM, Linktest, Winshim;
+IMPORT Linktest, Winshim;
 
 BEGIN
   Linktest.ltw("Linktest2 running via Linktest.");

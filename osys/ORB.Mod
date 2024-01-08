@@ -153,6 +153,12 @@ BEGIN s := topScope;
   RETURN x
 END thisObj;
 
+PROCEDURE SystemImported*(): BOOLEAN;
+VAR obj: Object;
+BEGIN obj := topScope.dsc;
+  WHILE (obj # NIL) & (obj.name # "SYSTEM") DO obj := obj.next END;
+RETURN obj # NIL END SystemImported;
+
 PROCEDURE thisimport*(mod: Object): Object;
 VAR obj: Object;
 BEGIN
