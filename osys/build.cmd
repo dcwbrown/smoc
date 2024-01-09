@@ -2,7 +2,7 @@
 ::
 @cd bootstrap
 @mkdir build >NUL 2>NUL
-@..\..\source\Build /v /b build /s ./;.. bootbuild
+@..\smoc\Build /v /b build /s ./;.. bootbuild
 @if errorlevel 1 goto end
 @cd ..
 ::

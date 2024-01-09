@@ -1,0 +1,10 @@
+*.sym
+*.smb
+*.rsc
+*.dll
+*.x64
+*.exe
+*.code
+t[0-9]
+build/*/*
+*.sublime-*
