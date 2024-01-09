@@ -70,7 +70,7 @@ TYPE
   (* SFunc    inline code number             *)
   (* Mod      key                            *)
 
-  ObjDesc*= RECORD
+  ObjDesc* = RECORD
     class*, exno*: BYTE;
     expo*, rdo*:   BOOLEAN;   (* exported / read-only                      *)
     lev*:          INTEGER;   (* >0: local stack frame, lev = proc nesting *)
@@ -156,7 +156,9 @@ END thisObj;
 PROCEDURE SystemImported*(): BOOLEAN;
 VAR obj: Object;
 BEGIN obj := topScope.dsc;
-  WHILE (obj # NIL) & (obj.name # "SYSTEM") DO obj := obj.next END;
+  WHILE (obj # NIL)  & ~((obj IS Module) & (obj(Module).orgname = "SYSTEM")) DO
+    obj := obj.next
+  END;
 RETURN obj # NIL END SystemImported;
 
 PROCEDURE thisimport*(mod: Object): Object;

@@ -19,24 +19,43 @@ VAR
   Header: CodeHeaderPtr;
 
   (* Pre-loaded Kernel32 imports *)
-  LoadLibraryA:                   PROCEDURE-(libname: INTEGER): INTEGER;
-  GetProcAddress:                 PROCEDURE-(hmodule, procname: INTEGER): INTEGER;
-  VirtualAlloc:                   PROCEDURE-(address, size, type, protection: INTEGER): INTEGER;
-  ExitProcess:                    PROCEDURE-(exitcode: INTEGER);
-  GetStdHandle:                   PROCEDURE-(nStdHandle: SYSTEM.INT32): INTEGER;
-  SetConsoleOutputCP:             PROCEDURE-(codepage: INTEGER) (* : INTEGER *);
-  WriteFile:                      PROCEDURE-(hFile, lpBuffer, nNumberOfBytesToWrite,
-                                             lpNumberOfBytesWritten, lpOverlapped: INTEGER
-                                            ): SYSTEM.CARD32;
+  LoadLibraryA*:            PROCEDURE-(libname: INTEGER): INTEGER;
+  GetProcAddress*:          PROCEDURE-(hmodule, procname: INTEGER): INTEGER;
+  VirtualAlloc*:            PROCEDURE-(address, size, type, protection: INTEGER): INTEGER;
+  ExitProcess*:             PROCEDURE-(exitcode: INTEGER);
+  GetStdHandle*:            PROCEDURE-(nStdHandle: SYSTEM.INT32): INTEGER;
+  SetConsoleOutputCP*:      PROCEDURE-(codepage: INTEGER) (* : INTEGER *);
+  GetCommandLineW*:         PROCEDURE-(): INTEGER;
+  GetModuleFileNameW*:      PROCEDURE-(hModule, lpFilename, nSize: INTEGER): INTEGER;
+  GetCurrentDirectoryW*:    PROCEDURE-(nsize, pbuffer: INTEGER): INTEGER;
+  GetFileAttributesW*:      PROCEDURE-(lpFileName: INTEGER): INTEGER;
+  DeleteFileW*:             PROCEDURE-(lpFilename: INTEGER): INTEGER;
+  CloseHandle*:             PROCEDURE-(hObject: INTEGER): INTEGER;
+  FlushFileBuffers*:        PROCEDURE-(hFile: INTEGER): INTEGER;
+  SetEndOfFile*:            PROCEDURE-(hFile: INTEGER): INTEGER;
+  GetFileSizeEx*:           PROCEDURE-(hFile, lpFileSize: INTEGER): INTEGER;
+  GetCurrentProcessId*:     PROCEDURE-(): INTEGER;
+  MoveFileExW*:             PROCEDURE-(lpExistingFileName, lpNewFileName, dwFlags: INTEGER): INTEGER;
+  CreateFileW*:             PROCEDURE-(lpFileName, dwDesiredAccess, dwShareMode,
+                                       lpSecurityAttributes, dwCreationDisposition,
+                                       dwFlagsAndAttributes, hTemplateFile: INTEGER): INTEGER;
+  ReadFile*:                PROCEDURE-(hFile, lpBuffer, nNumberOfBytesToRead,
+                                       lpNumberOfBytesRead, lpOverlapped: INTEGER): INTEGER;
+  WriteFile*:               PROCEDURE-(hFile, lpBuffer, nNumberOfBytesToWrite,
+                                       lpNumberOfBytesWritten, lpOverlapped: INTEGER): INTEGER;
+  SetFilePointerEx*:        PROCEDURE-(hFile, liDistanceToMove,
+                                       lpNewFilePointer, dwMoveMethod: INTEGER): INTEGER;
+  GetEnvironmentVariableW*: PROCEDURE-(lpName, lpBuffer, nSize: INTEGER): INTEGER;
+  GetFileAttributesExW*:    PROCEDURE-(lpName, fInfoLevelId, lpFileInformation: INTEGER): INTEGER;
+                            (* fInfoLevelId Must be 0 (GetFileExInfoStandard) *)
+  GetLastError*:            PROCEDURE-(): INTEGER;
+
   AddVectoredExceptionHandler:    PROCEDURE-(first, filter: INTEGER);
-  GetCommandLineW:                PROCEDURE-(): INTEGER;
   GetSystemTimePreciseAsFileTime: PROCEDURE-(tickAdr: INTEGER): INTEGER;
-  GetModuleFileNameW:             PROCEDURE-(hModule, lpFilename, nSize: INTEGER): INTEGER;
-  GetCurrentDirectoryW:           PROCEDURE-(nsize, pbuffer: INTEGER): INTEGER;
 
   (* Pre-loaded User32 imports *)
   MessageBoxA:        PROCEDURE-(hWnd, lpText, lpCaption, uType: INTEGER)(*: INTEGER*);
-  MessageBoxW:        PROCEDURE-(hWnd, lpText, lpCaption, uType: INTEGER)(*: INTEGER*);
+  MessageBoxW:        PROCEDURE-(hWnd, lpText, lpCaption, uType: INTEGER): INTEGER;
 
   (* Pre-loaded Shell32 imports *)
   CommandLineToArgvW: PROCEDURE-(lpCmdLine, pNumArgs: INTEGER): INTEGER;
@@ -48,6 +67,7 @@ VAR
   Log:       PROCEDURE(s: ARRAY OF BYTE);
   OberonAdr: INTEGER;   (* Address of first module (Winshim.mod) *)
   LoadAdr:   INTEGER;   (* Where to load next module *)
+  HWnd:      INTEGER;   (* Set if a window has been created *)
 
 
 PROCEDURE NoLog(s: ARRAY OF BYTE); BEGIN END NoLog;
@@ -56,6 +76,127 @@ PROCEDURE assert(expectation: BOOLEAN);
 BEGIN
   IF ~expectation THEN Log("Assertion failure."); Log(crlf); ExitProcess(99) END
 END assert;
+
+(* -------------------------------------------------------------------------- *)
+
+(* -------------------------------------------------------------------------- *)
+(* ------------ Unicode Transformation Formats UTF-8 and UTF-16 ------------- *)
+(* -------------------------------------------------------------------------- *)
+
+(* UTF-8:                                                                                           *)
+(* -------------- codepoint --------------    ----------------------- bytes ----------------------- *)
+(* 0000 0000 0000 0000 0000 0000 0zzz zzzz    0zzzzzzz                                              *)
+(* 0000 0000 0000 0000 0000 0yyy yyzz zzzz    110yyyyy 10zzzzzz                                     *)
+(* 0000 0000 0000 0000 xxxx yyyy yyzz zzzz    1110xxxx 10yyyyyy 10zzzzzz                            *)
+(* 0000 0000 000w wwxx xxxx yyyy yyzz zzzz    11110www 10xxxxxx 10yyyyyy 10zzzzzz                   *)
+(* The below are beyond the range of valid Unicode codepoints                                       *)
+(* 0000 00vv wwww wwxx xxxx yyyy yyzz zzzz    111110vv 10wwwwww 10xxxxxx 10yyyyyy 10zzzzzz          *)
+(* 0uvv vvvv wwww wwxx xxxx yyyy yyzz zzzz    1111110u 10vvvvvv 10wwwwww 10xxxxxx 10yyyyyy 10zzzzzz *)
+
+PROCEDURE GetUtf8*(src: ARRAY OF CHAR; VAR i: INTEGER): INTEGER;
+VAR n, result: INTEGER;
+BEGIN ASSERT(i < LEN(src)); result := ORD(src[i]);  INC(i);
+  IF result >= 0C0H THEN
+    IF    result >= 0FCH THEN result := result MOD 2;  n := 5
+    ELSIF result >= 0F8H THEN result := result MOD 4;  n := 4
+    ELSIF result >= 0F0H THEN result := result MOD 8;  n := 3
+    ELSIF result >= 0E0H THEN result := result MOD 16; n := 2
+    ELSE                      result := result MOD 32; n := 1
+    END;
+    WHILE n > 0 DO
+      result := LSL(result,6);  DEC(n);
+      IF (i < LEN(src)) & (ORD(src[i]) DIV 40H = 2) THEN
+        INC(result, ORD(src[i]) MOD 40H);  INC(i)
+      END
+    END
+  END;
+RETURN result END GetUtf8;
+
+PROCEDURE PutUtf8*(c: INTEGER; VAR dst: ARRAY OF CHAR; VAR i: INTEGER);
+VAR n: INTEGER;
+BEGIN
+  ASSERT(i < LEN(dst));
+  ASSERT(c > 0);  ASSERT(c < 80000000H);
+  IF i < LEN(dst) THEN
+    IF c < 80H THEN dst[i] := CHR(c);  INC(i)
+    ELSE
+      IF    c < 800H     THEN  dst[i] := CHR(0C0H + ASR(c, 6));    n := 1;
+      ELSIF c < 10000H   THEN  dst[i] := CHR(0E0H + ASR(c, 12));   n := 2;
+      ELSIF c < 200000H  THEN  dst[i] := CHR(0F0H + ASR(c, 18));   n := 3;
+      ELSIF c < 4000000H THEN  dst[i] := CHR(0F8H + ASR(c, 24));   n := 4;
+      ELSE                     dst[i] := CHR(0FCH + ASR(c, 30));   n := 5;
+      END;
+      INC(i);
+      WHILE (n > 0) & (i < LEN(dst)) DO
+        DEC(n);  dst[i] := CHR(80H + ASR(c, n*6) MOD 40H);  INC(i)
+      END;
+    END
+  END
+END PutUtf8;
+
+
+(* UTF-16:                                                                      *)
+(* -------------- codepoint --------------    ------------- words ------------- *)
+(* 0000 0000 0000 0000 zzzz zzzz zzzz zzzz    zzzzzzzzzzzzzzzz                  *)
+(* 0000 0000 000x xxxx yyyy yyzz zzzz zzzz    110110wwwwyyyyyy 110111zzzzzzzzzz *)
+(* Where xxxxx is 1-16, and wwww is xxxxx-1 (0-15).                             *)
+
+PROCEDURE GetUtf16*(src: ARRAY OF SYSTEM.CARD16; VAR i: INTEGER): INTEGER;
+VAR result: INTEGER;
+BEGIN
+  ASSERT(i < LEN(src));
+  result := src[i];  INC(i);
+  IF result DIV 400H = 36H THEN    (* High surrogate *)
+    result := LSL(result MOD 400H, 10) + 10000H;
+    IF (i < LEN(src)) & (src[i] DIV 400H = 37H) THEN  (* Low surrogate *)
+      INC(result, src[i] MOD 400H);  INC(i)
+    END
+  END
+RETURN result END GetUtf16;
+
+PROCEDURE PutUtf16*(ch: INTEGER; VAR dst: ARRAY OF SYSTEM.CARD16; VAR i: INTEGER);
+BEGIN
+  ASSERT(i < LEN(dst));
+  IF (ch < 10000H) & (i < LEN(dst)) THEN
+    dst[i] := ch;  INC(i)
+  ELSIF i+1 < LEN(dst) THEN
+    DEC(ch, 10000H);
+    dst[i] := 0D800H + ch DIV 400H;  INC(i);
+    dst[i] := 0DC00H + ch MOD 400H;  INC(i);
+  END
+END PutUtf16;
+
+
+PROCEDURE Utf8ToUtf16*(src: ARRAY OF CHAR;  VAR dst: ARRAY OF SYSTEM.CARD16): INTEGER;
+VAR i, j: INTEGER;
+BEGIN  i := 0;  j := 0;
+  WHILE (i < LEN(src)) & (src[i] # 0X) DO PutUtf16(GetUtf8(src, i), dst, j) END;
+  IF j < LEN(dst) THEN dst[j] := 0;  INC(j) END
+RETURN j END Utf8ToUtf16;
+
+PROCEDURE Utf16ToUtf8*(src: ARRAY OF SYSTEM.CARD16;  VAR dst: ARRAY OF CHAR): INTEGER;
+VAR i, j: INTEGER;
+BEGIN  i := 0;  j := 0;
+  WHILE (i < LEN(src)) & (src[i] # 0) DO PutUtf8(GetUtf16(src, i), dst, j) END;
+  IF j < LEN(dst) THEN dst[j] := 0X;  INC(j) END
+RETURN j END Utf16ToUtf8;
+
+
+(* -------------------------------------------------------------------------- *)
+(* ---------------- Last resort error reporting - MessageBox ---------------- *)
+(* -------------------------------------------------------------------------- *)
+
+PROCEDURE MessageBox*(title, msg: ARRAY OF CHAR);
+VAR
+  res:     INTEGER;
+  title16: ARRAY 256 OF SYSTEM.CARD16;
+  msg16:   ARRAY 256 OF SYSTEM.CARD16;
+BEGIN
+  res := Utf8ToUtf16(title, title16);
+  res := Utf8ToUtf16(msg,   msg16);
+  res := MessageBoxW(HWnd, SYSTEM.ADR(msg16), SYSTEM.ADR(title16), 0)
+END MessageBox;
+
 
 (* ---------------------------------------------------------------------------- *)
 
@@ -73,17 +214,31 @@ BEGIN
 END IntToHex;
 
 
-PROCEDURE Strlen(s: ARRAY OF BYTE): INTEGER;
-VAR i: INTEGER;
-BEGIN i := 0;  WHILE (i < LEN(s)) & (s[i] # 0) DO INC(i) END
-RETURN i END Strlen;
+(* -------------------------------------------------------------------------- *)
+(* ---------------------- Very basic string functions ----------------------- *)
+(* -------------------------------------------------------------------------- *)
+
+PROCEDURE Length*(s: ARRAY OF BYTE): INTEGER;
+VAR l: INTEGER;
+BEGIN  l := 0;  WHILE (l < LEN(s)) & (s[l] # 0) DO INC(l) END
+RETURN l END Length;
+
+PROCEDURE Append*(s: ARRAY OF CHAR; VAR d: ARRAY OF CHAR);
+VAR i, j: INTEGER;
+BEGIN
+  j := Length(d);
+  i := 0; WHILE (i < LEN(s)) & (j < LEN(d)) & (s[i] # 0X) DO
+    d[j] := s[i];  INC(i);  INC(j)
+  END;
+  IF j >= LEN( d) THEN DEC(j) END;  d[j] := 0X
+END Append;
 
 (* ---------------------------------------------------------------------------- *)
 
 PROCEDURE WriteStdout(s: ARRAY OF BYTE);
 VAR written, result: INTEGER;
 BEGIN
-  result := WriteFile(Stdout, SYSTEM.ADR(s), Strlen(s), SYSTEM.ADR(written), 0);
+  result := WriteFile(Stdout, SYSTEM.ADR(s), Length(s), SYSTEM.ADR(written), 0);
 END WriteStdout;
 
 (* ---------------------------------------------------------------------------- *)
@@ -337,7 +492,8 @@ END LoadRemainingModules;
 (* ---------------------------------------------------------------------------- *)
 
 BEGIN
-  Log := NoLog;
+  HWnd := 0;
+  Log  := NoLog;
 
   (* Initialise console output *)
   Stdout := GetStdHandle(-11);  (* -11:   StdOutputHandle *)
@@ -377,5 +533,6 @@ BEGIN
   (*MessageBoxA(0, SYSTEM.ADR("Complete."), SYSTEM.ADR("Winshim"), 0);*)
 
   wsl("Winshim complete.");
+  (*MessageBox("Winshim", "Complete");*)
   ExitProcess(0);
 END Winshim.
