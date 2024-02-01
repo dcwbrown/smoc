@@ -1,12 +1,12 @@
-MODULE Files;
+MODULE Files; (*$la+*) (*$lc+*)
 IMPORT SYSTEM, K := Kernel, Heap, w := Writer;
 
 CONST
   (* Win32 Const *)
   InvalidFileAttributes  = ORD({0..31});
   FileAttributeReadOnly  = {0};
-  FileAttributeTemporary = {8};
-  FileFlagDeleteOnClose  = {26};
+  FileAttributeTemporary = {8};   (*      100H *)
+  FileFlagDeleteOnClose  = {26};  (* 400,0000H *)
 
   GenericRead  = {31};
   GenericWrite = {30};
@@ -24,7 +24,7 @@ CONST
   MoveFileCopyAllowed = {1};
 
   FileShareDelete = {2};
-  FileSHareRead   = {0};
+  FileShareRead   = {0};
   FileShareWrite  = {1};
 
   (* File operations for CreateFile *)
@@ -108,10 +108,10 @@ BEGIN
   END;
   IF op = FileOpenR THEN
     access      := ORD(GenericRead);
-    mode        := ORD(FileSHareRead);
+    mode        := ORD(FileShareRead);
   ELSE
     access      := ORD(GenericRead+GenericWrite);
-    mode        := ORD(FileSHareRead+FileShareWrite+FileShareDelete);
+    mode        := ORD(FileShareRead+FileShareWrite+FileShareDelete);
   END;
   len := K.Utf8ToUtf16(name, name16);
   hFile := CreateFileW(SYSTEM.ADR(name16), access, mode, 0, disposition, flags, 0);
@@ -455,13 +455,13 @@ BEGIN i := 0;
   WriteByte(r, 0)
 END WriteString;
 
-PROCEDURE WriteBytes*(VAR r: Rider; x: ARRAY OF BYTE; n: INTEGER);
-VAR startPos, byteCount: INTEGER;
+PROCEDURE WriteBytes*(VAR r: Rider; x: ARRAY OF BYTE;  offset, length: INTEGER);
+VAR startPos: INTEGER;
 BEGIN
   CheckFilePos(r);  startPos := r.pos;
-  IF n > LEN(x) THEN byteCount := LEN(x) ELSE byteCount := n END;
-  WriteMem(r, SYSTEM.ADR(x), byteCount);
-  r.res := n - (r.pos - startPos)
+  ASSERT(offset + length <= LEN(x));
+  WriteMem(r, SYSTEM.ADR(x) + offset, length);
+  r.res := length - (r.pos - startPos)
 END WriteBytes;
 
 

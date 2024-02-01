@@ -103,7 +103,7 @@ BEGIN
   Files.Set(r, f, 0);
   WHILE ~r.eof DO
     Files.ReadBytes(r, buf, LEN(buf));
-    Files.WriteBytes(Exe, buf, LEN(buf) - r.res);
+    Files.WriteBytes(Exe, buf, 0, LEN(buf) - r.res);
   END
 END CopyFile;
 
@@ -306,7 +306,7 @@ BEGIN
   hdr.importTableSize         := ImportSize;
 
   Files.Set(Exe, ExeFile, 0);
-  Files.WriteBytes(Exe, hdr, SYSTEM.SIZE(PEHDR));
+  Files.WriteBytes(Exe, hdr, 0, SYSTEM.SIZE(PEHDR));
 
   (* Write section headers *)
   WriteSectionHeader(".idata",

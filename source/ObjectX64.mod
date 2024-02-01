@@ -408,7 +408,7 @@ BEGIN
   HdrCode := HdrBase + Align(staticSize, 16);
   HdrInit := HdrCode + initProc;
   Files.Set(X64, X64file, HdrCode);
-  Files.WriteBytes(X64, code, codesize);
+  Files.WriteBytes(X64, code, 0, codesize);
 
   HdrTrap := Align(HdrCode + codesize, 16);
 
@@ -418,7 +418,7 @@ BEGIN
   WHILE ~r.eof DO
     Files.ReadBytes(r, buffer, LEN(buffer));
     readlen := LEN(buffer) - r.res;
-    Files.WriteBytes(X64, buffer, readlen)
+    Files.WriteBytes(X64, buffer, 0, readlen)
   END;
   Files.WriteInt(X64, -1);
 
@@ -461,8 +461,8 @@ BEGIN
   (*Files.WriteBytes(X64, Header, SYSTEM.SIZE(Boot.ModuleHeaderDesc));*)
 
   Files.WriteInt  (X64, HdrLength);
-  Files.WriteInt  (X64, 0);            (* next *)
-  Files.WriteBytes(X64, B.Modid, 32);  (* name *)
+  Files.WriteInt  (X64, 0);               (* next *)
+  Files.WriteBytes(X64, B.Modid, 0, 32);  (* name *)
   Files.WriteInt  (X64, HdrBase);
   Files.WriteInt  (X64, HdrCode);
   Files.WriteInt  (X64, HdrInit);

@@ -2,6 +2,34 @@
           section '.text' code readable executable
 
 
+          org    0
+
+var:      rb     100H
+
+          lea    rcx,[var+98H+rax*8]
+          lea    rcx,[var+98H]
+
+absval    equ    12H
+          lea    rax,[absval]
+
+
+;48 8D 05 1E110000
+;
+;         reg*8+4, 25H, disp32
+
+          mov    [320H+rax],cl             ; Load
+          mov    rax,[10H+rsp]
+          lea    rdi,[320H+rax]            ; LoadAddress
+          mov    ecx,30CH                  ; LoadStructure
+          mov    rsi,[330H+rsp]            ; LoadStructure
+          mov    rax,[338H+rsp]
+          cmp    rcx,rax                   ; StoreStruct
+          jnc    ll
+          call   qword[0H]
+ll:       rep
+          movsb
+
+
           push   qword[rax]
           push   word[rax]
 
