@@ -1,10 +1,109 @@
           format PE64 Console
           section '.text' code readable executable
 
+          org    0
+
+          add    rax,80H     ; Only needed if signed
+          cmp    rax,100H
+          jbe    nf1
+          call   123H
+nf1:
+
+
+          mov    rbx,rax
+          shr    rbx,8
+          jz     nf2
+          call   123H
+nf2:
+
+
+          movsx  rbx,al
+          cmp    rbx,rax
+          je     nf3
+          call   123H
+nf3:
+
+
+          movsx  rbx,ax
+          cmp    rbx,rax
+          je     nf4
+          call   123H
+nf4:
+
+
+          movsxd rbx,eax
+          cmp    rbx,rax
+          je     nf5
+          call   123H
+nf5:
+
+
+          cmp    rax,123H
+          jg     f6
+          cmp    rax,-234H
+          jge    nf6
+f6:       call   123H
+nf6:
+
+
+          push   rbp
+          mov    rbp,rsp
+
+          enter  0,0
+
+          bts    qword[100],0
+          bt     qword[100],0
+
+
+          org    0
+
+          bt     [7850H],rax
+
+          setz   al
+          movzx  rax,al
+          and    eax,1
+          mov    al,0
+          xor    al,al
+          xor    eax,eax
+
+          setz   r8b
+          movzx  r8,r8b
+          and    r8d,1
+          mov    r8b,0
+          xor    r8b,r8b
+          xor    r8d,r8d
+
+          setz   al
+          jmp    c1
+          mov    al,0
+          jmp    c1
+          mov    al,1
+c1:       and    eax,1
+
+          setz   cl
+          jmp    c2
+          mov    cl,0
+          jmp    c2
+          mov    cl,1
+c2:       and    ecx,1
+
+          setz   r9l
+          jmp    c3
+          mov    r9l,0
+          jmp    c3
+          mov    r9l,1
+c3:       and    r9d,1
+
+
+
+
 
           org    0
 
 var:      rb     100H
+
+
+          imul   rcx,qword[8H+rsp],18H
 
           lea    rcx,[var+98H+rax*8]
           lea    rcx,[var+98H]

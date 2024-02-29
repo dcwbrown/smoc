@@ -109,27 +109,28 @@ TYPE
   Card16x512Array = POINTER TO RECORD lookup: ARRAY 512 OF SYSTEM.CARD16 END;
 
 VAR
+  GetLastError:       PROCEDURE(): INTEGER;
+  Sleep:              PROCEDURE(ms: INTEGER);
+
   CreateDIBSection:   PROCEDURE(hdc, pbmi, usage, ppvbits, hsection, offset: INTEGER): INTEGER;
   SelectObject:       PROCEDURE(hdc, hobject: INTEGER): INTEGER;
   DeleteObject:       PROCEDURE(hobject: INTEGER): INTEGER;
   CreateCompatibleDC: PROCEDURE(hdc: INTEGER): INTEGER;
   CreateBitmap:       PROCEDURE(width, height, planes, depth, bits: INTEGER): INTEGER;
+  BitBlt:             PROCEDURE(hdc, x, y, cx, cy, hdcSrc, x1, y1, rop: INTEGER): INTEGER;
+
   LoadCursorW:        PROCEDURE(hinstance, lpcursorname: INTEGER): INTEGER;
   RegisterClassExW:   PROCEDURE(wndclassexw: INTEGER): INTEGER;
-  CreateWindowExW:    PROCEDURE(dwExStyle, lpClassName, lpWindowName,
-                                dwStyle, X, Y, nWidth, nHeight,
-                                hWndParent, hMenu, hInstance, lpParam: INTEGER): INTEGER;
+  CreateWindowExW:    PROCEDURE(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam: INTEGER): INTEGER;
   GetMessageW:        PROCEDURE(lpmsg, hwnd, filtermin, filtermax: INTEGER): INTEGER;
   PeekMessageW:       PROCEDURE(lpmsg, hwnd, filtermin, filtermax, remove: INTEGER): INTEGER;
   GetQueueStatus:     PROCEDURE(flags: INTEGER): INTEGER;
   TranslateMessage:   PROCEDURE(msg: INTEGER): INTEGER;
   DispatchMessageW:   PROCEDURE(msg: INTEGER): INTEGER;
   DefWindowProcW:     PROCEDURE(hwnd, umsg, wparam, lparam: INTEGER): INTEGER;
-  GetLastError:       PROCEDURE(): INTEGER;
   PostQuitMessage:    PROCEDURE(retcode: INTEGER);
   BeginPaint:         PROCEDURE(hwnd, paintstruct: INTEGER): INTEGER;
   EndPaint:           PROCEDURE(hwnd, paintstruct: INTEGER): INTEGER;
-  BitBlt:             PROCEDURE(hdc, x, y, cx, cy, hdcSrc, x1, y1, rop: INTEGER): INTEGER;
   SetCapture:         PROCEDURE(hwnd: INTEGER);
   ReleaseCapture:     PROCEDURE;
   MoveWindow:         PROCEDURE(hwnd, x, y, w, h, repaint: INTEGER);
@@ -138,7 +139,6 @@ VAR
   WInvalidateRect:    PROCEDURE(hwnd, rect, bErase: INTEGER): INTEGER;
   ShowCursor:         PROCEDURE(show: INTEGER);
   CreateIconIndirect: PROCEDURE(iconinfo: INTEGER): INTEGER;
-  Sleep:              PROCEDURE(ms: INTEGER);
 
   MsgWaitForMultipleObjects:     PROCEDURE(count, handles, waitall, ms, wakemask: INTEGER);
   SetProcessDpiAwarenessContext: PROCEDURE(context: INTEGER): INTEGER;
